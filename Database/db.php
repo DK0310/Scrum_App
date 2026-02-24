@@ -1,8 +1,14 @@
 <?php
 
-$dsn = "pgsql:host=aws-1-ap-southeast-1.pooler.supabase.com;port=6543;dbname=postgres;sslmode=require";
-$user = "postgres.zydpdyoinxnrlsqkeobd";
-$password = "Khangkhang0310@";
+// Load environment variables
+require_once __DIR__ . '/../config/env.php';
+
+$dsn = "pgsql:host=" . EnvLoader::get('DB_HOST') . 
+       ";port=" . EnvLoader::get('DB_PORT') . 
+       ";dbname=" . EnvLoader::get('DB_NAME') . 
+       ";sslmode=" . EnvLoader::get('DB_SSL_MODE');
+$user = EnvLoader::get('DB_USER');
+$password = EnvLoader::get('DB_PASSWORD');
 
 try {
     $pdo = new PDO($dsn, $user, $password, [
@@ -19,3 +25,4 @@ try {
     }
     die("❌ Connection failed: " . $e->getMessage());
 }
+

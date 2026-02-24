@@ -12,7 +12,19 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        try {
+                // Gửi POST request với JSON body - dùng API mới với Mem0
+                const response = await fetch('chatbot-with-memory.php', {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        timestamp: new Date().toISOString()
+                    })
+                });egoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -323,6 +335,7 @@
 
     <script>
         const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/83eb33b2-fde3-4aa6-aa37-c3da8c1ca60f';
+        const CHATBOT_API_URL = 'chatbot-with-memory.php'; // API mới với Mem0
         
         function addMessage(text, isUser = false) {
             const messagesDiv = document.getElementById('chatMessages');
@@ -368,13 +381,13 @@
                 
                 // Lấy response text trước
                 const responseText = await response.text();
-                console.log('n8n raw response:', responseText);
+                console.log('API response:', responseText);
                 
                 showTyping(false);
                 
                 // Kiểm tra nếu response rỗng
                 if (!responseText || responseText.trim() === '') {
-                    addMessage('✅ Đã gửi! (Webhook không trả về nội dung)');
+                    addMessage('✅ Đã xử lý! (API không trả về nội dung)');
                     return;
                 }
                 
@@ -382,9 +395,16 @@
                 try {
                     const data = JSON.parse(responseText);
                     console.log('Parsed data:', data);
-                    // Tìm response trong nhiều field có thể
-                    const botReply = data.output || data.response || data.message || data.text || data.reply || data.answer || JSON.stringify(data);
-                    addMessage(botReply);
+                    
+                    if (data.success) {
+                        addMessage(data.response);
+                        // Nếu dùng Mem0, hiển thị thông báo
+                        if (data.context_used) {
+                            console.log('💾 Memory được sử dụng để cải thiện response');
+                        }
+                    } else {
+                        addMessage('❌ ' + (data.message || 'Lỗi không xác định'));
+                    }
                 } catch (jsonError) {
                     // Nếu không phải JSON, hiển thị text trực tiếp
                     addMessage(responseText);
