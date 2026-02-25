@@ -3,7 +3,8 @@
     "description": "Scrum Project with Chatbot + Mem0 Memory",
     "require": {
         "php": ">=7.4",
-        "guzzlehttp/guzzle": "^7.0"
+        "guzzlehttp/guzzle": "^7.0",
+        "phpmailer/phpmailer": "^7.0"
     },
     "autoload": {
         "psr-4": {

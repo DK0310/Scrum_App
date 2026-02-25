@@ -1,6 +1,10 @@
 <?php
 session_start();
-$title = "Scrum Project";
+$title = "DriveNow - Premium Car Rental Platform";
+$currentPage = 'home';
+
+// Include environment loader
+require_once '../config/env.php';
 
 // Include database connection
 require_once '../Database/db.php';
@@ -8,24 +12,17 @@ require_once '../Database/db.php';
 // Include n8n connector
 require_once '../api/n8n.php';
 
-// Khởi tạo N8N connector
-$n8n = new N8NConnector('http://localhost:5678');
+// Initialize N8N connector
+$n8n = new N8NConnector(\EnvLoader::get('N8N_BASE_URL', 'http://localhost:5678'));
 
-// Test kết nối n8n
+// Test n8n connection
 $n8nConnected = $n8n->testConnection();
 
-// Kiểm tra đăng nhập
+// Check login status
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? $_SESSION['username'] : null;
+$userRole = $_SESSION['role'] ?? 'renter';
 
-try {
-    // Có thể thêm logic ở đây
-    
-} catch (Exception $e) {
-    echo "Error loading template: " . $e->getMessage();
-}
-
-ob_start();
-$output = ob_get_clean();
-include '../templates/menu.html.php';
+// Load template
+include '../templates/index.html.php';
 ?>

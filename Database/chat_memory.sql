@@ -1,0 +1,35 @@
+-- =====================================================
+-- DriveNow - Chat Memory SQL
+-- n8n AI Agent manages chat history via: n8n_chat_histories table
+-- This file only creates the long-term memory table (optional)
+-- =====================================================
+
+-- NOTE: n8n PostgreSQL Chat Memory node automatically creates
+-- and manages the "n8n_chat_histories" table with columns:
+--   session_id (VARCHAR) — unique per conversation
+--   message (JSONB)      — { type: "ai"|"human", data: { content: "..." } }
+-- 
+-- PHP sends { chatInput, sessionId } to n8n webhook
+-- n8n handles storing/loading conversation history automatically
+-- DO NOT create chat_sessions or chat_messages tables
+
+-- =====================================================
+-- (OPTIONAL) CHAT_MEMORY - Long-term user facts/preferences
+-- Only needed if you want to manually store extracted facts
+-- n8n can also handle this with its own memory nodes
+-- =====================================================
+-- CREATE TABLE IF NOT EXISTS chat_memory (
+--     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+--     user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+--     session_token   VARCHAR(255),
+--     memory_type     VARCHAR(50) DEFAULT 'fact',
+--     content         TEXT NOT NULL,
+--     category        VARCHAR(100),
+--     importance      INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
+--     is_active       BOOLEAN DEFAULT true,
+--     created_at      TIMESTAMPTZ DEFAULT NOW(),
+--     updated_at      TIMESTAMPTZ DEFAULT NOW()
+-- );
+-- 
+-- CREATE INDEX IF NOT EXISTS idx_chat_memory_user ON chat_memory(user_id, is_active);
+-- CREATE INDEX IF NOT EXISTS idx_chat_memory_category ON chat_memory(category);
