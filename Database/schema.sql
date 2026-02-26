@@ -12,10 +12,10 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- =====================================================
 
 -- User roles: renter (thuê xe) vs owner (cho thuê xe) vs admin
-CREATE TYPE user_role AS ENUM ('renter', 'owner', 'admin');
+DO $$ BEGIN CREATE TYPE user_role AS ENUM ('renter', 'owner', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Auth providers
-CREATE TYPE auth_provider AS ENUM ('google', 'phone', 'faceid', 'email');
+DO $$ BEGIN CREATE TYPE auth_provider AS ENUM ('google', 'phone', 'faceid', 'email'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Booking status
 CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled');
@@ -24,13 +24,13 @@ CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'in_progress', 'comp
 CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'refunded', 'failed');
 
 -- Payment method
-CREATE TYPE payment_method AS ENUM ('cash', 'bank_transfer', 'credit_card', 'paypal', 'apple_pay', 'google_pay', 'crypto', 'digital_wallet');
+CREATE TYPE payment_method AS ENUM ('cash', 'bank_transfer', 'credit_card', 'paypal');
 
 -- Vehicle status
-CREATE TYPE vehicle_status AS ENUM ('available', 'rented', 'maintenance', 'inactive');
+DO $$ BEGIN CREATE TYPE vehicle_status AS ENUM ('available', 'rented', 'maintenance', 'inactive'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Membership tier
-CREATE TYPE membership_tier AS ENUM ('free', 'basic', 'premium', 'corporate');
+DO $$ BEGIN CREATE TYPE membership_tier AS ENUM ('free', 'basic', 'premium', 'corporate'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Notification type
 CREATE TYPE notification_type AS ENUM ('booking', 'payment', 'promo', 'system', 'alert');
@@ -38,7 +38,7 @@ CREATE TYPE notification_type AS ENUM ('booking', 'payment', 'promo', 'system', 
 -- =====================================================
 -- 2. USERS TABLE
 -- =====================================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     
     -- Auth info
@@ -87,10 +87,10 @@ CREATE TABLE users (
 );
 
 -- Index for fast lookups
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_phone ON users(phone);
-CREATE INDEX idx_users_google_id ON users(google_id);
-CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 -- =====================================================
 -- 3. AUTH SESSIONS TABLE
@@ -111,7 +111,7 @@ CREATE INDEX idx_sessions_token ON auth_sessions(session_token);
 -- =====================================================
 -- 4. VEHICLES TABLE (for owners)
 -- =====================================================
-CREATE TABLE vehicles (
+CREATE TABLE IF NOT EXISTS vehicles (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     
@@ -161,16 +161,16 @@ CREATE TABLE vehicles (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_vehicles_owner ON vehicles(owner_id);
-CREATE INDEX idx_vehicles_category ON vehicles(category);
-CREATE INDEX idx_vehicles_status ON vehicles(status);
-CREATE INDEX idx_vehicles_price ON vehicles(price_per_day);
-CREATE INDEX idx_vehicles_location ON vehicles(location_city);
+CREATE INDEX IF NOT EXISTS idx_vehicles_owner ON vehicles(owner_id);
+CREATE INDEX IF NOT EXISTS idx_vehicles_category ON vehicles(category);
+CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
+CREATE INDEX IF NOT EXISTS idx_vehicles_price ON vehicles(price_per_day);
+CREATE INDEX IF NOT EXISTS idx_vehicles_location ON vehicles(location_city);
 
 -- =====================================================
 -- 4b. VEHICLE IMAGES TABLE (BLOB storage)
 -- =====================================================
-CREATE TABLE vehicle_images (
+CREATE TABLE IF NOT EXISTS vehicle_images (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     vehicle_id      UUID REFERENCES vehicles(id) ON DELETE CASCADE,  -- nullable: images uploaded before vehicle is created
     image_data      BYTEA NOT NULL,             -- actual image binary data
@@ -182,12 +182,15 @@ CREATE TABLE vehicle_images (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_vehicle_images_vehicle ON vehicle_images(vehicle_id);
-CREATE INDEX idx_vehicle_images_thumbnail ON vehicle_images(vehicle_id, is_thumbnail);
+CREATE INDEX IF NOT EXISTS idx_vehicle_images_vehicle ON vehicle_images(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_vehicle_images_thumbnail ON vehicle_images(vehicle_id, is_thumbnail);
 
 -- Add FK for thumbnail_id after vehicle_images table exists
-ALTER TABLE vehicles ADD CONSTRAINT fk_vehicles_thumbnail
-    FOREIGN KEY (thumbnail_id) REFERENCES vehicle_images(id) ON DELETE SET NULL;
+DO $$ BEGIN
+    ALTER TABLE vehicles ADD CONSTRAINT fk_vehicles_thumbnail
+        FOREIGN KEY (thumbnail_id) REFERENCES vehicle_images(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================
 -- 5. BOOKINGS TABLE
@@ -201,11 +204,12 @@ CREATE TABLE bookings (
     owner_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     
     -- Booking details
-    booking_type    VARCHAR(30) NOT NULL DEFAULT 'self-drive', -- self-drive, with-driver, airport, corporate
-    pickup_date     TIMESTAMPTZ NOT NULL,
-    return_date     TIMESTAMPTZ NOT NULL,
+    booking_type    VARCHAR(30) NOT NULL DEFAULT 'self-drive', -- self-drive, with-driver, airport
+    pickup_date     DATE NOT NULL,
+    return_date     DATE,                                      -- NULL for airport transfer
     pickup_location TEXT,
     return_location TEXT,
+    airport_name    VARCHAR(255),                               -- for airport transfer type
     
     -- Pricing
     total_days      INT NOT NULL,
@@ -291,7 +295,7 @@ CREATE INDEX idx_promos_active ON promotions(is_active, starts_at, expires_at);
 -- =====================================================
 -- 7b. HERO SLIDES TABLE (admin-managed hero images)
 -- =====================================================
-CREATE TABLE hero_slides (
+CREATE TABLE IF NOT EXISTS hero_slides (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     image_data      BYTEA NOT NULL,             -- image binary (BYTEA like vehicle_images)
     mime_type       VARCHAR(50) NOT NULL,        -- image/jpeg, image/png, image/webp
@@ -306,7 +310,7 @@ CREATE TABLE hero_slides (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_hero_slides_active ON hero_slides(is_active, sort_order);
+CREATE INDEX IF NOT EXISTS idx_hero_slides_active ON hero_slides(is_active, sort_order);
 
 -- =====================================================
 -- 8. REVIEWS TABLE
@@ -492,9 +496,11 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply updated_at trigger to all relevant tables
+DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
 CREATE TRIGGER trg_users_updated_at
     BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS trg_vehicles_updated_at ON vehicles;
 CREATE TRIGGER trg_vehicles_updated_at
     BEFORE UPDATE ON vehicles FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
@@ -540,17 +546,21 @@ ALTER TABLE trip_enquiries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE promotions ENABLE ROW LEVEL SECURITY;
 
 -- Public read for vehicles & promotions
+DROP POLICY IF EXISTS "Vehicles are viewable by everyone" ON vehicles;
 CREATE POLICY "Vehicles are viewable by everyone"
     ON vehicles FOR SELECT USING (status = 'available');
 
+DROP POLICY IF EXISTS "Promotions are viewable by everyone" ON promotions;
 CREATE POLICY "Promotions are viewable by everyone"
     ON promotions FOR SELECT USING (is_active = TRUE);
 
 -- Community posts are public
+DROP POLICY IF EXISTS "Community posts are viewable by everyone" ON community_posts;
 CREATE POLICY "Community posts are viewable by everyone"
     ON community_posts FOR SELECT USING (TRUE);
 
 -- Reviews are public
+DROP POLICY IF EXISTS "Reviews are viewable by everyone" ON reviews;
 CREATE POLICY "Reviews are viewable by everyone"
     ON reviews FOR SELECT USING (TRUE);
 

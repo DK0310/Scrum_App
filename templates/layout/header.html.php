@@ -13,7 +13,7 @@
     <!-- ===== NAVBAR ===== -->
     <nav class="navbar" id="navbar">
         <div class="navbar-inner">
-            <a href="index.php" class="navbar-brand">🚗 DriveNow</a>
+            <a href="index.php" class="navbar-brand">DriveNow</a>
             
             <ul class="navbar-nav" id="navMenu">
                 <li><a href="cars.php" <?= ($currentPage ?? '') === 'cars' ? 'class="active"' : '' ?>>Cars</a></li>

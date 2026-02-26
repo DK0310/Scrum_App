@@ -3,7 +3,7 @@
         <div class="footer-container">
             <div class="footer-grid">
                 <div>
-                    <div class="footer-brand">🚗 DriveNow</div>
+                    <div class="footer-brand">DriveNow</div>
                     <p class="footer-description">
                         The world's leading car rental platform. Book premium cars from trusted owners in 120+ countries. Self-drive or with driver.
                     </p>

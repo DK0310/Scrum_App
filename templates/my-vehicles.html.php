@@ -115,22 +115,22 @@
                 </div>
 
                 <!-- Row 4: Engine, Consumption -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;" id="engineConsumptionRow">
                     <div class="form-group" style="margin-bottom:0;">
-                        <label class="form-label">Engine Size</label>
+                        <label class="form-label" id="engineLabel">Engine Size</label>
                         <div style="position:relative;">
                             <input type="text" class="form-input" id="vEngine" placeholder="e.g. 2, 3.5" oninput="autoFormatEngine(this)" style="padding-right:40px;">
                             <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray-400);font-size:0.875rem;pointer-events:none;" id="engineSuffix">L</span>
                         </div>
-                        <small style="color:var(--gray-400);font-size:0.75rem;">Enter number only, e.g. "2" → 2L</small>
+                        <small style="color:var(--gray-400);font-size:0.75rem;" id="engineHint">Enter number only, e.g. "2" → 2L</small>
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
-                        <label class="form-label">Consumption</label>
+                        <label class="form-label" id="consumptionLabel">Consumption</label>
                         <div style="position:relative;">
                             <input type="text" class="form-input" id="vConsumption" placeholder="e.g. 9.72" oninput="autoFormatConsumption(this)" style="padding-right:80px;">
                             <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray-400);font-size:0.875rem;pointer-events:none;" id="consumptionSuffix">L/100km</span>
                         </div>
-                        <small style="color:var(--gray-400);font-size:0.75rem;">Enter number only, e.g. "9.72" → 9.72L/100km</small>
+                        <small style="color:var(--gray-400);font-size:0.75rem;" id="consumptionHint">Enter number only, e.g. "9.72" → 9.72L/100km</small>
                     </div>
                 </div>
 
@@ -288,12 +288,69 @@
         let uploadedImages = [];   // [{id: 'uuid', url: '/api/vehicles.php?action=get-image&id=uuid'}, ...]
         let deleteTargetId = null;
 
-        // ===== AUTO-FORMAT ENGINE SIZE =====
-        // User types "2" → stores as "2L", types "3.5" → "3.5L"
+        // ===== ELECTRIC CATEGORY DETECTION =====
+        function isElectricMode() {
+            return document.getElementById('vCategory').value === 'electric';
+        }
+
+        // Switch form fields when category changes
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('vCategory').addEventListener('change', function() {
+                updateFieldsForCategory(this.value);
+            });
+        });
+
+        function updateFieldsForCategory(category) {
+            const engineLabel = document.getElementById('engineLabel');
+            const engineSuffix = document.getElementById('engineSuffix');
+            const engineHint = document.getElementById('engineHint');
+            const engineInput = document.getElementById('vEngine');
+            const consumptionLabel = document.getElementById('consumptionLabel');
+            const consumptionSuffix = document.getElementById('consumptionSuffix');
+            const consumptionHint = document.getElementById('consumptionHint');
+            const consumptionInput = document.getElementById('vConsumption');
+            const fuelSelect = document.getElementById('vFuelType');
+            const transSelect = document.getElementById('vTransmission');
+
+            if (category === 'electric') {
+                // Switch to electric fields
+                engineLabel.textContent = 'Battery Range';
+                engineSuffix.textContent = 'Km';
+                engineHint.textContent = 'Enter number only, e.g. "400" → 400Km';
+                engineInput.placeholder = 'e.g. 400, 550';
+                engineInput.value = '';
+
+                consumptionLabel.textContent = 'Energy Consumption';
+                consumptionSuffix.textContent = 'Wh/Km';
+                consumptionHint.textContent = 'Enter number only, e.g. "150" → 150Wh/Km';
+                consumptionInput.placeholder = 'e.g. 150, 180';
+                consumptionInput.value = '';
+
+                // Default electric = automatic transmission & electric fuel
+                fuelSelect.value = 'electric';
+                transSelect.value = 'automatic';
+            } else {
+                // Switch back to normal fields
+                engineLabel.textContent = 'Engine Size';
+                engineSuffix.textContent = 'L';
+                engineHint.textContent = 'Enter number only, e.g. "2" → 2L';
+                engineInput.placeholder = 'e.g. 2, 3.5';
+
+                consumptionLabel.textContent = 'Consumption';
+                consumptionSuffix.textContent = 'L/100km';
+                consumptionHint.textContent = 'Enter number only, e.g. "9.72" → 9.72L/100km';
+                consumptionInput.placeholder = 'e.g. 9.72';
+
+                // Reset fuel type if it was electric
+                if (fuelSelect.value === 'electric') {
+                    fuelSelect.value = 'petrol';
+                }
+            }
+        }
+
+        // ===== AUTO-FORMAT ENGINE SIZE / BATTERY RANGE =====
         function autoFormatEngine(input) {
-            // Strip non-numeric characters except dot
             let val = input.value.replace(/[^0-9.]/g, '');
-            // Prevent multiple dots
             const parts = val.split('.');
             if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
             input.value = val;
@@ -302,13 +359,12 @@
         function getFormattedEngine() {
             const raw = document.getElementById('vEngine').value.trim().replace(/[^0-9.]/g, '');
             if (!raw) return '';
+            if (isElectricMode()) return raw + 'Km';
             return raw + 'L';
         }
 
-        // ===== AUTO-FORMAT CONSUMPTION =====
-        // User types "9.72" → stores as "9.72L/100km"
+        // ===== AUTO-FORMAT CONSUMPTION / ENERGY CONSUMPTION =====
         function autoFormatConsumption(input) {
-            // Strip non-numeric characters except dot
             let val = input.value.replace(/[^0-9.]/g, '');
             const parts = val.split('.');
             if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
@@ -318,18 +374,30 @@
         function getFormattedConsumption() {
             const raw = document.getElementById('vConsumption').value.trim().replace(/[^0-9.]/g, '');
             if (!raw) return '';
+            if (isElectricMode()) return raw + 'Wh/Km';
             return raw + 'L/100km';
         }
 
         // ===== PARSE VALUES FOR EDIT (strip suffix for display in input) =====
         function parseEngineForInput(engineStr) {
             if (!engineStr) return '';
-            return engineStr.replace(/L$/i, '').trim();
+            // Handle both "2L" and "400Km"
+            return engineStr.replace(/(Km|L)$/i, '').trim();
         }
 
         function parseConsumptionForInput(consumptionStr) {
             if (!consumptionStr) return '';
-            return consumptionStr.replace(/L\/100km$/i, '').trim();
+            // Handle both "9.72L/100km" and "150Wh/Km"
+            return consumptionStr.replace(/(Wh\/Km|L\/100km)$/i, '').trim();
+        }
+
+        // Check if stored value is electric format
+        function isElectricEngineValue(engineStr) {
+            return engineStr && /Km$/i.test(engineStr);
+        }
+
+        function isElectricConsumptionValue(consumptionStr) {
+            return consumptionStr && /Wh\/Km$/i.test(consumptionStr);
         }
 
         // Load vehicles on page load
@@ -433,6 +501,9 @@
             uploadedImages = [];
             document.getElementById('imagePreviewList').innerHTML = '';
 
+            // Reset to non-electric labels
+            updateFieldsForCategory('sedan');
+
             document.getElementById('vehicleModal').classList.add('open');
         }
 
@@ -453,6 +524,10 @@
             document.getElementById('vTransmission').value = v.transmission || 'automatic';
             document.getElementById('vFuelType').value = v.fuel_type || 'petrol';
             document.getElementById('vSeats').value = v.seats || 5;
+
+            // Update field labels based on category BEFORE setting values
+            updateFieldsForCategory(v.category || 'sedan');
+
             document.getElementById('vEngine').value = parseEngineForInput(v.engine_size || '');
             document.getElementById('vConsumption').value = parseConsumptionForInput(v.consumption || '');
             document.getElementById('vPriceDay').value = v.price_per_day || '';

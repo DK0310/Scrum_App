@@ -66,26 +66,80 @@ try {
 
     // ============================================
     // Extract bot response from n8n
-    // n8n AI Agent typically returns { output: "..." }
+    // n8n can return many formats:
+    //   { output: "..." }                    — AI Agent standard
+    //   [{ output: "..." }]                  — Webhook wrapped in array
+    //   [{ json: { output: "..." } }]        — n8n item format
+    //   "plain text"                         — Plain string
+    //   { response: "..." }                  — Custom workflow
     // ============================================
     $responseData = $n8nResponse['data'];
     
-    // Handle various response formats from n8n
+    // Debug: log raw response to help troubleshoot
+    $debugLog = __DIR__ . '/../logs/chatbot_debug.log';
+    $debugDir = dirname($debugLog);
+    if (!is_dir($debugDir)) @mkdir($debugDir, 0777, true);
+    @file_put_contents($debugLog, date('[Y-m-d H:i:s]') . " Raw response: " . json_encode($responseData, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
+    
     $botResponse = null;
     
-    if (is_array($responseData)) {
-        // n8n AI Agent standard output
-        $botResponse = $responseData['output'] 
-                    ?? $responseData['response'] 
-                    ?? $responseData['text']
-                    ?? $responseData['message']
-                    ?? null;
-    } elseif (is_string($responseData) && !empty($responseData)) {
-        // Plain text response
-        $botResponse = $responseData;
+    // If response is a string, use directly
+    if (is_string($responseData) && !empty(trim($responseData))) {
+        $botResponse = trim($responseData);
+    }
+    
+    // If response is an array
+    if (!$botResponse && is_array($responseData)) {
+        // Case 1: n8n wraps result in array — [{ output: "..." }]
+        // Check if it's a numerically indexed array (list)
+        if (isset($responseData[0]) && is_array($responseData[0])) {
+            $firstItem = $responseData[0];
+            // n8n item format: [{ json: { output: "..." } }]
+            if (isset($firstItem['json']) && is_array($firstItem['json'])) {
+                $firstItem = $firstItem['json'];
+            }
+            $botResponse = $firstItem['output'] 
+                        ?? $firstItem['response'] 
+                        ?? $firstItem['text'] 
+                        ?? $firstItem['message']
+                        ?? $firstItem['content']
+                        ?? null;
+        }
+        
+        // Case 2: Direct object — { output: "..." }
+        if (!$botResponse) {
+            $botResponse = $responseData['output'] 
+                        ?? $responseData['response'] 
+                        ?? $responseData['text']
+                        ?? $responseData['message']
+                        ?? $responseData['content']
+                        ?? null;
+        }
+
+        // Case 3: Nested in 'data' key — { data: { output: "..." } }
+        if (!$botResponse && isset($responseData['data']) && is_array($responseData['data'])) {
+            $botResponse = $responseData['data']['output']
+                        ?? $responseData['data']['response']
+                        ?? $responseData['data']['text']
+                        ?? $responseData['data']['message']
+                        ?? null;
+        }
+        
+        // Case 4: First string value in the array (last resort)
+        if (!$botResponse) {
+            foreach ($responseData as $key => $val) {
+                if (is_string($val) && !empty(trim($val)) && !in_array($key, ['sessionId', 'userId', 'timestamp', 'chatInput'])) {
+                    $botResponse = trim($val);
+                    break;
+                }
+            }
+        }
     }
 
     if (empty($botResponse)) {
+        // Include debug info so user can report what n8n returned
+        $debugInfo = is_string($responseData) ? substr($responseData, 0, 200) : json_encode($responseData, JSON_UNESCAPED_UNICODE);
+        @file_put_contents($debugLog, date('[Y-m-d H:i:s]') . " WARNING: Could not extract bot response. Data type: " . gettype($responseData) . "\n", FILE_APPEND);
         $botResponse = 'I received your message but could not generate a response. Please try again.';
     }
 
@@ -140,27 +194,25 @@ function sendToN8N($data) {
         ];
     }
 
-    if ($httpCode === 404) {
-        return [
-            'success' => false,
-            'error' => 'Webhook not found. Make sure the n8n workflow is ACTIVE (not just saved). URL: ' . $url,
-            'http_code' => 404
-        ];
-    }
-
-    if ($httpCode === 500) {
-        return [
-            'success' => false,
-            'error' => 'n8n internal error. Check n8n execution logs for details.',
-            'http_code' => 500
-        ];
-    }
-    
     $decoded = json_decode($response, true);
     
+    // Debug: log raw curl response
+    $debugLog = __DIR__ . '/../logs/chatbot_debug.log';
+    $debugDir = dirname($debugLog);
+    if (!is_dir($debugDir)) @mkdir($debugDir, 0777, true);
+    @file_put_contents($debugLog, date('[Y-m-d H:i:s]') . " n8n HTTP $httpCode | URL: $url | Raw body: " . substr($response, 0, 500) . "\n", FILE_APPEND);
+
+    if ($httpCode < 200 || $httpCode >= 300) {
+        return [
+            'success' => false,
+            'error' => "n8n returned HTTP $httpCode. Response: " . substr($response, 0, 300),
+            'http_code' => $httpCode
+        ];
+    }
+    
     return [
-        'success' => $httpCode >= 200 && $httpCode < 300,
-        'data' => $decoded ?? $response,
+        'success' => true,
+        'data' => $decoded !== null ? $decoded : $response,
         'http_code' => $httpCode
     ];
 }

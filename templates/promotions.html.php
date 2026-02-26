@@ -25,7 +25,14 @@
     <!-- ===== PROMOTIONS PAGE JAVASCRIPT ===== -->
     <script>
         function applyPromo(code) {
-            showToast('Promo code "' + code + '" copied! Redirecting to booking...', 'success');
+            // Save promo to wallet in localStorage
+            let saved = JSON.parse(localStorage.getItem('drivenow_saved_promos') || '[]');
+            if (!saved.includes(code.toUpperCase())) {
+                saved.push(code.toUpperCase());
+                localStorage.setItem('drivenow_saved_promos', JSON.stringify(saved));
+            }
+
+            showToast('🎟️ Promo "' + code + '" saved to your wallet! Redirecting to booking...', 'success');
             setTimeout(() => {
                 window.location.href = 'booking.php?promo=' + encodeURIComponent(code);
             }, 1000);

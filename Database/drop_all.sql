@@ -4,15 +4,15 @@
 -- Order: drop dependent tables first (FK constraints)
 -- =====================================================
 
--- Drop triggers first
-DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
-DROP TRIGGER IF EXISTS trg_vehicles_updated_at ON vehicles;
+-- Drop triggers (only for tables being dropped; keep users & vehicles triggers)
+-- KEEP: trg_users_updated_at (users table kept)
+-- KEEP: trg_vehicles_updated_at (vehicles table kept)
 DROP TRIGGER IF EXISTS trg_bookings_updated_at ON bookings;
 DROP TRIGGER IF EXISTS trg_reviews_updated_at ON reviews;
 DROP TRIGGER IF EXISTS trg_posts_updated_at ON community_posts;
 
--- Drop trigger function
-DROP FUNCTION IF EXISTS update_updated_at();
+-- Keep trigger function (still needed by users & vehicles)
+-- DROP FUNCTION IF EXISTS update_updated_at();
 
 -- Drop views (none needed — n8n manages chat history via n8n_chat_histories)
 
@@ -29,22 +29,19 @@ DROP TABLE IF EXISTS community_posts CASCADE;
 DROP TABLE IF EXISTS reviews CASCADE;
 DROP TABLE IF EXISTS payments CASCADE;
 DROP TABLE IF EXISTS bookings CASCADE;
-DROP TABLE IF EXISTS vehicle_images CASCADE;
-DROP TABLE IF EXISTS vehicles CASCADE;
-DROP TABLE IF EXISTS hero_slides CASCADE;
+-- KEEP: vehicle_images, vehicles, users, hero_slides (do NOT drop)
 DROP TABLE IF EXISTS auth_sessions CASCADE;
 DROP TABLE IF EXISTS promotions CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
 
--- Drop ENUM types
+-- Drop ENUM types (only those NOT used by kept tables: users, vehicles, vehicle_images)
 DROP TYPE IF EXISTS notification_type;
-DROP TYPE IF EXISTS membership_tier;
-DROP TYPE IF EXISTS vehicle_status;
+-- KEEP: membership_tier  (used by users.membership)
+-- KEEP: vehicle_status   (used by vehicles.status)
 DROP TYPE IF EXISTS payment_method;
 DROP TYPE IF EXISTS payment_status;
 DROP TYPE IF EXISTS booking_status;
-DROP TYPE IF EXISTS auth_provider;
-DROP TYPE IF EXISTS user_role;
+-- KEEP: auth_provider    (used by users.auth_provider)
+-- KEEP: user_role        (used by users.role)
 
 -- =====================================================
 -- DONE! All tables & types dropped.
