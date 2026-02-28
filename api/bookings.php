@@ -16,6 +16,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 
+// Include notification helper functions
+require_once __DIR__ . '/notification-helpers.php';
+
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
@@ -131,6 +134,8 @@ if ($action === 'create') {
     $specialRequests = $input['special_requests'] ?? '';
     $promoCode = $input['promo_code'] ?? '';
     $paymentMethod = $input['payment_method'] ?? 'cash';
+    $distanceKm = isset($input['distance_km']) ? floatval($input['distance_km']) : null;
+    $frontendTransferCost = isset($input['transfer_cost']) ? floatval($input['transfer_cost']) : null;
 
     // Validate required fields
     if (empty($vehicleId) || empty($pickupDate) || empty($pickupLocation)) {
@@ -165,7 +170,7 @@ if ($action === 'create') {
 
     try {
         // Get vehicle info
-        $stmt = $pdo->prepare("SELECT id, owner_id, price_per_day, price_per_week, price_per_month, status FROM vehicles WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT id, owner_id, price_per_day, price_per_week, price_per_month, category, status FROM vehicles WHERE id = ?");
         $stmt->execute([$vehicleId]);
         $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -191,7 +196,19 @@ if ($action === 'create') {
 
         if ($bookingType === 'airport') {
             $totalDays = 1;
-            $subtotal = $pricePerDay;
+            // Airport transfer: use distance-based cost sent from frontend
+            if ($frontendTransferCost !== null && $frontendTransferCost > 0) {
+                $subtotal = $frontendTransferCost;
+            } elseif ($distanceKm !== null && $distanceKm > 0) {
+                // Fallback: calculate based on category rate
+                $category = strtolower($vehicle['category'] ?? 'sedan');
+                $ratePerKm = 1; // default
+                if (in_array($category, ['minibus', 'van', 'sport'])) $ratePerKm = 2;
+                elseif ($category === 'luxury') $ratePerKm = 5;
+                $subtotal = round($distanceKm * $ratePerKm, 2);
+            } else {
+                $subtotal = $pricePerDay; // fallback to daily rate
+            }
         } else {
             $d1 = new DateTime($pickupDate);
             $d2 = new DateTime($returnDate);
@@ -246,10 +263,11 @@ if ($action === 'create') {
         $stmt = $pdo->prepare("
             INSERT INTO bookings (renter_id, vehicle_id, owner_id, booking_type, pickup_date, return_date, 
                 pickup_location, return_location, airport_name, total_days, price_per_day, subtotal, 
-                discount_amount, total_amount, promo_code, special_requests, driver_requested, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+                discount_amount, total_amount, promo_code, special_requests, driver_requested, distance_km, transfer_cost, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
             RETURNING id, created_at
         ");
+        $driverRequested = ($bookingType === 'with-driver') ? 't' : 'f';
         $stmt->execute([
             $renterId,
             $vehicleId,
@@ -267,7 +285,9 @@ if ($action === 'create') {
             $totalAmount,
             $appliedPromo,
             $specialRequests,
-            $bookingType === 'with-driver'
+            $driverRequested,
+            $distanceKm,
+            ($bookingType === 'airport' && $frontendTransferCost !== null) ? $frontendTransferCost : null
         ]);
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -281,6 +301,25 @@ if ($action === 'create') {
             $totalAmount,
             $paymentMethod
         ]);
+
+        // --- Notifications ---
+        // Get vehicle name for notification
+        $vStmt = $pdo->prepare("SELECT brand, model FROM vehicles WHERE id = ?");
+        $vStmt->execute([$vehicleId]);
+        $vInfo = $vStmt->fetch(PDO::FETCH_ASSOC);
+        $vehicleName = ($vInfo ? $vInfo['brand'] . ' ' . $vInfo['model'] : 'Vehicle');
+
+        // Notify renter: booking created
+        createNotification($pdo, $renterId, 'booking',
+            '📋 Booking Created',
+            "Your booking for {$vehicleName} has been submitted. Pickup: {$pickupDate}. Total: \${$totalAmount}. Waiting for owner confirmation."
+        );
+
+        // Notify owner: new booking request
+        createNotification($pdo, $vehicle['owner_id'], 'booking',
+            '🆕 New Booking Request',
+            "You have a new booking request for your {$vehicleName}. Pickup: {$pickupDate}. Amount: \${$totalAmount}."
+        );
 
         echo json_encode([
             'success' => true,
@@ -296,6 +335,211 @@ if ($action === 'create') {
                 'status' => 'pending'
             ]
         ]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// MY ORDERS - List bookings for current user (renter + owner)
+// ==========================================================
+if ($action === 'my-orders') {
+    requireAuth();
+    $userId = $_SESSION['user_id'];
+
+    try {
+        $stmt = $pdo->prepare("
+            SELECT b.id, b.renter_id, b.owner_id, b.vehicle_id, b.booking_type,
+                   b.pickup_date, b.return_date, b.pickup_location, b.return_location,
+                   b.airport_name, b.total_days, b.price_per_day, b.subtotal,
+                   b.discount_amount, b.total_amount, b.promo_code, b.status,
+                   b.special_requests, b.driver_requested, b.created_at,
+                   b.confirmed_at, b.completed_at, b.cancelled_at,
+                   b.distance_km, b.transfer_cost,
+                   v.brand, v.model, v.year, v.category,
+                   u_renter.full_name AS renter_name,
+                   u_renter.email AS renter_email,
+                   p.method AS payment_method,
+                   p.status AS payment_status
+            FROM bookings b
+            JOIN vehicles v ON b.vehicle_id = v.id
+            LEFT JOIN users u_renter ON b.renter_id = u_renter.id
+            LEFT JOIN payments p ON p.booking_id = b.id
+            WHERE b.renter_id = ? OR b.owner_id = ?
+            ORDER BY b.created_at DESC
+        ");
+        $stmt->execute([$userId, $userId]);
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Get vehicle thumbnails & set role flags
+        foreach ($orders as &$order) {
+            // Set boolean flags by comparing IDs directly in PHP
+            $order['is_renter'] = ($order['renter_id'] === $userId);
+            $order['is_owner'] = ($order['owner_id'] === $userId);
+
+            // Get vehicle thumbnail
+            try {
+                $imgStmt = $pdo->prepare("SELECT image_data, mime_type FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, created_at ASC LIMIT 1");
+                $imgStmt->execute([$order['vehicle_id']]);
+                $img = $imgStmt->fetch(PDO::FETCH_ASSOC);
+                if ($img && $img['image_data']) {
+                    $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
+                    $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
+                } else {
+                    $order['thumbnail_url'] = '';
+                }
+            } catch (Exception $e) {
+                $order['thumbnail_url'] = '';
+            }
+        }
+
+        echo json_encode(['success' => true, 'orders' => $orders]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// UPDATE BOOKING STATUS (Owner: confirm, deliver, complete | Renter: cancel)
+// ==========================================================
+if ($action === 'update-status') {
+    requireAuth();
+    $userId = $_SESSION['user_id'];
+    $bookingId = $input['booking_id'] ?? '';
+    $newStatus = $input['status'] ?? '';
+
+    if (empty($bookingId) || empty($newStatus)) {
+        echo json_encode(['success' => false, 'message' => 'Booking ID and status are required.']);
+        exit;
+    }
+
+    $validStatuses = ['confirmed', 'in_progress', 'completed', 'cancelled'];
+    if (!in_array($newStatus, $validStatuses)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid status.']);
+        exit;
+    }
+
+    try {
+        // Get booking
+        $stmt = $pdo->prepare("SELECT id, renter_id, owner_id, vehicle_id, status FROM bookings WHERE id = ?");
+        $stmt->execute([$bookingId]);
+        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$booking) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found.']);
+            exit;
+        }
+
+        $isOwner = ($booking['owner_id'] === $userId);
+        $isRenter = ($booking['renter_id'] === $userId);
+        $isAdmin = (($_SESSION['role'] ?? '') === 'admin');
+
+        // Permission & transition checks
+        $allowed = false;
+        $currentStatus = $booking['status'];
+
+        if ($newStatus === 'confirmed' && $currentStatus === 'pending' && ($isOwner || $isAdmin)) {
+            $allowed = true;
+        } elseif ($newStatus === 'in_progress' && $currentStatus === 'confirmed' && ($isOwner || $isAdmin)) {
+            $allowed = true;
+        } elseif ($newStatus === 'completed' && $currentStatus === 'in_progress' && ($isOwner || $isAdmin)) {
+            $allowed = true;
+        } elseif ($newStatus === 'cancelled' && $currentStatus === 'pending' && ($isOwner || $isRenter || $isAdmin)) {
+            $allowed = true;
+        }
+
+        if (!$allowed) {
+            echo json_encode(['success' => false, 'message' => 'You are not allowed to perform this action.']);
+            exit;
+        }
+
+        // Update status
+        $extraSql = '';
+        if ($newStatus === 'confirmed') $extraSql = ', confirmed_at = NOW()';
+        if ($newStatus === 'completed') $extraSql = ', completed_at = NOW()';
+        if ($newStatus === 'cancelled') $extraSql = ', cancelled_at = NOW()';
+
+        $pdo->prepare("UPDATE bookings SET status = ?::booking_status" . $extraSql . " WHERE id = ?")->execute([$newStatus, $bookingId]);
+
+        // Update vehicle status & stats based on booking transition
+        $vehicleId = $booking['vehicle_id'];
+
+        if ($newStatus === 'in_progress') {
+            // Delivery started → vehicle is now rented, increment total_bookings
+            $pdo->prepare("UPDATE vehicles SET status = 'rented'::vehicle_status, total_bookings = total_bookings + 1 WHERE id = ?")->execute([$vehicleId]);
+        }
+
+        if ($newStatus === 'completed') {
+            // Order done → vehicle available again
+            $pdo->prepare("UPDATE vehicles SET status = 'available'::vehicle_status WHERE id = ?")->execute([$vehicleId]);
+        }
+
+        if ($newStatus === 'cancelled') {
+            // If vehicle was rented for this booking, make it available again
+            $pdo->prepare("UPDATE vehicles SET status = 'available'::vehicle_status WHERE id = ? AND status = 'rented'::vehicle_status")->execute([$vehicleId]);
+        }
+
+        // Update payment status if completed
+        if ($newStatus === 'completed') {
+            $pdo->prepare("UPDATE payments SET status = 'paid'::payment_status WHERE booking_id = ?")->execute([$bookingId]);
+        }
+        if ($newStatus === 'cancelled') {
+            $pdo->prepare("UPDATE payments SET status = 'failed'::payment_status WHERE booking_id = ?")->execute([$bookingId]);
+        }
+
+        // --- Notifications for status changes ---
+        $vStmt = $pdo->prepare("SELECT v.brand, v.model FROM vehicles v WHERE v.id = ?");
+        $vStmt->execute([$booking['vehicle_id']]);
+        $vInfo = $vStmt->fetch(PDO::FETCH_ASSOC);
+        $vehicleName = ($vInfo ? $vInfo['brand'] . ' ' . $vInfo['model'] : 'Vehicle');
+
+        $renterId = $booking['renter_id'];
+        $ownerId = $booking['owner_id'];
+
+        if ($newStatus === 'confirmed') {
+            createNotification($pdo, $renterId, 'booking',
+                '✅ Booking Confirmed',
+                "Your booking for {$vehicleName} has been confirmed by the owner. Get ready for pickup!"
+            );
+            createNotification($pdo, $ownerId, 'booking',
+                '✅ Booking Confirmed',
+                "You confirmed a booking for your {$vehicleName}."
+            );
+        } elseif ($newStatus === 'in_progress') {
+            createNotification($pdo, $renterId, 'booking',
+                '🚗 Trip Started',
+                "Your trip with {$vehicleName} has started. Drive safely!"
+            );
+            createNotification($pdo, $ownerId, 'alert',
+                '🚗 Vehicle Delivered',
+                "Your {$vehicleName} has been delivered to the renter."
+            );
+        } elseif ($newStatus === 'completed') {
+            createNotification($pdo, $renterId, 'payment',
+                '🎉 Trip Completed',
+                "Your trip with {$vehicleName} is complete. Payment has been processed. Thank you!"
+            );
+            createNotification($pdo, $ownerId, 'payment',
+                '💰 Payment Received',
+                "Your {$vehicleName} trip is completed. Payment has been received."
+            );
+        } elseif ($newStatus === 'cancelled') {
+            $cancelledBy = $isOwner ? 'owner' : ($isRenter ? 'you' : 'admin');
+            createNotification($pdo, $renterId, 'alert',
+                '❌ Booking Cancelled',
+                "Your booking for {$vehicleName} has been cancelled" . ($isOwner ? " by the owner." : ".")
+            );
+            if (!$isOwner) {
+                createNotification($pdo, $ownerId, 'alert',
+                    '❌ Booking Cancelled',
+                    "A booking for your {$vehicleName} has been cancelled" . ($isRenter ? " by the renter." : ".")
+                );
+            }
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Booking status updated to ' . $newStatus . '.']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }

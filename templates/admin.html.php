@@ -6,13 +6,14 @@
             <!-- Admin Header -->
             <div style="margin-bottom:32px;">
                 <h1 style="font-size:2rem;font-weight:800;color:var(--gray-900);">⚙️ Admin Dashboard</h1>
-                <p style="color:var(--gray-500);margin-top:4px;">Manage hero slides, promotions, vehicles and bookings</p>
+                <p style="color:var(--gray-500);margin-top:4px;">Manage users, hero slides, promotions, vehicles and bookings</p>
             </div>
 
             <!-- Tab Navigation -->
             <div class="admin-tabs" style="display:flex;gap:4px;margin-bottom:24px;background:white;padding:6px;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);flex-wrap:wrap;">
                 <button class="admin-tab active" onclick="switchTab('hero')" id="tab-hero">🖼️ Hero Slides</button>
                 <button class="admin-tab" onclick="switchTab('promotions')" id="tab-promotions">🎉 Promotions</button>
+                <button class="admin-tab" onclick="switchTab('users')" id="tab-users">👥 Users</button>
                 <button class="admin-tab" onclick="switchTab('vehicles')" id="tab-vehicles">🚗 Vehicles</button>
                 <button class="admin-tab" onclick="switchTab('bookings')" id="tab-bookings">📋 Bookings</button>
             </div>
@@ -111,9 +112,45 @@
                 </div>
             </div>
 
+            <!-- ===== USERS TAB ===== -->
+            <div class="admin-panel" id="panel-users" style="display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                    <h2 style="font-size:1.25rem;font-weight:700;">👥 All Users</h2>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <input type="text" id="userSearchInput" placeholder="Search name, email..." oninput="filterUsers()" style="padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;width:220px;">
+                        <select id="userRoleFilter" onchange="filterUsers()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                            <option value="">All Roles</option>
+                            <option value="renter">Renter</option>
+                            <option value="owner">Owner</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="adminUsersList">
+                    <div style="text-align:center;padding:40px;color:var(--gray-400);">Loading users...</div>
+                </div>
+            </div>
+
             <!-- ===== VEHICLES TAB ===== -->
             <div class="admin-panel" id="panel-vehicles" style="display:none;">
-                <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:20px;">All Vehicles</h2>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                    <h2 style="font-size:1.25rem;font-weight:700;">🚗 All Vehicles</h2>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <select id="vehicleOwnerFilter" onchange="filterAdminVehicles()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                            <option value="">All Owners</option>
+                        </select>
+                        <select id="vehicleCategoryFilter" onchange="filterAdminVehicles()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                            <option value="">All Types</option>
+                        </select>
+                        <select id="vehicleStatusFilter" onchange="filterAdminVehicles()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                            <option value="">All Status</option>
+                            <option value="available">Available</option>
+                            <option value="rented">Rented</option>
+                            <option value="maintenance">Maintenance</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
                 <div id="adminVehiclesList">
                     <div style="text-align:center;padding:40px;color:var(--gray-400);">Loading vehicles...</div>
                 </div>
@@ -121,7 +158,20 @@
 
             <!-- ===== BOOKINGS TAB ===== -->
             <div class="admin-panel" id="panel-bookings" style="display:none;">
-                <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:20px;">All Bookings</h2>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                    <h2 style="font-size:1.25rem;font-weight:700;">📋 All Bookings</h2>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <input type="text" id="bookingSearchInput" placeholder="Search renter or owner..." oninput="filterAdminBookings()" style="padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;width:220px;">
+                        <select id="bookingStatusFilter" onchange="filterAdminBookings()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                </div>
                 <div id="adminBookingsList">
                     <div style="text-align:center;padding:40px;color:var(--gray-400);">Loading bookings...</div>
                 </div>
@@ -198,6 +248,7 @@
             // Load data for tab
             if (tab === 'hero') loadHeroSlides();
             if (tab === 'promotions') loadPromotions();
+            if (tab === 'users') loadAdminUsers();
             if (tab === 'vehicles') loadAdminVehicles();
             if (tab === 'bookings') loadAdminBookings();
         }
@@ -439,6 +490,8 @@
         }
 
         // ===== VEHICLES =====
+        let allAdminVehicles = [];
+
         async function loadAdminVehicles() {
             try {
                 const res = await fetch(ADMIN_API, {
@@ -447,20 +500,54 @@
                     body: JSON.stringify({ action: 'admin-list-vehicles' })
                 });
                 const data = await res.json();
-                if (data.success) renderAdminVehicles(data.vehicles);
+                if (data.success) {
+                    allAdminVehicles = data.vehicles;
+                    populateVehicleFilters(data.vehicles);
+                    filterAdminVehicles();
+                }
                 else document.getElementById('adminVehiclesList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Failed to load.</div>';
             } catch (e) {
                 document.getElementById('adminVehiclesList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Error loading.</div>';
             }
         }
 
+        function populateVehicleFilters(vehicles) {
+            // Owner filter
+            const owners = [...new Set(vehicles.map(v => v.owner_name).filter(Boolean))].sort();
+            const ownerSelect = document.getElementById('vehicleOwnerFilter');
+            const currentOwner = ownerSelect.value;
+            ownerSelect.innerHTML = '<option value="">All Owners</option>' + owners.map(o => `<option value="${o}">${o}</option>`).join('');
+            ownerSelect.value = currentOwner;
+
+            // Category filter
+            const cats = [...new Set(vehicles.map(v => v.category).filter(Boolean))].sort();
+            const catSelect = document.getElementById('vehicleCategoryFilter');
+            const currentCat = catSelect.value;
+            catSelect.innerHTML = '<option value="">All Types</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+            catSelect.value = currentCat;
+        }
+
+        function filterAdminVehicles() {
+            const ownerFilter = document.getElementById('vehicleOwnerFilter').value;
+            const catFilter = document.getElementById('vehicleCategoryFilter').value;
+            const statusFilter = document.getElementById('vehicleStatusFilter').value;
+
+            let filtered = allAdminVehicles;
+            if (ownerFilter) filtered = filtered.filter(v => v.owner_name === ownerFilter);
+            if (catFilter) filtered = filtered.filter(v => v.category === catFilter);
+            if (statusFilter) filtered = filtered.filter(v => v.status === statusFilter);
+
+            renderAdminVehicles(filtered);
+        }
+
         function renderAdminVehicles(vehicles) {
             const el = document.getElementById('adminVehiclesList');
             if (vehicles.length === 0) {
-                el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">No vehicles in system.</div>';
+                el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">No vehicles found.</div>';
                 return;
             }
-            el.innerHTML = `<div style="overflow-x:auto;"><table class="admin-table">
+            el.innerHTML = `<div style="font-size:0.8rem;color:var(--gray-400);margin-bottom:8px;">Showing ${vehicles.length} vehicle(s)</div>
+            <div style="overflow-x:auto;"><table class="admin-table">
                 <thead><tr>
                     <th>Vehicle</th><th>Owner</th><th>License</th><th>Price/Day</th><th>Bookings</th><th>Status</th><th>Actions</th>
                 </tr></thead>
@@ -500,6 +587,8 @@
         }
 
         // ===== BOOKINGS =====
+        let allAdminBookings = [];
+
         async function loadAdminBookings() {
             try {
                 const res = await fetch(ADMIN_API, {
@@ -508,17 +597,37 @@
                     body: JSON.stringify({ action: 'admin-list-bookings' })
                 });
                 const data = await res.json();
-                if (data.success) renderAdminBookings(data.bookings);
+                if (data.success) {
+                    allAdminBookings = data.bookings;
+                    filterAdminBookings();
+                }
                 else document.getElementById('adminBookingsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Failed to load.</div>';
             } catch (e) {
                 document.getElementById('adminBookingsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Error loading.</div>';
             }
         }
 
+        function filterAdminBookings() {
+            const search = (document.getElementById('bookingSearchInput').value || '').toLowerCase().trim();
+            const statusFilter = document.getElementById('bookingStatusFilter').value;
+
+            let filtered = allAdminBookings;
+            if (search) {
+                filtered = filtered.filter(b =>
+                    (b.renter_name || '').toLowerCase().includes(search) ||
+                    (b.renter_email || '').toLowerCase().includes(search) ||
+                    (b.owner_name || '').toLowerCase().includes(search)
+                );
+            }
+            if (statusFilter) filtered = filtered.filter(b => b.status === statusFilter);
+
+            renderAdminBookings(filtered);
+        }
+
         function renderAdminBookings(bookings) {
             const el = document.getElementById('adminBookingsList');
             if (bookings.length === 0) {
-                el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">No bookings in system.</div>';
+                el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">No bookings found.</div>';
                 return;
             }
 
@@ -527,22 +636,30 @@
                 'completed': '#6b7280', 'cancelled': '#ef4444'
             };
 
-            el.innerHTML = `<div style="overflow-x:auto;"><table class="admin-table">
+            el.innerHTML = `<div style="font-size:0.8rem;color:var(--gray-400);margin-bottom:8px;">Showing ${bookings.length} booking(s)</div>
+            <div style="overflow-x:auto;"><table class="admin-table">
                 <thead><tr>
-                    <th>Vehicle</th><th>Renter</th><th>Owner</th><th>Dates</th><th>Total</th><th>Status</th><th>Actions</th>
+                    <th>Vehicle</th><th>Renter</th><th>Owner</th><th>Pickup Date</th><th>Return Date</th><th>Days</th><th>Total</th><th>Status</th><th>Actions</th>
                 </tr></thead>
                 <tbody>${bookings.map(b => {
                     const vehicle = b.brand ? `${b.brand} ${b.model} ${b.year}` : 'Unknown';
-                    const start = b.start_date ? b.start_date.substring(0, 10) : '—';
-                    const end = b.end_date ? b.end_date.substring(0, 10) : '—';
+                    const pickupDate = (b.pickup_date || b.start_date) ? new Date(b.pickup_date || b.start_date).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'}) : '—';
+                    const returnDate = (b.return_date || b.end_date) ? new Date(b.return_date || b.end_date).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'}) : '—';
+                    const rawStart = b.pickup_date || b.start_date;
+                    const rawEnd = b.return_date || b.end_date;
+                    const days = (rawStart && rawEnd) ? Math.max(1, Math.ceil((new Date(rawEnd) - new Date(rawStart)) / (1000*60*60*24))) : (b.total_days || '—');
                     const color = statusColors[b.status] || '#6b7280';
+                    const totalVal = b.total_amount || b.total_price;
+                    const total = totalVal ? '$' + parseFloat(totalVal).toFixed(2) : '—';
                     return `<tr>
                         <td><strong>${vehicle}</strong><br><span style="font-size:0.75rem;color:var(--gray-400);">${b.license_plate || ''}</span></td>
                         <td>${b.renter_name || 'Unknown'}<br><span style="font-size:0.75rem;color:var(--gray-400);">${b.renter_email || ''}</span></td>
                         <td>${b.owner_name || 'Unknown'}</td>
-                        <td>${start} → ${end}</td>
-                        <td>$${b.total_price || '—'}</td>
-                        <td><span style="color:${color};font-weight:600;font-size:0.8rem;text-transform:capitalize;">${b.status || 'N/A'}</span></td>
+                        <td style="white-space:nowrap;">${pickupDate}</td>
+                        <td style="white-space:nowrap;">${returnDate}</td>
+                        <td style="text-align:center;">${days}</td>
+                        <td style="font-weight:700;color:var(--primary);">${total}</td>
+                        <td><span style="color:${color};font-weight:600;font-size:0.8rem;text-transform:capitalize;">${(b.status || 'N/A').replace('_',' ')}</span></td>
                         <td><button class="btn-xs danger" onclick="adminDeleteBooking('${b.id}')">Delete</button></td>
                     </tr>`;
                 }).join('')}</tbody></table></div>`;
@@ -559,6 +676,140 @@
                 const data = await res.json();
                 showToast(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadAdminBookings();
+            } catch (e) { showToast('Failed.', 'error'); }
+        }
+
+        // ===== USERS =====
+        let allAdminUsers = [];
+
+        async function loadAdminUsers() {
+            try {
+                const res = await fetch(ADMIN_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'admin-list-users' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    allAdminUsers = data.users;
+                    filterUsers();
+                } else {
+                    document.getElementById('adminUsersList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Failed to load users.</div>';
+                }
+            } catch (e) {
+                document.getElementById('adminUsersList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Error loading users.</div>';
+            }
+        }
+
+        function filterUsers() {
+            const search = (document.getElementById('userSearchInput').value || '').toLowerCase().trim();
+            const roleFilter = document.getElementById('userRoleFilter').value;
+
+            let filtered = allAdminUsers;
+            if (search) {
+                filtered = filtered.filter(u =>
+                    (u.full_name || '').toLowerCase().includes(search) ||
+                    (u.email || '').toLowerCase().includes(search) ||
+                    (u.phone || '').toLowerCase().includes(search)
+                );
+            }
+            if (roleFilter) filtered = filtered.filter(u => u.role === roleFilter);
+
+            renderAdminUsers(filtered);
+        }
+
+        function renderAdminUsers(users) {
+            const el = document.getElementById('adminUsersList');
+            if (users.length === 0) {
+                el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">No users found.</div>';
+                return;
+            }
+
+            const roleColors = { 'admin': '#ef4444', 'owner': '#3b82f6', 'renter': '#22c55e' };
+
+            el.innerHTML = `<div style="font-size:0.8rem;color:var(--gray-400);margin-bottom:8px;">Showing ${users.length} user(s)</div>
+            <div style="overflow-x:auto;"><table class="admin-table">
+                <thead><tr>
+                    <th>User</th><th>Email</th><th>Phone</th><th>Role</th><th>Auth</th><th>Status</th><th>Joined</th><th>Actions</th>
+                </tr></thead>
+                <tbody>${users.map(u => {
+                    const roleColor = roleColors[u.role] || '#6b7280';
+                    const joined = u.created_at ? new Date(u.created_at).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'}) : '—';
+                    const lastLogin = u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('en-US', {month:'short',day:'numeric'}) : 'Never';
+                    return `<tr>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <div style="width:36px;height:36px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;flex-shrink:0;">
+                                    ${(u.full_name || u.email || '?').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div style="font-weight:600;">${u.full_name || '(No name)'}</div>
+                                    <div style="font-size:0.75rem;color:var(--gray-400);">Last login: ${lastLogin}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>${u.email || '—'}</td>
+                        <td>${u.phone || '—'}</td>
+                        <td><span style="color:${roleColor};font-weight:600;font-size:0.8rem;text-transform:capitalize;">${u.role}</span></td>
+                        <td style="text-transform:capitalize;">${u.auth_provider || '—'}</td>
+                        <td><span class="admin-badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
+                        <td style="white-space:nowrap;">${joined}</td>
+                        <td>
+                            <div style="display:flex;gap:4px;">
+                                <button class="btn-xs toggle" onclick="adminToggleUser('${u.id}', ${!u.is_active})">${u.is_active ? 'Disable' : 'Enable'}</button>
+                                <button class="btn-xs edit" onclick="adminChangeRole('${u.id}', '${u.role}', '${(u.full_name || '').replace(/'/g, "\\'")}')"">Role</button>
+                                <button class="btn-xs danger" onclick="adminDeleteUser('${u.id}', '${(u.full_name || '').replace(/'/g, "\\'")}')"">Del</button>
+                            </div>
+                        </td>
+                    </tr>`;
+                }).join('')}</tbody></table></div>`;
+        }
+
+        async function adminToggleUser(id, active) {
+            try {
+                const res = await fetch(ADMIN_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'admin-update-user', user_id: id, is_active: active })
+                });
+                const data = await res.json();
+                showToast(data.message, data.success ? 'success' : 'error');
+                if (data.success) loadAdminUsers();
+            } catch (e) { showToast('Failed.', 'error'); }
+        }
+
+        function adminChangeRole(id, currentRole, name) {
+            const newRole = prompt(`Change role for "${name}":\nCurrent: ${currentRole}\n\nEnter new role (renter, owner, admin):`, currentRole);
+            if (!newRole || newRole === currentRole) return;
+            if (!['renter', 'owner', 'admin'].includes(newRole)) {
+                showToast('Invalid role. Use: renter, owner, or admin.', 'error');
+                return;
+            }
+
+            fetch(ADMIN_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'admin-update-user', user_id: id, role: newRole })
+            })
+            .then(r => r.json())
+            .then(data => {
+                showToast(data.message, data.success ? 'success' : 'error');
+                if (data.success) loadAdminUsers();
+            })
+            .catch(() => showToast('Failed.', 'error'));
+        }
+
+        async function adminDeleteUser(id, name) {
+            if (!confirm(`Are you sure you want to delete user "${name}"? This action cannot be undone.`)) return;
+            try {
+                const res = await fetch(ADMIN_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'admin-delete-user', user_id: id })
+                });
+                const data = await res.json();
+                showToast(data.message, data.success ? 'success' : 'error');
+                if (data.success) loadAdminUsers();
             } catch (e) { showToast('Failed.', 'error'); }
         }
 

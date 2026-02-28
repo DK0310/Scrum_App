@@ -230,10 +230,13 @@ if ($action === 'list') {
             $params[] = '%' . strtolower($location) . '%';
         }
         if ($search) {
-            $where[] = "(LOWER(v.brand) ILIKE ? OR LOWER(v.model) ILIKE ? OR LOWER(v.category) ILIKE ?)";
-            $params[] = '%' . strtolower($search) . '%';
-            $params[] = '%' . strtolower($search) . '%';
-            $params[] = '%' . strtolower($search) . '%';
+            $where[] = "(LOWER(v.brand) ILIKE ? OR LOWER(v.model) ILIKE ? OR LOWER(v.category) ILIKE ? OR LOWER(v.brand || ' ' || v.model) ILIKE ? OR LOWER(v.brand || ' ' || v.model || ' ' || CAST(v.year AS TEXT)) ILIKE ?)";
+            $searchLike = '%' . strtolower($search) . '%';
+            $params[] = $searchLike;
+            $params[] = $searchLike;
+            $params[] = $searchLike;
+            $params[] = $searchLike;
+            $params[] = $searchLike;
         }
 
         $whereClause = implode(' AND ', $where);

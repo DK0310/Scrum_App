@@ -335,13 +335,13 @@
             <!-- ===== BOOKING SUCCESS ===== -->
             <div id="bookingSuccess" style="display:none;">
                 <div style="text-align:center;padding:60px 20px;max-width:560px;margin:0 auto;">
-                    <div style="width:80px;height:80px;border-radius:50%;background:var(--success-light);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;font-size:2.5rem;">✅</div>
-                    <h2 style="font-size:1.5rem;font-weight:800;color:var(--gray-900);margin-bottom:8px;">Booking Confirmed!</h2>
-                    <p style="color:var(--gray-500);margin-bottom:24px;line-height:1.7;" id="successMessage">Your booking has been submitted. We'll send pickup details to your email shortly.</p>
+                    <div style="width:80px;height:80px;border-radius:50%;background:var(--success-light);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;font-size:2.5rem;">🎉</div>
+                    <h2 style="font-size:1.5rem;font-weight:800;color:var(--gray-900);margin-bottom:8px;">Thank You!</h2>
+                    <p style="color:var(--gray-500);margin-bottom:24px;line-height:1.7;" id="successMessage">Your payment has been received. Please check your email for booking details or view your orders to track the status.</p>
                     <div class="success-booking-summary" id="successSummary"></div>
-                    <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;">
+                    <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;flex-wrap:wrap;">
+                        <a href="orders.php" class="btn btn-primary">📋 View My Orders</a>
                         <a href="cars.php" class="btn btn-outline">Browse More Cars</a>
-                        <a href="index.php" class="btn btn-primary">Back to Home</a>
                     </div>
                 </div>
             </div>
@@ -870,7 +870,13 @@
             const subtotal = totalDays * ppd;
             document.getElementById('paymentDailyRate').textContent = '$' + ppd.toFixed(2) + '/day';
             document.getElementById('paymentDaysLabel').textContent = totalDays + ' day' + (totalDays > 1 ? 's' : '');
-            document.getElementById('paymentSubtotal').textContent = '$' + subtotal.toFixed(2);
+
+            // For airport with transfer cost, subtotal = transfer cost
+            if (selectedBookingType === 'airport' && transferCost !== null) {
+                document.getElementById('paymentSubtotal').textContent = '$' + transferCost.toFixed(2);
+            } else {
+                document.getElementById('paymentSubtotal').textContent = '$' + subtotal.toFixed(2);
+            }
 
             // Distance + transfer cost
             if (calculatedDistance !== null && selectedBookingType !== 'self-drive') {
@@ -1041,7 +1047,9 @@
                 airport_name: selectedBookingType === 'airport' ? document.getElementById('airportName').value.trim() : null,
                 special_requests: document.getElementById('specialRequests').value.trim(),
                 promo_code: appliedPromo ? appliedPromo.code : '',
-                payment_method: selectedPaymentMethod
+                payment_method: selectedPaymentMethod,
+                distance_km: calculatedDistance,
+                transfer_cost: transferCost
             };
 
             try {
@@ -1178,7 +1186,7 @@
         async function searchNominatim(query, dropdown, input, type, isMapSearch) {
             try {
                 const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&addressdetails=1&countrycodes=vn', {
-                    headers: { 'Accept-Language': 'vi,en' }
+                    headers: { 'Accept-Language': 'en' }
                 });
                 const results = await res.json();
                 if (results.length === 0) { dropdown.style.display = 'none'; return; }
@@ -1317,7 +1325,7 @@
 
             try {
                 const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + pos.lat + '&lon=' + pos.lng + '&zoom=18&addressdetails=1', {
-                    headers: { 'Accept-Language': 'vi,en' }
+                    headers: { 'Accept-Language': 'en' }
                 });
                 const data = await res.json();
                 const address = data.display_name || (pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6));

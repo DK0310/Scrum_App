@@ -296,6 +296,26 @@
             70% { transform: scale(1.1); }
             100% { transform: scale(1); }
         }
+
+        .field-error {
+            font-size: 0.78rem;
+            color: #ef4444;
+            margin-top: 4px;
+            min-height: 18px;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+        .field-error:empty { opacity: 0; }
+        .field-error:not(:empty) { opacity: 1; }
+
+        input.input-error {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 3px rgba(239,68,68,0.1) !important;
+        }
+        input.input-valid {
+            border-color: #22c55e !important;
+            box-shadow: 0 0 0 3px rgba(34,197,94,0.1) !important;
+        }
     </style>
 </head>
 <body>
@@ -327,17 +347,19 @@
                 <div id="step1">
                     <div class="form-group">
                         <label>👤 Full Name *</label>
-                        <input type="text" id="fullName" placeholder="Enter your full name" required>
+                        <input type="text" id="fullName" required>
                     </div>
 
                     <div class="form-row">
                         <div class="form-group">
                             <label>📧 Email *</label>
-                            <input type="email" id="email" placeholder="your@email.com" required>
+                            <input type="email" id="email" required onblur="checkDuplicate('email')">
+                            <div class="field-error" id="emailError"></div>
                         </div>
                         <div class="form-group">
                             <label>📱 Phone *</label>
-                            <input type="tel" id="phone" placeholder="+84 xxx xxx xxx" required>
+                            <input type="tel" id="phone" required onblur="checkDuplicate('phone')">
+                            <div class="field-error" id="phoneError"></div>
                         </div>
                     </div>
 
@@ -348,14 +370,14 @@
                         </div>
                         <div class="form-group">
                             <label>📍 Address</label>
-                            <input type="text" id="address" placeholder="City, Country">
+                            <input type="text" id="address">
                         </div>
                     </div>
 
                     <div class="form-group">
                         <label>🔒 Password *</label>
                         <div class="password-wrapper">
-                            <input type="password" id="password" placeholder="Create a password" required autocomplete="new-password">
+                            <input type="password" id="password" required autocomplete="new-password">
                             <button type="button" class="toggle-password" onclick="togglePassword('password')">👁️</button>
                         </div>
                         <div class="password-hint">At least 6 characters</div>
@@ -364,7 +386,7 @@
                     <div class="form-group">
                         <label>🔒 Confirm Password *</label>
                         <div class="password-wrapper">
-                            <input type="password" id="confirmPassword" placeholder="Confirm your password" required autocomplete="new-password">
+                            <input type="password" id="confirmPassword" required autocomplete="new-password">
                             <button type="button" class="toggle-password" onclick="togglePassword('confirmPassword')">👁️</button>
                         </div>
                     </div>
@@ -383,11 +405,6 @@
                             We've sent a 6-digit code to<br>
                             <strong id="verifyEmail" style="color:#2563eb;"></strong>
                         </p>
-                    </div>
-
-                    <!-- Dev OTP Display (only in development) -->
-                    <div id="devOtpBox" class="dev-otp hidden">
-                        🛠️ Dev Mode — Your code: <strong id="devOtpCode"></strong>
                     </div>
 
                     <div class="otp-container">
@@ -510,6 +527,55 @@
             if (step === 4) document.getElementById('regLinks').classList.add('hidden');
         }
 
+        // ========== REALTIME DUPLICATE CHECK ==========
+        let duplicateFlags = { email: false, phone: false };
+
+        async function checkDuplicate(field) {
+            const input = document.getElementById(field);
+            const errorEl = document.getElementById(field + 'Error');
+            const value = input.value.trim();
+
+            // Clear state if empty
+            if (!value) {
+                errorEl.textContent = '';
+                input.classList.remove('input-error', 'input-valid');
+                duplicateFlags[field] = false;
+                return;
+            }
+
+            // Basic format check before API call
+            if (field === 'email' && !value.includes('@')) {
+                errorEl.textContent = '';
+                input.classList.remove('input-error', 'input-valid');
+                duplicateFlags[field] = false;
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'check-duplicate', field, value })
+                });
+                const data = await res.json();
+
+                if (data.success && data.exists) {
+                    const label = field === 'email' ? 'email' : 'phone number';
+                    errorEl.textContent = '⚠️ This ' + label + ' is already registered.';
+                    input.classList.add('input-error');
+                    input.classList.remove('input-valid');
+                    duplicateFlags[field] = true;
+                } else {
+                    errorEl.textContent = '';
+                    input.classList.remove('input-error');
+                    input.classList.add('input-valid');
+                    duplicateFlags[field] = false;
+                }
+            } catch (err) {
+                console.error('Duplicate check error:', err);
+            }
+        }
+
         // ========== STEP 1 → 2: Validate & Send OTP ==========
         async function goToStep2() {
             const fullName = document.getElementById('fullName').value.trim();
@@ -527,6 +593,10 @@
             if (!password || password.length < 6) return showStatus('error', 'Password must be at least 6 characters.');
             if (password !== confirmPassword) return showStatus('error', 'Passwords do not match.');
 
+            // Block if duplicate flags are set
+            if (duplicateFlags.email) return showStatus('error', 'This email is already registered. Please use a different email.');
+            if (duplicateFlags.phone) return showStatus('error', 'This phone number is already registered. Please use a different number.');
+
             showStatus('loading', '<span class="spinner"></span> Sending verification code...');
 
             try {
@@ -541,12 +611,6 @@
                     hideStatus();
                     document.getElementById('verifyEmail').textContent = email;
                     setStep(2);
-
-                    // Show dev OTP if available
-                    if (data.dev_otp) {
-                        document.getElementById('devOtpBox').classList.remove('hidden');
-                        document.getElementById('devOtpCode').textContent = data.dev_otp;
-                    }
 
                     startCountdown();
                     startResendTimer();
@@ -636,10 +700,6 @@
 
                 if (data.success) {
                     showStatus('success', '✅ New code sent!');
-                    if (data.dev_otp) {
-                        document.getElementById('devOtpBox').classList.remove('hidden');
-                        document.getElementById('devOtpCode').textContent = data.dev_otp;
-                    }
                     // Reset inputs & timers
                     for (let i = 1; i <= 6; i++) document.getElementById('otp' + i).value = '';
                     document.getElementById('otp1').focus();

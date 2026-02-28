@@ -21,9 +21,53 @@
  *   POST logout             - Logout
  */
 
+// ===== SERVE AVATAR IMAGE (before JSON headers) =====
+$preAction = $_GET['action'] ?? '';
+if ($preAction === 'get-avatar') {
+    session_start();
+    require_once __DIR__ . '/../Database/db.php';
+
+    $targetUserId = $_GET['id'] ?? '';
+    if (empty($targetUserId)) {
+        http_response_code(400);
+        echo 'User ID required';
+        exit;
+    }
+
+    try {
+        $stmt = $pdo->prepare("SELECT avatar_data, avatar_mime FROM users WHERE id = ?");
+        $stmt->execute([$targetUserId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row || !$row['avatar_data']) {
+            http_response_code(404);
+            echo 'Avatar not found';
+            exit;
+        }
+
+        $imageData = $row['avatar_data'];
+        if (is_resource($imageData)) {
+            $imageData = stream_get_contents($imageData);
+        }
+        if (is_string($imageData) && substr($imageData, 0, 2) === '\\x') {
+            $imageData = hex2bin(substr($imageData, 2));
+        }
+
+        header('Content-Type: ' . ($row['avatar_mime'] ?? 'image/jpeg'));
+        header('Content-Length: ' . strlen($imageData));
+        header('Cache-Control: public, max-age=3600');
+        echo $imageData;
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo 'Server error';
+    }
+    exit;
+}
+
+// ===== JSON API =====
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -33,12 +77,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/notification-helpers.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
-$input = json_decode(file_get_contents('php://input'), true);
+// Run migration: add avatar_data/avatar_mime if not exist
+try {
+    $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data BYTEA");
+    $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_mime VARCHAR(50)");
+} catch (PDOException $e) { /* ignore */ }
+
+// Handle both JSON and multipart form data
+if (isset($_FILES['avatar'])) {
+    $input = $_POST;
+    if (!isset($input['action'])) $input['action'] = 'upload-avatar';
+} else {
+    $input = json_decode(file_get_contents('php://input'), true);
+}
 
 if (!$input || !isset($input['action'])) {
     echo json_encode(['success' => false, 'message' => 'Invalid request. Action required.']);
@@ -46,6 +103,33 @@ if (!$input || !isset($input['action'])) {
 }
 
 $action = $input['action'];
+
+// ==========================================================
+// CHECK DUPLICATE (email / phone) - Realtime validation
+// ==========================================================
+if ($action === 'check-duplicate') {
+    $field = trim($input['field'] ?? '');
+    $value = trim($input['value'] ?? '');
+
+    if (!in_array($field, ['email', 'phone'])) {
+        echo json_encode(['success' => false, 'message' => 'Field must be email or phone.']);
+        exit;
+    }
+    if (empty($value)) {
+        echo json_encode(['success' => true, 'exists' => false]);
+        exit;
+    }
+
+    try {
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE $field = ? LIMIT 1");
+        $stmt->execute([$value]);
+        $exists = (bool)$stmt->fetch();
+        echo json_encode(['success' => true, 'exists' => $exists]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error.']);
+    }
+    exit;
+}
 
 // ==========================================================
 // GOOGLE LOGIN / REGISTER
@@ -303,18 +387,18 @@ if ($action === 'email-send-otp') {
             $mail->send();
             $emailSent = true;
         } catch (Exception $e) {
-            // Email sending failed, fall back to dev mode
+            // Email sending failed
             error_log("PHPMailer Error: " . $e->getMessage());
+            error_log("PHPMailer Debug: SMTP Host=$smtpHost, Port=$smtpPort, User=$smtpUser");
         }
     }
 
     echo json_encode([
-        'success' => true,
+        'success' => $emailSent,
         'message' => $emailSent
             ? "Verification code sent to $email. Check your inbox (and spam folder)."
-            : "OTP generated. Configure SMTP in .env to send real emails.",
+            : "Failed to send verification email. Please check SMTP configuration.",
         'email_sent' => $emailSent,
-        'dev_otp' => ($isDev && !$emailSent) ? $otp : null,  // Only show OTP in dev mode when email not sent
     ]);
     exit;
 }
@@ -427,6 +511,9 @@ if ($action === 'register') {
         $_SESSION['email'] = $user['email'];
         $_SESSION['role'] = $user['role'];
         $_SESSION['profile_completed'] = true;
+
+        // Welcome notification for new user
+        createNotification($pdo, $user['id'], 'system', '🎉 Welcome to DriveNow!', 'Your account has been created successfully. Start exploring vehicles to rent or list your own cars!');
 
         echo json_encode([
             'success' => true,
@@ -632,6 +719,9 @@ if ($action === 'enable-faceid') {
         ");
         $stmt->execute([json_encode($faceDescriptor), $userId]);
 
+        // Notification
+        createNotification($pdo, $userId, 'system', '🔐 Face ID Enabled', 'Face ID has been enabled on your account. You can now log in using facial recognition.');
+
         echo json_encode([
             'success' => true,
             'message' => 'Face ID enabled successfully! You can now log in with your face.'
@@ -662,6 +752,9 @@ if ($action === 'disable-faceid') {
             WHERE id = ?
         ");
         $stmt->execute([$userId]);
+
+        // Notification
+        createNotification($pdo, $userId, 'system', '🔓 Face ID Disabled', 'Face ID has been removed from your account. You can re-enable it anytime from your profile settings.');
 
         echo json_encode(['success' => true, 'message' => 'Face ID disabled.']);
     } catch (PDOException $e) {
@@ -832,6 +925,235 @@ if ($action === 'get-profile') {
 }
 
 // ==========================================================
+// UPLOAD AVATAR (BLOB storage)
+// ==========================================================
+if ($action === 'upload-avatar') {
+    if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
+        echo json_encode(['success' => false, 'message' => 'Not authenticated.']);
+        exit;
+    }
+
+    if (!isset($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['success' => false, 'message' => 'No avatar file provided.']);
+        exit;
+    }
+
+    $file = $_FILES['avatar'];
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    $maxSize = 3 * 1024 * 1024; // 3MB
+
+    if (!in_array($file['type'], $allowedTypes)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid file type. Only JPEG, PNG, WebP, GIF allowed.']);
+        exit;
+    }
+    if ($file['size'] > $maxSize) {
+        echo json_encode(['success' => false, 'message' => 'Image too large. Max 3MB.']);
+        exit;
+    }
+
+    $imageData = file_get_contents($file['tmp_name']);
+    if ($imageData === false) {
+        echo json_encode(['success' => false, 'message' => 'Failed to read uploaded file.']);
+        exit;
+    }
+
+    try {
+        $userId = $_SESSION['user_id'];
+        $avatarUrl = '/api/auth.php?action=get-avatar&id=' . $userId . '&t=' . time();
+
+        $stmt = $pdo->prepare("UPDATE users SET avatar_data = :imgdata, avatar_mime = :imgmime, avatar_url = :url, updated_at = NOW() WHERE id = :uid");
+        $stmt->bindParam(':imgdata', $imageData, PDO::PARAM_LOB);
+        $stmt->bindParam(':imgmime', $file['type']);
+        $stmt->bindParam(':url', $avatarUrl);
+        $stmt->bindParam(':uid', $userId);
+        $stmt->execute();
+
+        // Notification
+        createNotification($pdo, $userId, 'system', '📷 Avatar Updated', 'Your profile picture has been updated successfully.');
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Avatar updated!',
+            'avatar_url' => $avatarUrl
+        ]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// EMAIL CHANGE - SEND OTP TO BOTH OLD & NEW EMAIL
+// ==========================================================
+if ($action === 'email-change-send-otp') {
+    if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
+        echo json_encode(['success' => false, 'message' => 'Not authenticated.']);
+        exit;
+    }
+
+    $newEmail = trim($input['new_email'] ?? '');
+    $oldEmail = trim($input['old_email'] ?? '');
+
+    if (empty($newEmail) || !filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'message' => 'Valid new email is required.']);
+        exit;
+    }
+    if (empty($oldEmail) || !filter_var($oldEmail, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'message' => 'Valid old email is required.']);
+        exit;
+    }
+    if ($newEmail === $oldEmail) {
+        echo json_encode(['success' => false, 'message' => 'New email must be different from current email.']);
+        exit;
+    }
+
+    // Check if new email already exists
+    $checkStmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+    $checkStmt->execute([$newEmail, $_SESSION['user_id']]);
+    if ($checkStmt->fetch()) {
+        echo json_encode(['success' => false, 'message' => 'This email is already registered to another account.']);
+        exit;
+    }
+
+    // Generate OTPs for both
+    $otpOld = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $otpNew = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+
+    // Store in session
+    $_SESSION['email_change_old_email'] = $oldEmail;
+    $_SESSION['email_change_new_email'] = $newEmail;
+    $_SESSION['email_change_otp_old'] = $otpOld;
+    $_SESSION['email_change_otp_new'] = $otpNew;
+    $_SESSION['email_change_expires'] = $expiresAt;
+
+    $smtpHost = \EnvLoader::get('SMTP_HOST', 'smtp.gmail.com');
+    $smtpPort = (int) \EnvLoader::get('SMTP_PORT', 587);
+    $smtpUser = \EnvLoader::get('SMTP_USERNAME', '');
+    $smtpPass = \EnvLoader::get('SMTP_PASSWORD', '');
+    $fromEmail = \EnvLoader::get('SMTP_FROM_EMAIL', $smtpUser);
+    $fromName = \EnvLoader::get('SMTP_FROM_NAME', 'DriveNow');
+
+    $sentOld = false;
+    $sentNew = false;
+
+    // Helper to send OTP email
+    $sendOtpMail = function($toEmail, $otp, $purpose) use ($smtpHost, $smtpPort, $smtpUser, $smtpPass, $fromEmail, $fromName) {
+        try {
+            $mail = new PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = $smtpHost;
+            $mail->SMTPAuth = true;
+            $mail->Username = $smtpUser;
+            $mail->Password = $smtpPass;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = $smtpPort;
+            $mail->setFrom($fromEmail, $fromName);
+            $mail->addAddress($toEmail);
+            $mail->isHTML(true);
+            $mail->Subject = "DriveNow - Email Change Verification: $otp";
+            $mail->Body = "
+                <div style='font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;'>
+                    <div style='text-align:center;margin-bottom:24px;'>
+                        <h1 style='color:#2563eb;font-size:1.5rem;'>🚗 DriveNow</h1>
+                    </div>
+                    <div style='background:#f8fafc;border-radius:16px;padding:32px;text-align:center;'>
+                        <h2 style='color:#1e293b;margin-bottom:8px;'>$purpose</h2>
+                        <p style='color:#64748b;margin-bottom:24px;'>Use this code to confirm the email change. It expires in 5 minutes.</p>
+                        <div style='background:#fff;border:2px solid #2563eb;border-radius:12px;padding:20px;font-size:2rem;font-weight:800;letter-spacing:8px;color:#2563eb;margin-bottom:24px;'>
+                            $otp
+                        </div>
+                        <p style='color:#94a3b8;font-size:0.813rem;'>If you didn't request this, please ignore this email or contact support.</p>
+                    </div>
+                </div>
+            ";
+            $mail->AltBody = "Your DriveNow email change verification code is: $otp (expires in 5 minutes)";
+            $mail->send();
+            return true;
+        } catch (Exception $e) {
+            error_log("PHPMailer Error: " . $e->getMessage());
+            return false;
+        }
+    };
+
+    $sentOld = $sendOtpMail($oldEmail, $otpOld, 'Confirm Email Change (Current Email)');
+    $sentNew = $sendOtpMail($newEmail, $otpNew, 'Verify New Email Address');
+
+    if ($sentOld && $sentNew) {
+        echo json_encode(['success' => true, 'message' => 'Verification codes sent to both emails.']);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to send verification emails. Please check SMTP configuration.']);
+    }
+    exit;
+}
+
+// ==========================================================
+// EMAIL CHANGE - VERIFY BOTH OTPS
+// ==========================================================
+if ($action === 'email-change-verify') {
+    if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
+        echo json_encode(['success' => false, 'message' => 'Not authenticated.']);
+        exit;
+    }
+
+    $otpOld = trim($input['otp_old'] ?? '');
+    $otpNew = trim($input['otp_new'] ?? '');
+
+    if (empty($otpOld) || empty($otpNew)) {
+        echo json_encode(['success' => false, 'message' => 'Both OTP codes are required.']);
+        exit;
+    }
+
+    // Check session data exists
+    if (!isset($_SESSION['email_change_otp_old']) || !isset($_SESSION['email_change_otp_new'])) {
+        echo json_encode(['success' => false, 'message' => 'No pending email change. Please request again.']);
+        exit;
+    }
+
+    // Check expiry
+    if (isset($_SESSION['email_change_expires']) && strtotime($_SESSION['email_change_expires']) < time()) {
+        unset($_SESSION['email_change_old_email'], $_SESSION['email_change_new_email'], $_SESSION['email_change_otp_old'], $_SESSION['email_change_otp_new'], $_SESSION['email_change_expires']);
+        echo json_encode(['success' => false, 'message' => 'Codes have expired. Please request new ones.']);
+        exit;
+    }
+
+    // Verify both OTPs
+    if ($_SESSION['email_change_otp_old'] !== $otpOld) {
+        echo json_encode(['success' => false, 'message' => 'Invalid code for current email.']);
+        exit;
+    }
+    if ($_SESSION['email_change_otp_new'] !== $otpNew) {
+        echo json_encode(['success' => false, 'message' => 'Invalid code for new email.']);
+        exit;
+    }
+
+    $newEmail = $_SESSION['email_change_new_email'];
+    $userId = $_SESSION['user_id'];
+
+    try {
+        $stmt = $pdo->prepare("UPDATE users SET email = ?, email_verified = true, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$newEmail, $userId]);
+
+        // Update session
+        $_SESSION['email'] = $newEmail;
+
+        // Clear change session
+        unset($_SESSION['email_change_old_email'], $_SESSION['email_change_new_email'], $_SESSION['email_change_otp_old'], $_SESSION['email_change_otp_new'], $_SESSION['email_change_expires']);
+
+        // --- Notification: email changed ---
+        createNotification($pdo, $userId, 'system',
+            '📧 Email Changed',
+            "Your email has been changed to {$newEmail}."
+        );
+
+        echo json_encode(['success' => true, 'message' => 'Email changed successfully!', 'new_email' => $newEmail]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
 // UPDATE PROFILE
 // ==========================================================
 if ($action === 'update-profile') {
@@ -880,8 +1202,22 @@ if ($action === 'update-profile') {
 
         // Update session
         $_SESSION['username'] = $user['full_name'] ?? $_SESSION['username'];
+        $_SESSION['full_name'] = $user['full_name'] ?? $_SESSION['full_name'] ?? $_SESSION['username'];
         $_SESSION['email'] = $user['email'] ?? $_SESSION['email'];
         $_SESSION['role'] = $user['role'];
+
+        // --- Notification: profile updated ---
+        $changedFields = [];
+        if (isset($input['full_name'])) $changedFields[] = 'name';
+        if (isset($input['phone'])) $changedFields[] = 'phone';
+        if (isset($input['address'])) $changedFields[] = 'address';
+        if (isset($input['role'])) $changedFields[] = 'role to ' . $input['role'];
+        if (isset($input['bio'])) $changedFields[] = 'bio';
+        $fieldsSummary = !empty($changedFields) ? implode(', ', $changedFields) : 'profile info';
+        createNotification($pdo, $userId, 'system',
+            '✏️ Profile Updated',
+            "Your profile has been updated: {$fieldsSummary}."
+        );
 
         echo json_encode([
             'success' => true,

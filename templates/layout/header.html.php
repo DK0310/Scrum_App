@@ -14,21 +14,6 @@
     <nav class="navbar" id="navbar">
         <div class="navbar-inner">
             <a href="index.php" class="navbar-brand">DriveNow</a>
-            
-            <ul class="navbar-nav" id="navMenu">
-                <li><a href="cars.php" <?= ($currentPage ?? '') === 'cars' ? 'class="active"' : '' ?>>Cars</a></li>
-                <li><a href="index.php#how-it-works" <?= ($currentPage ?? '') === 'how-it-works' ? 'class="active"' : '' ?>>How It Works</a></li>
-                <li><a href="promotions.php" <?= ($currentPage ?? '') === 'promotions' ? 'class="active"' : '' ?>>Promotions</a></li>
-                <li><a href="community.php" <?= ($currentPage ?? '') === 'community' ? 'class="active"' : '' ?>>Community</a></li>
-                <li><a href="membership.php" <?= ($currentPage ?? '') === 'membership' ? 'class="active"' : '' ?>>Membership</a></li>
-                <li><a href="support.php" <?= ($currentPage ?? '') === 'support' ? 'class="active"' : '' ?>>Support</a></li>
-                <?php if (isset($isLoggedIn) && $isLoggedIn && ($userRole ?? '') === 'owner'): ?>
-                <li><a href="my-vehicles.php" <?= ($currentPage ?? '') === 'my-vehicles' ? 'class="active"' : '' ?> style="color:var(--primary);font-weight:600;">🚗 My Vehicles</a></li>
-                <?php endif; ?>
-                <?php if (isset($isLoggedIn) && $isLoggedIn && ($userRole ?? '') === 'admin'): ?>
-                <li><a href="admin.php" <?= ($currentPage ?? '') === 'admin' ? 'class="active"' : '' ?> style="color:#ef4444;font-weight:600;">⚙️ Admin</a></li>
-                <?php endif; ?>
-            </ul>
 
             <div class="navbar-actions">
                 <button class="navbar-lang" onclick="toggleLanguageMenu()" id="langBtn">🌐 EN</button>
@@ -36,60 +21,90 @@
                 <?php if (isset($isLoggedIn) && $isLoggedIn): ?>
                     <button class="navbar-notification" onclick="toggleNotifications()" id="notifBtn">
                         🔔
-                        <span class="notification-badge" id="notifCount">3</span>
+                        <span class="notification-badge" id="notifCount" style="display:none;">0</span>
                     </button>
-                    <span style="font-weight:600;font-size:0.875rem;color:var(--gray-700)">👤 <?= htmlspecialchars($currentUser) ?></span>
+                    <a href="profile.php" class="navbar-profile-link" <?= ($currentPage ?? '') === 'profile' ? 'style="background:var(--primary-50);color:var(--primary);"' : '' ?>>👤 <?= htmlspecialchars($currentUser) ?></a>
+                    <a href="orders.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'orders' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">📋 My Orders</a>
+                    <?php if (($userRole ?? '') === 'owner'): ?>
+                    <a href="my-vehicles.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'my-vehicles' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">🚗 My Vehicles</a>
+                    <?php endif; ?>
                     <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
                 <?php else: ?>
                     <a href="login.php" class="btn btn-outline btn-sm">Sign In</a>
                     <a href="register.php" class="btn btn-primary btn-sm">Sign Up</a>
                 <?php endif; ?>
 
-                <button class="hamburger" onclick="toggleMobileMenu()" id="hamburger">
+                <!-- Side Menu Toggle Button -->
+                <button class="side-menu-toggle" onclick="toggleSideMenu()" id="sideMenuToggle" title="Menu">
                     <span></span><span></span><span></span>
                 </button>
             </div>
         </div>
     </nav>
 
+    <!-- Side Menu Overlay -->
+    <div class="side-menu-overlay" id="sideMenuOverlay" onclick="closeSideMenu()"></div>
+
+    <!-- ===== SIDE MENU (slides from right) ===== -->
+    <aside class="side-menu" id="sideMenu">
+        <div class="side-menu-header">
+            <span class="side-menu-title">☰ Menu</span>
+            <button class="side-menu-close" onclick="closeSideMenu()">✕</button>
+        </div>
+        <nav class="side-menu-nav">
+            <a href="cars.php" class="side-menu-item <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">
+                <span class="side-menu-icon">🚗</span> Cars
+            </a>
+            <a href="index.php#how-it-works" class="side-menu-item <?= ($currentPage ?? '') === 'how-it-works' ? 'active' : '' ?>">
+                <span class="side-menu-icon">📖</span> How It Works
+            </a>
+            <a href="promotions.php" class="side-menu-item <?= ($currentPage ?? '') === 'promotions' ? 'active' : '' ?>">
+                <span class="side-menu-icon">🏷️</span> Promotions
+            </a>
+            <a href="community.php" class="side-menu-item <?= ($currentPage ?? '') === 'community' ? 'active' : '' ?>">
+                <span class="side-menu-icon">👥</span> Community
+            </a>
+            <a href="membership.php" class="side-menu-item <?= ($currentPage ?? '') === 'membership' ? 'active' : '' ?>">
+                <span class="side-menu-icon">⭐</span> Membership
+            </a>
+            <a href="support.php" class="side-menu-item <?= ($currentPage ?? '') === 'support' ? 'active' : '' ?>">
+                <span class="side-menu-icon">💬</span> Support
+            </a>
+            <?php if (isset($isLoggedIn) && $isLoggedIn): ?>
+            <div class="side-menu-divider side-menu-mobile-only"></div>
+            <a href="orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
+                <span class="side-menu-icon">📋</span> My Orders
+            </a>
+            <?php if (($userRole ?? '') === 'owner'): ?>
+            <a href="my-vehicles.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'my-vehicles' ? 'active' : '' ?>">
+                <span class="side-menu-icon">🚙</span> My Vehicles
+            </a>
+            <?php endif; ?>
+            <?php endif; ?>
+            <?php if (isset($isLoggedIn) && $isLoggedIn && ($userRole ?? '') === 'admin'): ?>
+            <div class="side-menu-divider"></div>
+            <a href="admin.php" class="side-menu-item side-menu-admin <?= ($currentPage ?? '') === 'admin' ? 'active' : '' ?>">
+                <span class="side-menu-icon">⚙️</span> Admin Dashboard
+            </a>
+            <?php endif; ?>
+        </nav>
+        <div class="side-menu-footer">
+            <p>© <?= date('Y') ?> DriveNow</p>
+        </div>
+    </aside>
+
     <!-- ===== NOTIFICATION PANEL ===== -->
     <div class="notification-panel" id="notificationPanel">
         <div class="notification-panel-header">
             <span class="notification-panel-title">🔔 Notifications</span>
-            <button class="btn btn-ghost btn-sm" onclick="markAllRead()">Mark all read</button>
+            <div style="display:flex;gap:4px;">
+                <button class="btn btn-ghost btn-sm" onclick="markAllRead()">Mark all read</button>
+                <button class="btn btn-ghost btn-sm" onclick="clearAllNotifications()" style="color:var(--danger);">Clear all</button>
+            </div>
         </div>
         <ul class="notification-list" id="notificationList">
-            <li class="notification-item unread">
-                <div class="notification-icon booking">📋</div>
-                <div class="notification-content">
-                    <div class="notification-title">Booking Confirmed</div>
-                    <div class="notification-text">Your Toyota Camry booking for March 5 has been confirmed.</div>
-                    <div class="notification-time">2 minutes ago</div>
-                </div>
-            </li>
-            <li class="notification-item unread">
-                <div class="notification-icon payment">💳</div>
-                <div class="notification-content">
-                    <div class="notification-title">Payment Received</div>
-                    <div class="notification-text">$120.00 payment processed successfully.</div>
-                    <div class="notification-time">1 hour ago</div>
-                </div>
-            </li>
-            <li class="notification-item unread">
-                <div class="notification-icon promo">🎉</div>
-                <div class="notification-content">
-                    <div class="notification-title">New Promotion!</div>
-                    <div class="notification-text">Get 20% off on your next weekend rental. Code: WEEKEND20</div>
-                    <div class="notification-time">3 hours ago</div>
-                </div>
-            </li>
-            <li class="notification-item">
-                <div class="notification-icon alert">📧</div>
-                <div class="notification-content">
-                    <div class="notification-title">Email Confirmed</div>
-                    <div class="notification-text">Your email address has been verified.</div>
-                    <div class="notification-time">1 day ago</div>
-                </div>
+            <li class="notification-item" style="justify-content:center;color:var(--gray-400);font-size:0.85rem;">
+                <span>Loading notifications...</span>
             </li>
         </ul>
     </div>

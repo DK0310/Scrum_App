@@ -130,7 +130,10 @@ if ($action === 'login') {
             // Đăng nhập thành công
             session_start();
             $_SESSION['user_id'] = $bestMatch['id'];
-            $_SESSION['username'] = $bestMatch['username'];
+            $_SESSION['username'] = $bestMatch['username'] ?? $bestMatch['email'];
+            $_SESSION['full_name'] = $bestMatch['full_name'] ?? $bestMatch['username'] ?? $bestMatch['email'];
+            $_SESSION['email'] = $bestMatch['email'];
+            $_SESSION['role'] = $bestMatch['role'] ?? 'renter';
             $_SESSION['logged_in'] = true;
 
             echo json_encode([

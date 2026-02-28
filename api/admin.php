@@ -85,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 session_start();
 require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/notification-helpers.php';
 
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
@@ -331,6 +332,10 @@ if ($action === 'promotion-add') {
         ]);
         $promo = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        // Broadcast notification to all users
+        $discountText = $discountType === 'percentage' ? "{$discountValue}%" : "\${$discountValue}";
+        createNotificationForAll($pdo, 'promo', '🎁 New Promotion: ' . strtoupper($code), "Use code {$code} to get {$discountText} off your next rental! {$description}");
+
         echo json_encode(['success' => true, 'message' => 'Promotion created.', 'promotion' => $promo]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
@@ -521,14 +526,18 @@ if ($action === 'admin-list-bookings') {
 
     try {
         $stmt = $pdo->query("
-            SELECT b.*, 
+            SELECT b.id, b.renter_id, b.vehicle_id, b.owner_id, b.booking_type,
+                   b.pickup_date, b.return_date, b.pickup_location, b.return_location,
+                   b.total_days, b.price_per_day, b.subtotal, b.discount_amount,
+                   b.total_amount, b.promo_code, b.status, b.special_requests,
+                   b.created_at,
                    u.full_name AS renter_name, u.email AS renter_email,
                    v.brand, v.model, v.year, v.license_plate,
-                   ow.full_name AS owner_name
+                   ow.full_name AS owner_name, ow.email AS owner_email
             FROM bookings b
             LEFT JOIN users u ON b.renter_id = u.id
             LEFT JOIN vehicles v ON b.vehicle_id = v.id
-            LEFT JOIN users ow ON v.owner_id = ow.id
+            LEFT JOIN users ow ON b.owner_id = ow.id
             ORDER BY b.created_at DESC
         ");
         $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -539,4 +548,137 @@ if ($action === 'admin-list-bookings') {
     exit;
 }
 
+// ==========================================================
+// ADMIN - LIST ALL USERS
+// ==========================================================
+if ($action === 'admin-list-users') {
+    requireAdmin();
+
+    try {
+        $stmt = $pdo->query("
+            SELECT id, email, phone, auth_provider, role, full_name, date_of_birth,
+                   avatar_url, city, country, driving_license, membership,
+                   is_active, email_verified, phone_verified, faceid_enabled,
+                   profile_completed, created_at, last_login_at
+            FROM users
+            ORDER BY created_at DESC
+        ");
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Cast booleans for JS
+        foreach ($users as &$u) {
+            $u['is_active'] = ($u['is_active'] === 't' || $u['is_active'] === true || $u['is_active'] === '1');
+            $u['email_verified'] = ($u['email_verified'] === 't' || $u['email_verified'] === true || $u['email_verified'] === '1');
+            $u['phone_verified'] = ($u['phone_verified'] === 't' || $u['phone_verified'] === true || $u['phone_verified'] === '1');
+            $u['faceid_enabled'] = ($u['faceid_enabled'] === 't' || $u['faceid_enabled'] === true || $u['faceid_enabled'] === '1');
+        }
+
+        echo json_encode(['success' => true, 'users' => $users]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - UPDATE USER (role, is_active)
+// ==========================================================
+if ($action === 'admin-update-user') {
+    requireAdmin();
+
+    $userId = $input['user_id'] ?? '';
+    if (empty($userId)) {
+        echo json_encode(['success' => false, 'message' => 'User ID is required.']);
+        exit;
+    }
+
+    // Prevent self-modification for safety
+    if ($userId === $_SESSION['user_id']) {
+        echo json_encode(['success' => false, 'message' => 'Cannot modify your own account from admin panel.']);
+        exit;
+    }
+
+    $fields = [];
+    $params = [];
+
+    if (isset($input['role']) && in_array($input['role'], ['renter', 'owner', 'admin'])) {
+        $fields[] = "role = ?::user_role";
+        $params[] = $input['role'];
+    }
+
+    if (isset($input['is_active'])) {
+        $fields[] = "is_active = ?";
+        $params[] = $input['is_active'] ? 't' : 'f';
+    }
+
+    if (empty($fields)) {
+        echo json_encode(['success' => false, 'message' => 'No fields to update.']);
+        exit;
+    }
+
+    $fields[] = "updated_at = NOW()";
+    $params[] = $userId;
+
+    try {
+        $sql = "UPDATE users SET " . implode(', ', $fields) . " WHERE id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+
+        if ($stmt->rowCount() === 0) {
+            echo json_encode(['success' => false, 'message' => 'User not found.']);
+            exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'User updated successfully.']);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - DELETE USER
+// ==========================================================
+if ($action === 'admin-delete-user') {
+    requireAdmin();
+
+    $userId = $input['user_id'] ?? '';
+    if (empty($userId)) {
+        echo json_encode(['success' => false, 'message' => 'User ID is required.']);
+        exit;
+    }
+
+    // Prevent self-deletion
+    if ($userId === $_SESSION['user_id']) {
+        echo json_encode(['success' => false, 'message' => 'Cannot delete your own account.']);
+        exit;
+    }
+
+    try {
+        // Check for active bookings
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE (renter_id = ? OR owner_id = ?) AND status IN ('pending', 'confirmed', 'in_progress')");
+        $stmt->execute([$userId, $userId]);
+        $activeBookings = $stmt->fetchColumn();
+
+        if ($activeBookings > 0) {
+            echo json_encode(['success' => false, 'message' => 'Cannot delete user with ' . $activeBookings . ' active booking(s). Cancel them first.']);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+
+        if ($stmt->rowCount() === 0) {
+            echo json_encode(['success' => false, 'message' => 'User not found.']);
+            exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'User deleted successfully.']);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 echo json_encode(['success' => false, 'message' => 'Unknown admin action: ' . $action]);
+

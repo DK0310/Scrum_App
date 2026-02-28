@@ -14,15 +14,6 @@
     <nav class="navbar" id="navbar">
         <div class="navbar-inner">
             <a href="index.php" class="navbar-brand">🚗 DriveNow</a>
-            
-            <ul class="navbar-nav" id="navMenu">
-                <li><a href="#cars" class="active">Cars</a></li>
-                <li><a href="#how-it-works">How It Works</a></li>
-                <li><a href="#promotions">Promotions</a></li>
-                <li><a href="#community">Community</a></li>
-                <li><a href="#membership">Membership</a></li>
-                <li><a href="#support">Support</a></li>
-            </ul>
 
             <div class="navbar-actions">
                 <button class="navbar-lang" onclick="toggleLanguageMenu()" id="langBtn">🌐 EN</button>
@@ -39,12 +30,34 @@
                     <a href="register.php" class="btn btn-primary btn-sm">Sign Up</a>
                 <?php endif; ?>
 
-                <button class="hamburger" onclick="toggleMobileMenu()" id="hamburger">
+                <button class="side-menu-toggle" onclick="toggleSideMenu()" id="sideMenuToggle" title="Menu">
                     <span></span><span></span><span></span>
                 </button>
             </div>
         </div>
     </nav>
+
+    <!-- Side Menu Overlay -->
+    <div class="side-menu-overlay" id="sideMenuOverlay" onclick="closeSideMenu()"></div>
+
+    <!-- ===== SIDE MENU ===== -->
+    <aside class="side-menu" id="sideMenu">
+        <div class="side-menu-header">
+            <span class="side-menu-title">☰ Menu</span>
+            <button class="side-menu-close" onclick="closeSideMenu()">✕</button>
+        </div>
+        <nav class="side-menu-nav">
+            <a href="#cars" class="side-menu-item active"><span class="side-menu-icon">🚗</span> Cars</a>
+            <a href="#how-it-works" class="side-menu-item"><span class="side-menu-icon">📖</span> How It Works</a>
+            <a href="#promotions" class="side-menu-item"><span class="side-menu-icon">🏷️</span> Promotions</a>
+            <a href="#community" class="side-menu-item"><span class="side-menu-icon">👥</span> Community</a>
+            <a href="#membership" class="side-menu-item"><span class="side-menu-icon">⭐</span> Membership</a>
+            <a href="#support" class="side-menu-item"><span class="side-menu-icon">💬</span> Support</a>
+        </nav>
+        <div class="side-menu-footer">
+            <p>© <?= date('Y') ?> DriveNow</p>
+        </div>
+    </aside>
 
     <!-- ===== NOTIFICATION PANEL ===== -->
     <div class="notification-panel" id="notificationPanel">
