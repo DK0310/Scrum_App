@@ -15,6 +15,21 @@
         <div class="navbar-inner">
             <a href="index.php" class="navbar-brand">DriveNow</a>
 
+            <!-- ===== NAVBAR SEARCH BAR (center) ===== -->
+            <div class="navbar-search-wrapper" id="navbarSearchWrapper">
+                <div class="navbar-search-bar">
+                    <span class="navbar-search-icon">🔍</span>
+                    <input type="text" 
+                           id="navbarSearchInput" 
+                           class="navbar-search-input" 
+                           placeholder="Search cars... e.g. Mercedes, BMW X5" 
+                           autocomplete="off"
+                           value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+                    <button class="navbar-search-clear" id="navbarSearchClear" onclick="navbarClearSearch()" style="display:none;">✕</button>
+                </div>
+                <div class="navbar-suggestions" id="navbarSuggestions"></div>
+            </div>
+
             <div class="navbar-actions">
                 <button class="navbar-lang" onclick="toggleLanguageMenu()" id="langBtn">🌐 EN</button>
                 

@@ -85,6 +85,63 @@ img { max-width: 100%; height: auto; }
     font-size: 1.5rem; font-weight: 800; color: var(--primary);
 }
 .navbar-nav { display: none; } /* Removed — nav items moved to side menu */
+
+/* ===== NAVBAR SEARCH BAR ===== */
+.navbar-search-wrapper {
+    flex: 1; max-width: 480px; position: relative;
+    margin: 0 24px;
+}
+.navbar-search-bar {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--gray-50); border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-full); padding: 6px 14px;
+    transition: var(--transition);
+}
+.navbar-search-bar:focus-within {
+    border-color: var(--primary); background: white;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+.navbar-search-icon { font-size: 0.95rem; flex-shrink: 0; line-height: 1; }
+.navbar-search-input {
+    flex: 1; border: none; outline: none; font-size: 0.875rem;
+    font-family: var(--font); color: var(--gray-800); background: transparent;
+    padding: 4px 0; min-width: 0;
+}
+.navbar-search-input::placeholder { color: var(--gray-400); }
+.navbar-search-clear {
+    width: 22px; height: 22px; border-radius: 50%; border: none;
+    background: var(--gray-200); color: var(--gray-500); cursor: pointer;
+    font-size: 0.65rem; display: flex; align-items: center; justify-content: center;
+    transition: var(--transition); flex-shrink: 0;
+}
+.navbar-search-clear:hover { background: var(--gray-300); color: var(--gray-700); }
+.navbar-suggestions {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+    background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-xl);
+    border: 1px solid var(--gray-100); z-index: 1100;
+    display: none; max-height: 360px; overflow-y: auto;
+}
+.navbar-suggestions.open { display: block; }
+
+/* Suggestion dropdown items (shared for navbar + cars page) */
+.suggestion-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; cursor: pointer; transition: var(--transition);
+    border-bottom: 1px solid var(--gray-50);
+}
+.suggestion-item:last-child { border-bottom: none; }
+.suggestion-item:hover { background: var(--primary-50); }
+.suggestion-icon {
+    width: 36px; height: 36px; border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+}
+.suggestion-icon.brand-icon { background: var(--primary-50); color: var(--primary); }
+.suggestion-icon.vehicle-icon { background: var(--gray-100); color: var(--gray-600); }
+.suggestion-text { flex: 1; }
+.suggestion-label { font-size: 0.938rem; font-weight: 600; color: var(--gray-800); }
+.suggestion-sub { font-size: 0.75rem; color: var(--gray-500); margin-top: 2px; }
+.suggestion-hint { font-size: 0.75rem; color: var(--gray-400); padding: 8px 20px; background: var(--gray-50); }
 .navbar-profile-link {
     font-weight: 600; font-size: 0.875rem; color: var(--gray-700); text-decoration: none;
     padding: 6px 12px; border-radius: var(--radius); transition: var(--transition); cursor: pointer;
@@ -241,7 +298,7 @@ img { max-width: 100%; height: auto; }
     width: 100%; max-width: 560px; aspect-ratio: 16/10;
     background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
     border-radius: var(--radius-xl); border: 1px solid rgba(255,255,255,0.1);
-    display: flex; align-items: center; justify-content: center; font-size: 8rem;
+    display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(10px); position: relative; overflow: hidden;
 }
 .hero-car-visual::after {
@@ -556,6 +613,9 @@ img { max-width: 100%; height: auto; }
     .navbar-actions .navbar-action-link { display: none; }
     .side-menu-mobile-only { display: flex; }
     .navbar-profile-link { padding: 4px 8px; font-size: 0.8rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .navbar-search-wrapper { max-width: 200px; margin: 0 10px; }
+    .navbar-search-input { font-size: 0.8rem; }
+    .navbar-search-bar { padding: 5px 10px; }
     .hero-title { font-size: 2.5rem; }
     .car-grid { grid-template-columns: 1fr; }
     .category-grid { grid-template-columns: repeat(2, 1fr); }
@@ -583,6 +643,8 @@ img { max-width: 100%; height: auto; }
     .navbar-profile-link { max-width: 90px; }
     .navbar-actions .btn-danger { padding: 4px 8px; font-size: 0.7rem; }
     .side-menu { width: 260px; right: -270px; }
+    .navbar-search-wrapper { max-width: 140px; margin: 0 6px; }
+    .navbar-search-input::placeholder { font-size: 0.75rem; }
 }
 
 /* ===== UTILITIES ===== */

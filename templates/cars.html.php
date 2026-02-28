@@ -1,28 +1,7 @@
 <?php include __DIR__ . '/layout/header.html.php'; ?>
 
-    <!-- ===== SEARCH BAR ===== -->
-    <section class="section" style="padding-top:100px;">
-        <div class="section-container">
-            <div class="car-search-wrapper">
-                <div class="car-search-bar">
-                    <span class="car-search-icon">🔍</span>
-                    <input type="text" 
-                           id="carSearchInput" 
-                           class="car-search-input" 
-                           placeholder="Search by brand, model... e.g. Mercedes, BMW X5, Tesla" 
-                           autocomplete="off"
-                           value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
-                    <button class="car-search-clear" id="searchClearBtn" onclick="clearSearch()" style="display:none;">✕</button>
-                    <button class="btn btn-primary car-search-btn" onclick="executeSearch()">Search</button>
-                </div>
-                <!-- Suggestions dropdown -->
-                <div class="car-suggestions" id="carSuggestions"></div>
-            </div>
-        </div>
-    </section>
-
     <!-- ===== ALL CARS + FILTER SYSTEM ===== -->
-    <section class="section featured-section" id="cars">
+    <section class="section featured-section" id="cars" style="padding-top:100px;">
         <div class="section-container">
             <div class="section-header">
                 <div>
@@ -105,58 +84,6 @@
             font-size: 0.875rem; font-weight: 500;
         }
 
-        /* ===== SEARCH BAR ===== */
-        .car-search-wrapper { position: relative; max-width: 800px; margin: 0 auto; }
-        .car-search-bar {
-            display: flex; align-items: center; gap: 12px;
-            background: white; border: 2px solid var(--gray-200);
-            border-radius: var(--radius-lg); padding: 8px 8px 8px 20px;
-            box-shadow: var(--shadow-lg); transition: var(--transition);
-        }
-        .car-search-bar:focus-within { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(37,99,235,0.12), var(--shadow-lg); }
-        .car-search-icon { font-size: 1.25rem; flex-shrink: 0; }
-        .car-search-input {
-            flex: 1; border: none; outline: none; font-size: 1rem;
-            font-family: var(--font); color: var(--gray-800); background: transparent;
-            padding: 8px 0;
-        }
-        .car-search-input::placeholder { color: var(--gray-400); }
-        .car-search-clear {
-            width: 28px; height: 28px; border-radius: 50%; border: none;
-            background: var(--gray-100); color: var(--gray-500); cursor: pointer;
-            font-size: 0.75rem; display: flex; align-items: center; justify-content: center;
-            transition: var(--transition); flex-shrink: 0;
-        }
-        .car-search-clear:hover { background: var(--gray-200); color: var(--gray-700); }
-        .car-search-btn { border-radius: var(--radius) !important; padding: 10px 24px !important; flex-shrink: 0; }
-
-        /* Suggestions Dropdown */
-        .car-suggestions {
-            position: absolute; top: calc(100% + 6px); left: 0; right: 0;
-            background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-xl);
-            border: 1px solid var(--gray-100); z-index: 100;
-            display: none; max-height: 360px; overflow-y: auto;
-        }
-        .car-suggestions.open { display: block; }
-        .suggestion-item {
-            display: flex; align-items: center; gap: 12px;
-            padding: 12px 20px; cursor: pointer; transition: var(--transition);
-            border-bottom: 1px solid var(--gray-50);
-        }
-        .suggestion-item:last-child { border-bottom: none; }
-        .suggestion-item:hover { background: var(--primary-50); }
-        .suggestion-icon {
-            width: 36px; height: 36px; border-radius: var(--radius);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1rem; flex-shrink: 0;
-        }
-        .suggestion-icon.brand-icon { background: var(--primary-50); color: var(--primary); }
-        .suggestion-icon.vehicle-icon { background: var(--gray-100); color: var(--gray-600); }
-        .suggestion-text { flex: 1; }
-        .suggestion-label { font-size: 0.938rem; font-weight: 600; color: var(--gray-800); }
-        .suggestion-sub { font-size: 0.75rem; color: var(--gray-500); margin-top: 2px; }
-        .suggestion-hint { font-size: 0.75rem; color: var(--gray-400); padding: 8px 20px; background: var(--gray-50); }
-
         /* ===== FILTER OVERRIDES ===== */
         .filter-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 24px; }
         .filter-group-title { font-size: 0.8rem; font-weight: 700; color: var(--gray-600); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center; }
@@ -202,8 +129,6 @@
         }
         @media (max-width: 768px) {
             .filter-grid { grid-template-columns: 1fr 1fr; }
-            .car-search-bar { padding: 6px 6px 6px 14px; }
-            .car-search-btn { padding: 8px 16px !important; font-size: 0.813rem; }
         }
         @media (max-width: 480px) {
             .filter-grid { grid-template-columns: 1fr; }
@@ -358,7 +283,16 @@
 
             // Show clear button if search has value
             if (filterState.search) {
-                document.getElementById('searchClearBtn').style.display = 'flex';
+                const navClear = document.getElementById('navbarSearchClear');
+                if (navClear) navClear.style.display = 'flex';
+                const navInput = document.getElementById('navbarSearchInput');
+                if (navInput) navInput.value = filterState.search;
+            }
+            if (filterState.brand) {
+                const navInput = document.getElementById('navbarSearchInput');
+                if (navInput && !filterState.search) navInput.value = filterState.brand;
+                const navClear = document.getElementById('navbarSearchClear');
+                if (navClear) navClear.style.display = 'flex';
             }
 
             // Load dynamic filter options from DB
@@ -481,15 +415,16 @@
             window.location.href = 'cars.php';
         }
 
-        // ===== SEARCH WITH SUGGESTIONS =====
-        const searchInput = document.getElementById('carSearchInput');
-        const suggestionsBox = document.getElementById('carSuggestions');
-        const clearBtn = document.getElementById('searchClearBtn');
+        // ===== SEARCH WITH SUGGESTIONS (uses navbar search bar) =====
+        const searchInput = document.getElementById('navbarSearchInput');
+        const suggestionsBox = document.getElementById('navbarSuggestions');
+        const clearBtn = document.getElementById('navbarSearchClear');
         let debounceTimer = null;
 
+        if (searchInput) {
         searchInput.addEventListener('input', function() {
             const q = this.value.trim();
-            clearBtn.style.display = q ? 'flex' : 'none';
+            if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
 
             clearTimeout(debounceTimer);
             if (q.length < 1) {
@@ -507,11 +442,12 @@
                 executeSearch();
             }
         });
+        }
 
         // Close suggestions when clicking outside
         document.addEventListener('click', function(e) {
-            if (!e.target.closest('.car-search-wrapper')) {
-                suggestionsBox.classList.remove('open');
+            if (!e.target.closest('.navbar-search-wrapper')) {
+                if (suggestionsBox) suggestionsBox.classList.remove('open');
             }
         });
 
@@ -557,9 +493,9 @@
                     const type = this.dataset.type;
                     const text = this.dataset.text;
 
-                    searchInput.value = text;
+                    if (searchInput) searchInput.value = text;
                     suggestionsBox.classList.remove('open');
-                    clearBtn.style.display = 'flex';
+                    if (clearBtn) clearBtn.style.display = 'flex';
 
                     if (type === 'brand') {
                         filterState.search = '';
@@ -579,19 +515,19 @@
         }
 
         function executeSearch() {
-            filterState.search = searchInput.value.trim();
-            suggestionsBox.classList.remove('open');
+            filterState.search = searchInput ? searchInput.value.trim() : '';
+            if (suggestionsBox) suggestionsBox.classList.remove('open');
             if (filterState.search) {
                 applyAllFilters();
             }
         }
 
         function clearSearch() {
-            searchInput.value = '';
-            clearBtn.style.display = 'none';
+            if (searchInput) searchInput.value = '';
+            if (clearBtn) clearBtn.style.display = 'none';
             filterState.search = '';
-            suggestionsBox.classList.remove('open');
-            searchInput.focus();
+            if (suggestionsBox) suggestionsBox.classList.remove('open');
+            if (searchInput) searchInput.focus();
         }
 
         // ===== LOAD CARS FROM API =====

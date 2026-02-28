@@ -12,7 +12,7 @@
                     Book premium cars from trusted owners worldwide. Self-drive or with driver, online or by phone — your journey starts here.
                 </p>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                    <a href="#search-box" class="btn btn-primary btn-lg">🔍 Search Cars</a>
+                    <a href="cars.php" class="btn btn-primary btn-lg">🔍 Browse Cars</a>
                     <a href="#how-it-works" class="btn btn-outline btn-lg" style="border-color:rgba(255,255,255,0.3);color:white;">Learn More →</a>
                 </div>
                 <div class="hero-stats">
@@ -56,24 +56,6 @@
             </div>
         </div>
     </section>
-
-    <!-- ===== SEARCH BOX ===== -->
-    <div class="section-container">
-        <div class="search-box" id="search-box" style="padding:20px 28px;">
-            <div class="car-search-wrapper" style="max-width:100%;">
-                <div class="car-search-bar" style="box-shadow:none;border:2px solid var(--gray-200);">
-                    <span class="car-search-icon">🔍</span>
-                    <input type="text" 
-                           id="homeSearchInput" 
-                           class="car-search-input" 
-                           placeholder="Search cars by brand, model... e.g. Mercedes, BMW X5" 
-                           autocomplete="off">
-                    <button class="btn btn-primary car-search-btn" onclick="homeSearch()">Search Cars</button>
-                </div>
-                <div class="car-suggestions" id="homeSuggestions"></div>
-            </div>
-        </div>
-    </div>
 
     <!-- ===== CAR CATEGORIES ===== -->
     <section class="section">
@@ -623,65 +605,6 @@
         }
 
         // ===== SEARCH =====
-        // ===== HOMEPAGE SEARCH WITH SUGGESTIONS =====
-        const homeInput = document.getElementById('homeSearchInput');
-        const homeSugBox = document.getElementById('homeSuggestions');
-        let homeDebounce = null;
-
-        homeInput.addEventListener('input', function() {
-            clearTimeout(homeDebounce);
-            const q = this.value.trim();
-            if (q.length < 1) { homeSugBox.classList.remove('open'); return; }
-            homeDebounce = setTimeout(() => fetchHomeSuggestions(q), 250);
-        });
-
-        homeInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') { e.preventDefault(); homeSearch(); }
-        });
-
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.car-search-wrapper')) homeSugBox.classList.remove('open');
-        });
-
-        async function fetchHomeSuggestions(query) {
-            try {
-                const res = await fetch('/api/vehicles.php?action=search-suggestions&q=' + encodeURIComponent(query));
-                const data = await res.json();
-                if (data.success && data.suggestions.length > 0) {
-                    homeSugBox.innerHTML = data.suggestions.map(s => {
-                        const icon = s.type === 'brand' ? '🏷️' : '🚗';
-                        return '<div class="suggestion-item" onclick="pickHomeSuggestion(\'' + s.type + '\',\'' + s.text.replace(/'/g, "\\'") + '\')">' +
-                            '<div class="suggestion-icon ' + (s.type === 'brand' ? 'brand-icon' : 'vehicle-icon') + '">' + icon + '</div>' +
-                            '<div class="suggestion-text"><div class="suggestion-label">' + s.label + '</div>' +
-                            (s.sub ? '<div class="suggestion-sub">' + s.sub + '</div>' : '') +
-                            '</div></div>';
-                    }).join('');
-                    homeSugBox.classList.add('open');
-                } else {
-                    homeSugBox.classList.remove('open');
-                }
-            } catch(e) { homeSugBox.classList.remove('open'); }
-        }
-
-        function pickHomeSuggestion(type, text) {
-            homeSugBox.classList.remove('open');
-            if (type === 'brand') {
-                window.location.href = 'cars.php?brand=' + encodeURIComponent(text);
-            } else {
-                window.location.href = 'cars.php?search=' + encodeURIComponent(text);
-            }
-        }
-
-        function homeSearch() {
-            const q = homeInput.value.trim();
-            homeSugBox.classList.remove('open');
-            if (q) {
-                window.location.href = 'cars.php?search=' + encodeURIComponent(q);
-            } else {
-                window.location.href = 'cars.php';
-            }
-        }
-
         function filterByCategory(category) {
             window.location.href = 'cars.php?category=' + encodeURIComponent(category);
         }
