@@ -7,24 +7,7 @@
             <!-- Profile Header -->
             <div style="text-align:center;margin-bottom:32px;">
                 <div class="profile-avatar-wrapper" style="position:relative;width:110px;height:110px;margin:0 auto 16px;">
-                    <div class="profile-avatar" id="profileAvatar" style="width:110px;height:110px;border                    if (newRole === 'owner') {
-                        // Show My Vehicles link if not present
-                        if (!myVehiclesLink) {
-                            const ordersLi = document.querySelector('.navbar-nav a[href="orders.php"]')?.parentElement;
-                            if (ordersLi) {
-                                const li = document.createElement('li');
-                                li.innerHTML = '<a href="my-vehicles.php" style="color:var(--primary);font-weight:600;">\u{1F697} My Vehicles</a>';
-                                ordersLi.after(li);
-                            }
-                        }
-                        // Remove admin link if present
-                        if (adminLink) adminLink.parentElement.remove();
-                    } else if (newRole === 'renter') {
-                        // Remove My Vehicles link if present
-                        if (myVehiclesLink) myVehiclesLink.parentElement.remove();
-                        // Remove admin link if present
-                        if (adminLink) adminLink.parentElement.remove();
-                    }ckground:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:800;overflow:hidden;border:4px solid white;box-shadow:var(--shadow-md);">
+                    <div class="profile-avatar" id="profileAvatar" style="width:110px;height:110px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:800;overflow:hidden;border:4px solid white;box-shadow:var(--shadow-md);">
                         <span id="avatarInitial">?</span>
                     </div>
                     <label for="avatarUpload" style="position:absolute;bottom:2px;right:2px;width:34px;height:34px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow-sm);font-size:0.9rem;border:2px solid white;transition:var(--transition);" title="Change avatar">

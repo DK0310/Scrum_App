@@ -79,7 +79,7 @@
 | **Styling** | Custom CSS | CSS variables, responsive design, no external UI framework |
 | **Backend API** | PHP 8.2 | REST API with action-based routing (`?action=xxx` or `{action: "xxx"}`) |
 | **Database** | PostgreSQL 15 (Supabase) | Hosted on Supabase, connected via PDO with SSL |
-| **Image Storage** | PostgreSQL BYTEA | Vehicle images & avatars stored as binary in DB (no S3/cloud storage) |
+| **Image Storage** | Supabase Storage | Vehicle images, avatars, hero slides stored in Supabase Storage bucket "DriveNow" |
 | **Authentication** | PHP Sessions + Multi-method | Email/password, Google OAuth, Phone OTP, Email OTP, Face ID |
 | **AI Chatbot** | n8n AI Agent | n8n workflow with PostgreSQL chat memory, proxied through PHP |
 | **Email** | PHPMailer + Gmail SMTP | OTP delivery, booking confirmations |
@@ -102,6 +102,7 @@ Scrum/
 ├── Database/
 │   ├── db.php                    # PDO connection to Supabase PostgreSQL
 │   ├── schema.sql                # Full database schema (17 tables + RLS)
+│   ├── migration_storage.sql     # Migration: BYTEA → Supabase Storage columns
 │   ├── chat_memory.sql           # n8n chat history table reference
 │   └── drop_all.sql              # Reset script
 │
@@ -115,6 +116,7 @@ Scrum/
 │   ├── community.php             # Community posts, comments, likes
 │   ├── face-auth.php             # Face ID registration/login (face-api.js descriptors)
 │   ├── chatbot-with-memory.php   # Proxy to n8n AI agent webhook
+│   ├── supabase-storage.php      # ★ Supabase Storage helper (upload/delete/public URL)
 │   ├── mem0.php                  # Mem0 AI memory integration class
 │   ├── n8n.php                   # N8NConnector class (webhook helper)
 │   └── images/                   # (empty — images stored in DB as BYTEA)
@@ -727,49 +729,71 @@ The current system uses polling. For mobile, extend with:
 
 ## 10. Image Storage
 
-### Architecture (No Cloud Storage — All BYTEA)
+### Architecture (Supabase Storage Bucket)
+
+Images are stored in the **Supabase Storage** bucket named `DriveNow`, organized by folder:
 
 ```
-┌──────────────┐        ┌─────────────────────┐
-│  Client       │  POST  │ vehicles.php         │
-│  (multipart)  │──────→ │ action=upload-image  │
-│               │        │                      │
-│               │        │ 1. Validate file     │
-│               │        │ 2. Read binary data  │
-│               │        │ 3. INSERT INTO       │
-│               │        │    vehicle_images     │
-│               │        │    (BYTEA column)     │
-│               │        │ 4. Return image_id   │
-└──────────────┘        └─────────────────────┘
+DriveNow/                        ← Supabase Storage Bucket
+├── vehicles/{vehicle_id}/       ← Vehicle photos
+│   ├── abc123def456.jpg
+│   └── 789ghi012jkl.png
+├── avatars/                     ← User profile pictures
+│   └── {user_id}.jpg
+├── hero-slides/                 ← Admin homepage banners
+│   └── abc123def456.jpg
+└── community/                   ← Community post images
+    └── abc123def456.jpg
+```
 
-┌──────────────┐        ┌─────────────────────┐
-│  Client       │  GET   │ vehicles.php         │
-│  <img src=.>  │──────→ │ ?action=get-image    │
-│               │        │  &id={uuid}          │
-│               │        │                      │
-│               │        │ 1. SELECT image_data  │
-│               │        │    FROM vehicle_images│
-│               │        │ 2. Set Content-Type   │
-│               │        │ 3. Echo raw binary    │
-└──────────────┘        └─────────────────────┘
+```
+┌──────────────┐        ┌─────────────────────┐       ┌──────────────────┐
+│  Client       │  POST  │ vehicles.php         │       │ Supabase Storage │
+│  (multipart)  │──────→ │ action=upload-image  │──────→│ Bucket: DriveNow │
+│               │        │                      │       │ PUT /object/...  │
+│               │        │ 1. Validate file     │       │                  │
+│               │        │ 2. Upload to Storage  │       │ Returns public   │
+│               │        │ 3. Save path to DB   │       │ URL              │
+│               │        │ 4. Return public URL │       │                  │
+└──────────────┘        └─────────────────────┘       └──────────────────┘
+
+┌──────────────┐        ┌──────────────────────────────────────────────────┐
+│  Client       │  GET   │ Supabase Storage CDN                            │
+│  <img src=.>  │──────→ │ https://{project}.supabase.co/storage/v1/       │
+│               │        │   object/public/DriveNow/vehicles/{id}/img.jpg  │
+│               │        │                                                  │
+│               │        │ Direct CDN access — no PHP proxy needed         │
+└──────────────┘        └──────────────────────────────────────────────────┘
 ```
 
 ### Image Endpoints
 
-| Endpoint | Table | Column |
-|----------|-------|--------|
-| `/api/vehicles.php?action=get-image&id=X` | `vehicle_images` | `image_data` (BYTEA) |
-| `/api/auth.php?action=get-avatar&id=X` | `users` | `avatar_data` (BYTEA) |
-| `/api/admin.php?action=hero-slide-image&id=X` | `hero_slides` | `image_data` (BYTEA) |
-| `/api/community.php?action=get-post-image&id=X` | `community_posts` | `image_data` (BYTEA) |
+| Endpoint | Storage Folder | Notes |
+|----------|---------------|-------|
+| Upload: `POST /api/vehicles.php` `{action: "upload-image"}` | `vehicles/{vehicle_id}/` | Returns Supabase public URL |
+| Upload: `POST /api/auth.php` (multipart, avatar) | `avatars/` | Upsert (overwrites previous) |
+| Upload: `POST /api/admin.php` (multipart, hero slide) | `hero-slides/` | Returns public URL |
+| Upload: `POST /api/community.php` (multipart, post image) | `community/` | Returns public URL |
+
+### Image URLs
+
+All API responses now return **direct Supabase Storage public URLs**:
+
+```
+https://zydpdyoinxnrlsqkeobd.supabase.co/storage/v1/object/public/DriveNow/vehicles/{vehicle_id}/image.jpg
+```
+
+Legacy `/api/vehicles.php?action=get-image&id=X` endpoints still work — they redirect (302) to the Supabase public URL.
 
 ### Image Upload Limits
 
-- Max file size: **5 MB** per image
+- Vehicle images: **5 MB** max per image
+- Avatars: **3 MB** max
+- Hero slides: **10 MB** max
+- Community posts: **5 MB** max
 - Accepted formats: JPEG, PNG, WebP, GIF
-- No external CDN — images served directly from PostgreSQL
 
-> **Mobile Note**: For large-scale mobile apps, consider migrating to Supabase Storage (S3-compatible) for better performance. The current BYTEA approach works but adds load to the database.
+> **Mobile Note**: Images are now served via Supabase Storage CDN, so mobile apps can use the public URLs directly as `<img src>` or `Image.network()` — no cookie/session needed for image loading.
 
 ---
 
@@ -818,6 +842,10 @@ DB_NAME=postgres
 DB_USER=postgres.your_project_ref
 DB_PASSWORD=your_password
 DB_SSL_MODE=require
+
+# Supabase Storage
+SUPABASE_URL=https://your_project_ref.supabase.co
+SUPABASE_SERVICE_KEY=your_supabase_service_role_key
 
 # n8n AI Chatbot
 N8N_WEBHOOK_URL=http://localhost:5678/webhook/your-webhook-id
@@ -935,8 +963,8 @@ POST /api/vehicles.php { "action": "list", "search": "BMW", "category": "suv" }
 // Autocomplete
 GET /api/vehicles.php?action=search-suggestions&q=mer
 
-// Display images
-Image.network("https://yourserver.com/api/vehicles.php?action=get-image&id=$imageId")
+// Display images — direct Supabase Storage CDN URLs
+Image.network(vehicle['images'][0])  // Already a full public URL
 ```
 
 #### 3. Booking

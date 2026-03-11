@@ -70,6 +70,9 @@
             <a href="cars.php" class="side-menu-item <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚗</span> Cars
             </a>
+            <a href="booking.php?mode=minicab" class="side-menu-item <?= ($currentPage ?? '') === 'booking' ? 'active' : '' ?>">
+                <span class="side-menu-icon">🚕</span> Book a Minicab
+            </a>
             <a href="index.php#how-it-works" class="side-menu-item <?= ($currentPage ?? '') === 'how-it-works' ? 'active' : '' ?>">
                 <span class="side-menu-icon">📖</span> How It Works
             </a>
@@ -87,6 +90,9 @@
             </a>
             <?php if (isset($isLoggedIn) && $isLoggedIn): ?>
             <div class="side-menu-divider side-menu-mobile-only"></div>
+            <a href="profile.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'profile' ? 'active' : '' ?>">
+                <span class="side-menu-icon">👤</span> My Profile
+            </a>
             <a href="orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
                 <span class="side-menu-icon">📋</span> My Orders
             </a>

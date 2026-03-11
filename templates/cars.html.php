@@ -101,6 +101,22 @@
 
         /* Price Range */
         .range-slider-wrapper { position: relative; width: 100%; height: 24px; display: flex; align-items: center; }
+
+        /* Vehicle Status Badge */
+        .car-status-badge {
+            position: absolute; top: 10px; left: 10px; z-index: 3;
+            padding: 4px 12px; border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+            letter-spacing: 0.3px; text-transform: uppercase; backdrop-filter: blur(4px);
+        }
+        .car-status-badge.available {
+            background: rgba(16, 185, 129, 0.9); color: white;
+        }
+        .car-status-badge.rented {
+            background: rgba(239, 68, 68, 0.9); color: white;
+        }
+        .car-card.car-rented { opacity: 0.75; }
+        .car-card.car-rented .car-card-image img { filter: grayscale(30%); }
+
         .range-slider-wrapper input[type="range"] {
             -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
             background: var(--gray-200); border-radius: 3px; outline: none; position: relative; z-index: 2;
@@ -206,6 +222,9 @@
                 <div style="display:flex;gap:12px;">
                     <button class="btn btn-outline" style="flex:1;" onclick="closeModal('carDetailModal')">Close</button>
                     <button class="btn btn-primary" style="flex:2;" id="detailBookBtn" onclick="bookCar('')">📋 Book This Car</button>
+                </div>
+                <div id="detailStatusNotice" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius-md);text-align:center;">
+                    <span style="font-size:0.85rem;color:#991b1b;font-weight:600;">🔒 This vehicle is currently rented</span>
                 </div>
             </div>
         </div>
@@ -594,12 +613,13 @@
             if (filterState.category) activeFilters.push(filterState.category);
             const filterSuffix = activeFilters.length > 0 ? ' for ' + activeFilters.join(', ') : '';
 
-            countText.textContent = cars.length + ' car' + (cars.length !== 1 ? 's' : '') + ' available' + filterSuffix;
+            countText.textContent = cars.length + ' car' + (cars.length !== 1 ? 's' : '') + ' found' + filterSuffix;
 
             grid.innerHTML = cars.map(car => {
                 const images = car.images || [];
-                const imageHTML = images.length > 0
-                    ? '<img src="' + images[0] + '" alt="' + car.brand + ' ' + car.model + '" style="width:100%;height:100%;object-fit:cover;">'
+                const hasValidImage = images.length > 0 && images[0] && (images[0].startsWith('http') || images[0].startsWith('/api/'));
+                const imageHTML = hasValidImage
+                    ? '<img src="' + images[0] + '" alt="' + car.brand + ' ' + car.model + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="no-image-placeholder" style="display:none;">No Photo</div>'
                     : '<div class="no-image-placeholder">No Photo</div>';
 
                 const fuelIcon = car.fuel_type === 'electric' ? '⚡' : '⛽';
@@ -607,9 +627,16 @@
                 const rating = parseFloat(car.avg_rating) || 0;
                 const stars = '★'.repeat(Math.round(rating)) + '☆'.repeat(5 - Math.round(rating));
 
-                return '<div class="car-card" onclick="handleCarClick(\'' + car.id + '\')">' +
+                // Vehicle status badge
+                const isAvailable = (car.status || 'available') === 'available';
+                const statusBadge = isAvailable
+                    ? '<span class="car-status-badge available">✓ Available</span>'
+                    : '<span class="car-status-badge rented">🔒 Rented</span>';
+
+                return '<div class="car-card' + (isAvailable ? '' : ' car-rented') + '" onclick="handleCarClick(\'' + car.id + '\')">' +
                     '<div class="car-card-image">' +
                         imageHTML +
+                        statusBadge +
                         '<button class="car-card-favorite" onclick="event.stopPropagation();toggleFavorite(this)">🤍</button>' +
                     '</div>' +
                     '<div class="car-card-body">' +
@@ -686,10 +713,10 @@
             const mainImg = document.getElementById('detailMainImage');
             const thumbsEl = document.getElementById('detailThumbs');
 
-            if (images.length > 0) {
-                mainImg.innerHTML = '<img src="' + images[0] + '" alt="' + car.brand + ' ' + car.model + '" style="width:100%;height:100%;object-fit:cover;">';
+            if (images.length > 0 && images[0] && (images[0].startsWith('http') || images[0].startsWith('/api/'))) {
+                mainImg.innerHTML = '<img src="' + images[0] + '" alt="' + car.brand + ' ' + car.model + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'<span style=color:var(--gray-400);font-size:0.875rem>No Photo Available</span>\'">';
                 if (images.length > 1) {
-                    thumbsEl.innerHTML = images.map((img, i) => 
+                    thumbsEl.innerHTML = images.filter(img => img && (img.startsWith('http') || img.startsWith('/api/'))).map((img, i) => 
                         '<div class="detail-thumb ' + (i === 0 ? 'active' : '') + '" onclick="switchDetailImage(\'' + img + '\', this)">' +
                         '<img src="' + img + '" alt="Photo ' + (i+1) + '"></div>'
                     ).join('');
@@ -759,7 +786,20 @@
             }
 
             // Book button
-            document.getElementById('detailBookBtn').setAttribute('onclick', "bookCar('" + car.id + "')");
+            const bookBtn = document.getElementById('detailBookBtn');
+            const statusNotice = document.getElementById('detailStatusNotice');
+            bookBtn.setAttribute('onclick', "bookCar('" + car.id + "')");
+            if ((car.status || 'available') === 'available') {
+                bookBtn.disabled = false;
+                bookBtn.style.opacity = '1';
+                bookBtn.textContent = '📋 Book This Car';
+                statusNotice.style.display = 'none';
+            } else {
+                bookBtn.disabled = true;
+                bookBtn.style.opacity = '0.5';
+                bookBtn.textContent = '🔒 Currently Rented';
+                statusNotice.style.display = 'block';
+            }
 
             // Open modal
             document.getElementById('carDetailModal').classList.add('open');
@@ -790,6 +830,12 @@
                 setTimeout(() => {
                     window.location.href = 'login.php?redirect=booking.php&car_id=' + encodeURIComponent(carId);
                 }, 1000);
+                return;
+            }
+            // Check if car is available
+            const car = allLoadedCars.find(c => c.id === carId);
+            if (car && car.status !== 'available') {
+                showToast('This vehicle is currently rented and not available for booking.', 'warning');
                 return;
             }
             window.location.href = 'booking.php?car_id=' + encodeURIComponent(carId);

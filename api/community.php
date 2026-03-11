@@ -2,18 +2,19 @@
 /**
  * Community API - DriveNow
  * Handles community posts CRUD, comments, likes, user public profile
- * - Posts with optional BLOB image upload
+ * - Posts with optional image upload to Supabase Storage
  * - Category filtering
  * - Comments system
  * - Like/unlike toggle
  * - User public profile
  */
 
-// ===== SERVE POST IMAGE (before JSON headers) =====
+// ===== SERVE POST IMAGE (redirect to Supabase Storage) =====
 $action = $_GET['action'] ?? '';
 if ($action === 'get-post-image') {
     session_start();
     require_once __DIR__ . '/../Database/db.php';
+    require_once __DIR__ . '/supabase-storage.php';
 
     $postId = $_GET['id'] ?? '';
     if (empty($postId)) {
@@ -23,29 +24,38 @@ if ($action === 'get-post-image') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT image_data, image_mime FROM community_posts WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT image_storage_path, image_data, image_mime FROM community_posts WHERE id = ?");
         $stmt->execute([$postId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$row || !$row['image_data']) {
+        if (!$row) {
             http_response_code(404);
             echo 'Image not found';
             exit;
         }
 
-        $imageData = $row['image_data'];
-        if (is_resource($imageData)) {
-            $imageData = stream_get_contents($imageData);
+        if (!empty($row['image_storage_path'])) {
+            $storage = new SupabaseStorage();
+            $publicUrl = $storage->getPublicUrl($row['image_storage_path']);
+            header('Location: ' . $publicUrl, true, 302);
+            header('Cache-Control: public, max-age=86400');
+        } elseif (!empty($row['image_data'])) {
+            // Legacy fallback: serve BYTEA data directly
+            $mime = $row['image_mime'] ?? 'image/jpeg';
+            header('Content-Type: ' . $mime);
+            header('Cache-Control: public, max-age=86400');
+            $data = $row['image_data'];
+            if (is_resource($data)) {
+                echo stream_get_contents($data);
+            } else {
+                echo $data;
+            }
+        } else {
+            http_response_code(404);
+            echo 'Image not found';
+            exit;
         }
-        if (is_string($imageData) && substr($imageData, 0, 2) === '\\x') {
-            $imageData = hex2bin(substr($imageData, 2));
-        }
-
-        header('Content-Type: ' . ($row['image_mime'] ?? 'image/jpeg'));
-        header('Content-Length: ' . strlen($imageData));
-        header('Cache-Control: public, max-age=86400');
-        echo $imageData;
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         http_response_code(500);
         echo 'Server error';
     }
@@ -64,9 +74,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 session_start();
 require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/supabase-storage.php';
 
-// Run migration: add image_data/image_mime if not exist
+// Run migration: add image_storage_path if not exist
 try {
+    $pdo->exec("ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS image_storage_path TEXT");
     $pdo->exec("ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS image_data BYTEA");
     $pdo->exec("ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS image_mime VARCHAR(50)");
 } catch (PDOException $e) {
@@ -103,7 +115,10 @@ if ($action === 'list-posts') {
         $sql = "
             SELECT p.id, p.user_id, p.title, p.content, p.category, p.image_url,
                    p.likes_count, p.comments_count, p.created_at,
-                   CASE WHEN p.image_data IS NOT NULL THEN true ELSE false END as has_image,
+                   CASE WHEN p.image_storage_path IS NOT NULL THEN true
+                        WHEN p.image_data IS NOT NULL THEN true
+                        ELSE false END as has_image,
+                   p.image_storage_path,
                    u.full_name as author_name, u.avatar_url, u.role as author_role
             FROM community_posts p
             JOIN users u ON p.user_id = u.id
@@ -122,11 +137,17 @@ if ($action === 'list-posts') {
         $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Check if current user liked each post
+        $storage = new SupabaseStorage();
         foreach ($posts as &$post) {
             $post['has_image'] = ($post['has_image'] === true || $post['has_image'] === 't');
-            $post['image_src'] = $post['has_image']
-                ? '/api/community.php?action=get-post-image&id=' . $post['id']
-                : null;
+            if ($post['has_image'] && !empty($post['image_storage_path'])) {
+                $post['image_src'] = $storage->getPublicUrl($post['image_storage_path']);
+            } else if ($post['has_image']) {
+                $post['image_src'] = '/api/community.php?action=get-post-image&id=' . $post['id'];
+            } else {
+                $post['image_src'] = null;
+            }
+            unset($post['image_storage_path']);
             $post['is_own'] = ($userId && $post['user_id'] === $userId);
             $post['liked'] = false;
 
@@ -167,8 +188,8 @@ if ($action === 'create-post') {
         exit;
     }
 
-    // Process image if uploaded
-    $imageData = null;
+    // Process image if uploaded — upload to Supabase Storage
+    $storagePath = null;
     $imageMime = null;
 
     if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
@@ -187,19 +208,29 @@ if ($action === 'create-post') {
 
         $imageData = file_get_contents($file['tmp_name']);
         $imageMime = $file['type'];
+
+        $storage = new SupabaseStorage();
+        $uniqueName = SupabaseStorage::uniqueName($file['name']);
+        $storagePath = 'community/' . $uniqueName;
+
+        $uploadResult = $storage->upload($storagePath, $imageData, $file['type']);
+        if (!$uploadResult['success']) {
+            echo json_encode(['success' => false, 'message' => 'Storage upload failed: ' . ($uploadResult['message'] ?? 'Unknown error')]);
+            exit;
+        }
     }
 
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO community_posts (user_id, title, content, category, image_data, image_mime)
-            VALUES (:uid, :title, :content, :category, :imgdata, :imgmime)
+            INSERT INTO community_posts (user_id, title, content, category, image_storage_path, image_mime)
+            VALUES (:uid, :title, :content, :category, :spath, :imgmime)
             RETURNING id
         ");
         $stmt->bindParam(':uid', $userId);
         $stmt->bindParam(':title', $title);
         $stmt->bindParam(':content', $content);
         $stmt->bindParam(':category', $category);
-        $stmt->bindParam(':imgdata', $imageData, $imageData ? PDO::PARAM_LOB : PDO::PARAM_NULL);
+        $stmt->bindParam(':spath', $storagePath);
         $stmt->bindParam(':imgmime', $imageMime);
         $stmt->execute();
         $postId = $stmt->fetchColumn();
@@ -225,7 +256,7 @@ if ($action === 'delete-post') {
 
     try {
         // Check ownership or admin
-        $stmt = $pdo->prepare("SELECT user_id FROM community_posts WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT user_id, image_storage_path FROM community_posts WHERE id = ?");
         $stmt->execute([$postId]);
         $post = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -237,6 +268,12 @@ if ($action === 'delete-post') {
         if ($post['user_id'] !== $userId && $userRole !== 'admin') {
             echo json_encode(['success' => false, 'message' => 'You do not have permission to delete this post.']);
             exit;
+        }
+
+        // Delete image from Supabase Storage
+        if (!empty($post['image_storage_path'])) {
+            $storage = new SupabaseStorage();
+            $storage->delete($post['image_storage_path']);
         }
 
         // Cascade delete handles comments and likes
@@ -457,17 +494,26 @@ if ($action === 'get-user-public') {
         // Recent posts
         $rpStmt = $pdo->prepare("
             SELECT id, title, category, likes_count, comments_count, created_at,
-                   CASE WHEN image_data IS NOT NULL THEN true ELSE false END as has_image
+                   image_storage_path,
+                   CASE WHEN image_storage_path IS NOT NULL THEN true
+                        WHEN image_data IS NOT NULL THEN true
+                        ELSE false END as has_image
             FROM community_posts WHERE user_id = ?
             ORDER BY created_at DESC LIMIT 5
         ");
         $rpStmt->execute([$targetUserId]);
         $user['recent_posts'] = $rpStmt->fetchAll(PDO::FETCH_ASSOC);
+        $storage = new SupabaseStorage();
         foreach ($user['recent_posts'] as &$rp) {
             $rp['has_image'] = ($rp['has_image'] === true || $rp['has_image'] === 't');
-            $rp['image_src'] = $rp['has_image']
-                ? '/api/community.php?action=get-post-image&id=' . $rp['id']
-                : null;
+            if ($rp['has_image'] && !empty($rp['image_storage_path'])) {
+                $rp['image_src'] = $storage->getPublicUrl($rp['image_storage_path']);
+            } else if ($rp['has_image']) {
+                $rp['image_src'] = '/api/community.php?action=get-post-image&id=' . $rp['id'];
+            } else {
+                $rp['image_src'] = null;
+            }
+            unset($rp['image_storage_path']);
         }
         unset($rp);
 

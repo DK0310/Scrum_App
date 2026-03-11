@@ -5,7 +5,7 @@
                 <div>
                     <div class="footer-brand">DriveNow</div>
                     <p class="footer-description">
-                        The world's leading car rental platform. Book premium cars from trusted owners in 120+ countries. Self-drive or with driver.
+                        The world's leading car rental platform. Book minicabs or hire cars with drivers from trusted owners in 120+ countries.
                     </p>
                     <div class="social-links">
                         <a href="#" class="social-link" title="Facebook">📘</a>
@@ -29,9 +29,8 @@
                 <div>
                     <h4 class="footer-title">Services</h4>
                     <ul class="footer-links">
-                        <li><a href="cars.php">Self-Drive Rental</a></li>
-                        <li><a href="booking.php">Book a Driver</a></li>
-                        <li><a href="booking.php">Airport Transfer</a></li>
+                        <li><a href="cars.php">Hire With Driver</a></li>
+                        <li><a href="booking.php?mode=minicab">Book a Minicab</a></li>
                         <li><a href="membership.php">Corporate Fleet</a></li>
                         <li><a href="booking.php">Long-term Rental</a></li>
                     </ul>
@@ -49,9 +48,9 @@
                 <div>
                     <h4 class="footer-title">Download App</h4>
                     <div class="footer-devices" style="flex-direction:column;">
-                        <a href="#" class="footer-device-badge">🍎 App Store</a>
-                        <a href="#" class="footer-device-badge">🤖 Google Play</a>
-                        <a href="#" class="footer-device-badge">🖥️ Web App</a>
+                        <a href="#" class="footer-device-badge">App Store</a>
+                        <a href="#" class="footer-device-badge">Google Play</a>
+                        <a href="#" class="footer-device-badge">Web App</a>
                     </div>
                     <h4 class="footer-title" style="margin-top:24px;">Supported Devices</h4>
                     <p style="font-size:0.813rem;color:var(--gray-400);">iOS, Android, Web Browser, Desktop, Tablet — all devices supported.</p>

@@ -365,7 +365,7 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label>🎂 Date of Birth *</label>
+                            <label>🎂 Date of Birth * <span style="font-weight:400;font-size:0.75rem;color:#94a3b8;">(Must be 18+)</span></label>
                             <input type="date" id="dob" required>
                         </div>
                         <div class="form-group">
@@ -494,6 +494,13 @@
         let countdownInterval = null;
         let resendInterval = null;
 
+        // Set DOB max date to 18 years ago
+        (function() {
+            const d = new Date();
+            d.setFullYear(d.getFullYear() - 18);
+            document.getElementById('dob').max = d.toISOString().split('T')[0];
+        })();
+
         // ========== TOGGLE PASSWORD ==========
         function togglePassword(fieldId) {
             const input = document.getElementById(fieldId);
@@ -590,6 +597,15 @@
             if (!email || !email.includes('@')) return showStatus('error', 'Please enter a valid email address.');
             if (!phone) return showStatus('error', 'Please enter your phone number.');
             if (!dob) return showStatus('error', 'Please select your date of birth.');
+
+            // Age must be 18+
+            const birthDate = new Date(dob);
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
+            if (age < 18) return showStatus('error', 'You must be at least 18 years old to register.');
+
             if (!password || password.length < 6) return showStatus('error', 'Password must be at least 6 characters.');
             if (password !== confirmPassword) return showStatus('error', 'Passwords do not match.');
 

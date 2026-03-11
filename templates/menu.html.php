@@ -110,7 +110,7 @@
                     Find Your Perfect <span>Drive</span> Today
                 </h1>
                 <p class="hero-description">
-                    Book premium cars from trusted owners worldwide. Self-drive or with driver, online or by phone — your journey starts here.
+                    Book minicabs or hire cars with a driver from trusted owners worldwide. Online or by phone — your journey starts here.
                 </p>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
                     <a href="#search-box" class="btn btn-primary btn-lg">🔍 Search Cars</a>
@@ -145,9 +145,8 @@
     <div class="section-container">
         <div class="search-box" id="search-box">
             <div class="search-tabs">
-                <button class="search-tab active" onclick="switchSearchTab(this, 'self-drive')">🚗 Self-Drive</button>
-                <button class="search-tab" onclick="switchSearchTab(this, 'with-driver')">👨‍✈️ With Driver</button>
-                <button class="search-tab" onclick="switchSearchTab(this, 'airport')">✈️ Airport Transfer</button>
+                <button class="search-tab active" onclick="switchSearchTab(this, 'minicab')">� Book a Minicab</button>
+                <button class="search-tab" onclick="switchSearchTab(this, 'with-driver')">🚗 Hire With Driver</button>
                 <button class="search-tab" onclick="switchSearchTab(this, 'long-term')">📋 Long-term Contract</button>
             </div>
             <form class="search-form" onsubmit="handleSearch(event)">
@@ -558,12 +557,10 @@
                         <div class="form-group">
                             <label class="form-label">Booking Type</label>
                             <select class="form-select" id="bookingType">
-                                <option value="self-drive">Self-Drive</option>
-                                <option value="with-driver">With Driver</option>
-                                <option value="airport">Airport Transfer</option>
+                                <option value="minicab">Book a Minicab</option>
+                                <option value="with-driver">Hire With Driver</option>
                                 <option value="corporate">Corporate / Long-term</option>
                             </select>
-                        </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -873,7 +870,7 @@
                 <div>
                     <div class="footer-brand">🚗 DriveNow</div>
                     <p class="footer-description">
-                        The world's leading car rental platform. Book premium cars from trusted owners in 120+ countries. Self-drive or with driver.
+                        The world's leading car rental platform. Book minicabs or hire cars with drivers from trusted owners in 120+ countries.
                     </p>
                     <div class="social-links">
                         <a href="#" class="social-link" title="Facebook">📘</a>
@@ -897,11 +894,10 @@
                 <div>
                     <h4 class="footer-title">Services</h4>
                     <ul class="footer-links">
-                        <li><a href="#">Self-Drive Rental</a></li>
-                        <li><a href="#">Book a Driver</a></li>
-                        <li><a href="#">Airport Transfer</a></li>
-                        <li><a href="#">Corporate Fleet</a></li>
-                        <li><a href="#">Long-term Rental</a></li>
+                        <li><a href="#">Book a Minicab</a></li>
+                        <li><a href="#">Hire With Driver</a></li>
+                        <li><a href="#">Book a Minicab</a></li>
+                        <li><a href="#">Hire With Driver</a></li>
                     </ul>
                 </div>
                 <div>

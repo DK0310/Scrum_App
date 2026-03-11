@@ -2,12 +2,12 @@
 /**
  * Admin API - DriveNow
  * Admin-only operations:
- * - Hero slides CRUD (BYTEA image storage)
+ * - Hero slides CRUD (Supabase Storage)
  * - Promotions CRUD
  * - Delete any vehicle / booking
  */
 
-// Handle hero-slide-image serving BEFORE setting JSON headers
+// Handle hero-slide-image serving — redirect to Supabase Storage or serve BYTEA fallback
 $action = $_GET['action'] ?? '';
 if ($action === 'hero-slide-image') {
     session_start();
@@ -21,7 +21,15 @@ if ($action === 'hero-slide-image') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT image_data, mime_type, file_name FROM hero_slides WHERE id = ?");
+        // Check if storage_path column exists
+        $colCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'hero_slides' AND column_name = 'storage_path'");
+        $hasStoragePath = $colCheck->fetch() !== false;
+
+        if ($hasStoragePath) {
+            $stmt = $pdo->prepare("SELECT storage_path, mime_type, file_name, image_data FROM hero_slides WHERE id = ?");
+        } else {
+            $stmt = $pdo->prepare("SELECT NULL as storage_path, mime_type, file_name, image_data FROM hero_slides WHERE id = ?");
+        }
         $stmt->execute([$slideId]);
         $img = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -31,20 +39,29 @@ if ($action === 'hero-slide-image') {
             exit;
         }
 
-        $imageData = $img['image_data'];
-        if (is_resource($imageData)) {
-            $imageData = stream_get_contents($imageData);
-        }
-        if (is_string($imageData) && substr($imageData, 0, 2) === '\\x') {
-            $imageData = hex2bin(substr($imageData, 2));
+        // If storage_path exists → redirect to Supabase
+        if (!empty($img['storage_path'])) {
+            require_once __DIR__ . '/supabase-storage.php';
+            $storage = new SupabaseStorage();
+            $publicUrl = $storage->getPublicUrl($img['storage_path']);
+            header('Location: ' . $publicUrl, true, 302);
+            header('Cache-Control: public, max-age=86400');
+            exit;
         }
 
-        header('Content-Type: ' . $img['mime_type']);
-        header('Content-Length: ' . strlen($imageData));
-        header('Cache-Control: public, max-age=86400');
-        header('Content-Disposition: inline; filename="' . ($img['file_name'] ?? 'slide') . '"');
-        echo $imageData;
-    } catch (PDOException $e) {
+        // Fallback: serve image_data BYTEA directly
+        if (!empty($img['image_data'])) {
+            $binaryData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
+            header('Content-Type: ' . ($img['mime_type'] ?? 'image/jpeg'));
+            header('Content-Length: ' . strlen($binaryData));
+            header('Cache-Control: public, max-age=86400');
+            echo $binaryData;
+            exit;
+        }
+
+        http_response_code(404);
+        echo 'No image data found';
+    } catch (Exception $e) {
         http_response_code(500);
         echo 'Server error';
     }
@@ -58,17 +75,34 @@ if ($action === 'hero-slides-public') {
     require_once __DIR__ . '/../Database/db.php';
 
     try {
-        $stmt = $pdo->query("SELECT id, title, subtitle, link_url, sort_order FROM hero_slides WHERE is_active = TRUE ORDER BY sort_order ASC, created_at DESC");
+        // Check if storage_path column exists
+        $colCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'hero_slides' AND column_name = 'storage_path'");
+        $hasStoragePath = $colCheck->fetch() !== false;
+
+        if ($hasStoragePath) {
+            $stmt = $pdo->query("SELECT id, title, subtitle, link_url, sort_order, storage_path FROM hero_slides WHERE is_active = TRUE ORDER BY sort_order ASC, created_at DESC");
+        } else {
+            $stmt = $pdo->query("SELECT id, title, subtitle, link_url, sort_order, NULL as storage_path FROM hero_slides WHERE is_active = TRUE ORDER BY sort_order ASC, created_at DESC");
+        }
         $slides = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Add image URLs
+        $storage = null;
         foreach ($slides as &$s) {
-            $s['image_url'] = '/api/admin.php?action=hero-slide-image&id=' . $s['id'];
+            if (!empty($s['storage_path'])) {
+                if (!$storage) {
+                    require_once __DIR__ . '/supabase-storage.php';
+                    $storage = new SupabaseStorage();
+                }
+                $s['image_url'] = $storage->getPublicUrl($s['storage_path']);
+            } else {
+                $s['image_url'] = '/api/admin.php?action=hero-slide-image&id=' . $s['id'];
+            }
+            unset($s['storage_path']);
         }
 
         echo json_encode(['success' => true, 'slides' => $slides]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -86,6 +120,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/notification-helpers.php';
+require_once __DIR__ . '/supabase-storage.php';
+
+// Auto-migration: ensure storage_path column exists on hero_slides
+try {
+    $pdo->exec("ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS storage_path TEXT");
+} catch (Exception $e) { /* column may already exist */ }
 
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
@@ -120,22 +160,39 @@ if ($action === 'hero-slides-list') {
     requireAdmin();
 
     try {
-        $stmt = $pdo->query("SELECT id, file_name, mime_type, file_size, title, subtitle, link_url, sort_order, is_active, created_at FROM hero_slides ORDER BY sort_order ASC, created_at DESC");
+        // Check if storage_path column exists
+        $colCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'hero_slides' AND column_name = 'storage_path'");
+        $hasStoragePath = $colCheck->fetch() !== false;
+
+        if ($hasStoragePath) {
+            $stmt = $pdo->query("SELECT id, file_name, mime_type, file_size, title, subtitle, link_url, sort_order, is_active, created_at, storage_path FROM hero_slides ORDER BY sort_order ASC, created_at DESC");
+        } else {
+            $stmt = $pdo->query("SELECT id, file_name, mime_type, file_size, title, subtitle, link_url, sort_order, is_active, created_at, NULL as storage_path FROM hero_slides ORDER BY sort_order ASC, created_at DESC");
+        }
         $slides = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        $storage = null;
         foreach ($slides as &$s) {
-            $s['image_url'] = '/api/admin.php?action=hero-slide-image&id=' . $s['id'];
+            if (!empty($s['storage_path'])) {
+                if (!$storage) {
+                    $storage = new SupabaseStorage();
+                }
+                $s['image_url'] = $storage->getPublicUrl($s['storage_path']);
+            } else {
+                // Fallback: serve via hero-slide-image endpoint (handles BYTEA)
+                $s['image_url'] = '/api/admin.php?action=hero-slide-image&id=' . $s['id'];
+            }
         }
 
         echo json_encode(['success' => true, 'slides' => $slides]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
 
 // ==========================================================
-// HERO SLIDES - UPLOAD (admin, multipart)
+// HERO SLIDES - UPLOAD (admin, multipart — Supabase Storage)
 // ==========================================================
 if ($action === 'hero-slide-upload') {
     requireAdmin();
@@ -173,12 +230,24 @@ if ($action === 'hero-slide-upload') {
     $adminId = $_SESSION['user_id'];
 
     try {
+        $storage = new SupabaseStorage();
+        $uniqueName = SupabaseStorage::uniqueName($file['name']);
+        $storagePath = 'hero-slides/' . $uniqueName;
+
+        // Upload to Supabase Storage
+        $uploadResult = $storage->upload($storagePath, $imageData, $file['type']);
+        if (!$uploadResult['success']) {
+            echo json_encode(['success' => false, 'message' => 'Storage upload failed: ' . ($uploadResult['message'] ?? 'Unknown error')]);
+            exit;
+        }
+
         $stmt = $pdo->prepare("
-            INSERT INTO hero_slides (image_data, mime_type, file_name, file_size, title, subtitle, link_url, sort_order, is_active, created_by)
-            VALUES (:data, :mime, :fname, :fsize, :title, :sub, :link, :sort, :active, :uid)
+            INSERT INTO hero_slides (storage_path, image_data, mime_type, file_name, file_size, title, subtitle, link_url, sort_order, is_active, created_by)
+            VALUES (:spath, :imgdata, :mime, :fname, :fsize, :title, :sub, :link, :sort, :active, :uid)
             RETURNING id
         ");
-        $stmt->bindParam(':data', $imageData, PDO::PARAM_LOB);
+        $stmt->bindParam(':spath', $storagePath);
+        $stmt->bindParam(':imgdata', $imageData, PDO::PARAM_LOB);
         $stmt->bindParam(':mime', $file['type']);
         $stmt->bindParam(':fname', $file['name']);
         $stmt->bindParam(':fsize', $file['size'], PDO::PARAM_INT);
@@ -196,10 +265,10 @@ if ($action === 'hero-slide-upload') {
             'success' => true,
             'message' => 'Hero slide uploaded successfully.',
             'slide_id' => $newId,
-            'image_url' => '/api/admin.php?action=hero-slide-image&id=' . $newId
+            'image_url' => $uploadResult['public_url']
         ]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -260,17 +329,29 @@ if ($action === 'hero-slide-delete') {
     }
 
     try {
-        $stmt = $pdo->prepare("DELETE FROM hero_slides WHERE id = ?");
-        $stmt->execute([$slideId]);
+        // Get storage path before deleting
+        $pathStmt = $pdo->prepare("SELECT storage_path FROM hero_slides WHERE id = ?");
+        $pathStmt->execute([$slideId]);
+        $slide = $pathStmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($stmt->rowCount() === 0) {
+        if (!$slide) {
             echo json_encode(['success' => false, 'message' => 'Slide not found.']);
             exit;
         }
 
+        // Delete from Supabase Storage
+        if (!empty($slide['storage_path'])) {
+            $storage = new SupabaseStorage();
+            $storage->delete($slide['storage_path']);
+        }
+
+        // Delete DB record
+        $stmt = $pdo->prepare("DELETE FROM hero_slides WHERE id = ?");
+        $stmt->execute([$slideId]);
+
         echo json_encode(['success' => true, 'message' => 'Slide deleted successfully.']);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -301,8 +382,6 @@ if ($action === 'promotion-add') {
     $description = trim($input['description'] ?? '');
     $discountType = trim($input['discount_type'] ?? 'percentage');
     $discountValue = floatval($input['discount_value'] ?? 0);
-    $minRentalDays = intval($input['min_rental_days'] ?? 1);
-    $maxDiscount = isset($input['max_discount']) ? floatval($input['max_discount']) : null;
     $startDate = trim($input['start_date'] ?? '');
     $endDate = trim($input['end_date'] ?? '');
     $usageLimit = isset($input['usage_limit']) ? intval($input['usage_limit']) : null;
@@ -321,13 +400,12 @@ if ($action === 'promotion-add') {
         }
 
         $stmt = $pdo->prepare("
-            INSERT INTO promotions (code, description, discount_type, discount_value, min_rental_days, max_discount, start_date, end_date, usage_limit)
-            VALUES (?, ?, ?::discount_type, ?, ?, ?, ?::DATE, ?::DATE, ?)
+            INSERT INTO promotions (code, title, description, discount_type, discount_value, starts_at, expires_at, max_uses)
+            VALUES (?, ?, ?, ?, ?, ?::TIMESTAMPTZ, ?::TIMESTAMPTZ, ?)
             RETURNING *
         ");
         $stmt->execute([
-            strtoupper($code), $description, $discountType, $discountValue,
-            $minRentalDays, $maxDiscount,
+            strtoupper($code), strtoupper($code), $description, $discountType, $discountValue,
             $startDate ?: null, $endDate ?: null, $usageLimit
         ]);
         $promo = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -360,13 +438,11 @@ if ($action === 'promotion-update') {
 
     if (isset($input['code'])) { $fields[] = 'code = :code'; $params[':code'] = strtoupper($input['code']); }
     if (isset($input['description'])) { $fields[] = 'description = :desc'; $params[':desc'] = $input['description']; }
-    if (isset($input['discount_type'])) { $fields[] = "discount_type = :dtype::discount_type"; $params[':dtype'] = $input['discount_type']; }
+    if (isset($input['discount_type'])) { $fields[] = "discount_type = :dtype"; $params[':dtype'] = $input['discount_type']; }
     if (isset($input['discount_value'])) { $fields[] = 'discount_value = :dval'; $params[':dval'] = floatval($input['discount_value']); }
-    if (isset($input['min_rental_days'])) { $fields[] = 'min_rental_days = :mrd'; $params[':mrd'] = intval($input['min_rental_days']); }
-    if (isset($input['max_discount'])) { $fields[] = 'max_discount = :maxd'; $params[':maxd'] = floatval($input['max_discount']); }
-    if (isset($input['start_date'])) { $fields[] = 'start_date = :sd::DATE'; $params[':sd'] = $input['start_date']; }
-    if (isset($input['end_date'])) { $fields[] = 'end_date = :ed::DATE'; $params[':ed'] = $input['end_date']; }
-    if (isset($input['usage_limit'])) { $fields[] = 'usage_limit = :ul'; $params[':ul'] = intval($input['usage_limit']); }
+    if (isset($input['start_date'])) { $fields[] = 'starts_at = :sd::TIMESTAMPTZ'; $params[':sd'] = $input['start_date']; }
+    if (isset($input['end_date'])) { $fields[] = 'expires_at = :ed::TIMESTAMPTZ'; $params[':ed'] = $input['end_date']; }
+    if (isset($input['usage_limit'])) { $fields[] = 'max_uses = :ul'; $params[':ul'] = intval($input['usage_limit']); }
     if (isset($input['is_active'])) { $fields[] = 'is_active = :active'; $params[':active'] = (bool)$input['is_active']; }
 
     if (empty($fields)) {
@@ -440,6 +516,15 @@ if ($action === 'admin-delete-vehicle') {
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete vehicle with active bookings (' . $activeBookings . ' active). Cancel them first.']);
             exit;
+        }
+
+        // Delete images from Supabase Storage first
+        $imgStmt = $pdo->prepare("SELECT storage_path FROM vehicle_images WHERE vehicle_id = ? AND storage_path IS NOT NULL");
+        $imgStmt->execute([$vehicleId]);
+        $storagePaths = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
+        if (!empty($storagePaths)) {
+            $storage = new SupabaseStorage();
+            $storage->deleteMultiple($storagePaths);
         }
 
         // Admin can delete any vehicle (no owner_id check)

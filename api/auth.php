@@ -21,11 +21,12 @@
  *   POST logout             - Logout
  */
 
-// ===== SERVE AVATAR IMAGE (before JSON headers) =====
+// ===== SERVE AVATAR IMAGE (redirect to Supabase Storage) =====
 $preAction = $_GET['action'] ?? '';
 if ($preAction === 'get-avatar') {
     session_start();
     require_once __DIR__ . '/../Database/db.php';
+    require_once __DIR__ . '/supabase-storage.php';
 
     $targetUserId = $_GET['id'] ?? '';
     if (empty($targetUserId)) {
@@ -35,29 +36,21 @@ if ($preAction === 'get-avatar') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT avatar_data, avatar_mime FROM users WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT avatar_storage_path, avatar_url FROM users WHERE id = ?");
         $stmt->execute([$targetUserId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$row || !$row['avatar_data']) {
+        if (!$row || empty($row['avatar_storage_path'])) {
             http_response_code(404);
             echo 'Avatar not found';
             exit;
         }
 
-        $imageData = $row['avatar_data'];
-        if (is_resource($imageData)) {
-            $imageData = stream_get_contents($imageData);
-        }
-        if (is_string($imageData) && substr($imageData, 0, 2) === '\\x') {
-            $imageData = hex2bin(substr($imageData, 2));
-        }
-
-        header('Content-Type: ' . ($row['avatar_mime'] ?? 'image/jpeg'));
-        header('Content-Length: ' . strlen($imageData));
+        $storage = new SupabaseStorage();
+        $publicUrl = $storage->getPublicUrl($row['avatar_storage_path']);
+        header('Location: ' . $publicUrl, true, 302);
         header('Cache-Control: public, max-age=3600');
-        echo $imageData;
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         http_response_code(500);
         echo 'Server error';
     }
@@ -78,13 +71,15 @@ session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/notification-helpers.php';
+require_once __DIR__ . '/supabase-storage.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
-// Run migration: add avatar_data/avatar_mime if not exist
+// Run migration: add avatar_storage_path if not exist
 try {
+    $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_storage_path TEXT");
     $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data BYTEA");
     $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_mime VARCHAR(50)");
 } catch (PDOException $e) { /* ignore */ }
@@ -461,6 +456,15 @@ if ($action === 'register') {
         exit;
     }
 
+    // Age must be 18+
+    $birthDate = new \DateTime($dob);
+    $today = new \DateTime();
+    $age = $today->diff($birthDate)->y;
+    if ($age < 18) {
+        echo json_encode(['success' => false, 'message' => 'You must be at least 18 years old to register.']);
+        exit;
+    }
+
     if (empty($password) || strlen($password) < 6) {
         echo json_encode(['success' => false, 'message' => 'Password must be at least 6 characters.']);
         exit;
@@ -710,6 +714,35 @@ if ($action === 'enable-faceid') {
     }
 
     try {
+        // Check if this face matches any OTHER user's face descriptor
+        $stmt = $pdo->prepare("
+            SELECT id, full_name, face_descriptor FROM users 
+            WHERE faceid_enabled = TRUE AND face_descriptor IS NOT NULL AND id != ?
+        ");
+        $stmt->execute([$userId]);
+        $existingUsers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $duplicateThreshold = 0.45; // Stricter threshold for duplicate detection
+        foreach ($existingUsers as $existing) {
+            $storedDescriptor = json_decode($existing['face_descriptor'], true);
+            if (!is_array($storedDescriptor)) continue;
+
+            $distance = 0;
+            for ($i = 0; $i < min(count($faceDescriptor), count($storedDescriptor)); $i++) {
+                $distance += pow($faceDescriptor[$i] - $storedDescriptor[$i], 2);
+            }
+            $distance = sqrt($distance);
+
+            if ($distance < $duplicateThreshold) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'This face is already registered to another account ("' . ($existing['full_name'] ?? 'Unknown') . '"). Each face can only be linked to one account.',
+                    'duplicate' => true
+                ]);
+                exit;
+            }
+        }
+
         $stmt = $pdo->prepare("
             UPDATE users SET
                 face_descriptor = ?::JSONB,
@@ -925,7 +958,7 @@ if ($action === 'get-profile') {
 }
 
 // ==========================================================
-// UPLOAD AVATAR (BLOB storage)
+// UPLOAD AVATAR (Supabase Storage)
 // ==========================================================
 if ($action === 'upload-avatar') {
     if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
@@ -959,11 +992,22 @@ if ($action === 'upload-avatar') {
 
     try {
         $userId = $_SESSION['user_id'];
+        $storage = new SupabaseStorage();
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION)) ?: 'jpg';
+        $storagePath = 'avatars/' . $userId . '.' . $ext;
+
+        // Upload to Supabase Storage (upsert to overwrite previous avatar)
+        $uploadResult = $storage->upload($storagePath, $imageData, $file['type'], true);
+        if (!$uploadResult['success']) {
+            echo json_encode(['success' => false, 'message' => 'Storage upload failed: ' . ($uploadResult['message'] ?? 'Unknown error')]);
+            exit;
+        }
+
+        $publicUrl = $uploadResult['public_url'] . '?t=' . time();
         $avatarUrl = '/api/auth.php?action=get-avatar&id=' . $userId . '&t=' . time();
 
-        $stmt = $pdo->prepare("UPDATE users SET avatar_data = :imgdata, avatar_mime = :imgmime, avatar_url = :url, updated_at = NOW() WHERE id = :uid");
-        $stmt->bindParam(':imgdata', $imageData, PDO::PARAM_LOB);
-        $stmt->bindParam(':imgmime', $file['type']);
+        $stmt = $pdo->prepare("UPDATE users SET avatar_storage_path = :spath, avatar_url = :url, updated_at = NOW() WHERE id = :uid");
+        $stmt->bindParam(':spath', $storagePath);
         $stmt->bindParam(':url', $avatarUrl);
         $stmt->bindParam(':uid', $userId);
         $stmt->execute();
@@ -974,10 +1018,11 @@ if ($action === 'upload-avatar') {
         echo json_encode([
             'success' => true,
             'message' => 'Avatar updated!',
-            'avatar_url' => $avatarUrl
+            'avatar_url' => $avatarUrl,
+            'public_url' => $publicUrl
         ]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }

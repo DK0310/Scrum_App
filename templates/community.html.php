@@ -91,7 +91,10 @@
                 <h3 class="modal-title">💬 Comments</h3>
                 <button class="modal-close" onclick="closeModal('commentModal')">✕</button>
             </div>
-            <div class="modal-body" style="flex:1;overflow-y:auto;max-height:400px;" id="commentsContainer">
+            <!-- Post Preview at top -->
+            <div id="commentPostPreview" style="padding:0;border-bottom:1px solid var(--gray-200);max-height:45vh;overflow-y:auto;"></div>
+            <!-- Comments list -->
+            <div class="modal-body" style="flex:1;overflow-y:auto;max-height:300px;" id="commentsContainer">
                 <div style="text-align:center;padding:30px;color:var(--gray-400);">Loading comments...</div>
             </div>
             <?php if ($isLoggedIn): ?>
@@ -187,7 +190,7 @@
             : null;
         
         const imageHtml = imageSrc
-            ? `<div class="community-post-image" style="background:none;overflow:hidden;"><img src="${imageSrc}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:2rem;font-weight:800;color:var(--primary);background:linear-gradient(135deg,var(--primary-50),var(--primary-100));\\'>DriveNow</div>'"></div>`
+            ? `<div class="community-post-image" style="background:none;overflow:hidden;cursor:pointer;" onclick="event.stopPropagation();openImageLightbox('${imageSrc}',event)"><img src="${imageSrc}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:2rem;font-weight:800;color:var(--primary);background:linear-gradient(135deg,var(--primary-50),var(--primary-100));\\'>DriveNow</div>';this.parentElement.style.cursor='default';this.parentElement.onclick=null;"></div>`
             : `<div class="community-post-image" style="background:linear-gradient(135deg,var(--primary-50),var(--primary-100));"><div style="font-size:2rem;font-weight:800;color:var(--primary);">DriveNow</div></div>`;
         
         const canDelete = (post.is_own || CURRENT_USER_ROLE === 'admin');
@@ -361,6 +364,44 @@
     // ===== COMMENTS =====
     function openComments(postId) {
         currentCommentPostId = postId;
+        
+        // Render post preview at top of modal
+        const post = allPosts.find(p => p.id === postId);
+        const previewContainer = document.getElementById('commentPostPreview');
+        if (post) {
+            const avatar = post.avatar_url 
+                ? `<img src="${post.avatar_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">`
+                : `<div class="community-avatar">${post.author_name ? post.author_name.charAt(0).toUpperCase() : '👤'}</div>`;
+            const date = new Date(post.created_at).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+            const catBadge = post.category ? `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.7rem;background:var(--primary-50);color:var(--primary);font-weight:600;">${categoryEmoji[post.category] || '📋'} ${categoryLabel[post.category] || post.category}</span>` : '';
+            
+            const imageSrc = post.image_src || null;
+            const imageHtml = imageSrc
+                ? `<div style="width:100%;max-height:300px;border-radius:var(--radius);margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:var(--gray-100);" onclick="openImageLightbox('${imageSrc}',event)"><img src="${imageSrc}" style="max-width:100%;max-height:300px;object-fit:contain;display:block;border-radius:var(--radius);" onerror="this.parentElement.style.display='none'"></div>`
+                : '';
+
+            previewContainer.innerHTML = `
+                <div style="padding:16px 24px;">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                        ${avatar}
+                        <div>
+                            <div style="font-weight:600;font-size:0.85rem;color:var(--gray-800);">${escHtml(post.author_name || 'Unknown')}</div>
+                            <div style="font-size:0.7rem;color:var(--gray-400);">${date}</div>
+                        </div>
+                        <div style="margin-left:auto;">${catBadge}</div>
+                    </div>
+                    ${imageHtml}
+                    <h3 style="font-size:1.05rem;font-weight:700;color:var(--gray-900);margin-bottom:8px;">${escHtml(post.title)}</h3>
+                    <p style="font-size:0.88rem;color:var(--gray-600);line-height:1.6;white-space:pre-line;word-wrap:break-word;">${escHtml(post.content)}</p>
+                    <div style="display:flex;align-items:center;gap:16px;margin-top:12px;padding-top:10px;border-top:1px solid var(--gray-100);font-size:0.8rem;color:var(--gray-500);">
+                        <span>❤️ ${post.likes_count || 0} likes</span>
+                        <span>💬 ${post.comments_count || 0} comments</span>
+                    </div>
+                </div>`;
+        } else {
+            previewContainer.innerHTML = '';
+        }
+
         document.getElementById('commentModal').classList.add('open');
         loadComments(postId);
     }
@@ -595,6 +636,43 @@
 
     // ===== LOAD POSTS ON PAGE LOAD =====
     document.addEventListener('DOMContentLoaded', () => loadPosts());
+
+    // ===== IMAGE LIGHTBOX =====
+    function openImageLightbox(src, evt) {
+        // Don't open lightbox if triggered from behind a modal overlay
+        if (evt && !evt.target.closest('.modal-overlay') && document.querySelector('.modal-overlay.open')) {
+            return;
+        }
+
+        let overlay = document.getElementById('imageLightbox');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'imageLightbox';
+            overlay.innerHTML = `
+                <button class="lightbox-close" onclick="closeImageLightbox()">✕</button>
+                <img class="lightbox-img" id="lightboxImg" src="" alt="Full image">
+            `;
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) closeImageLightbox();
+            });
+            document.body.appendChild(overlay);
+        }
+        document.getElementById('lightboxImg').src = src;
+        overlay.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeImageLightbox() {
+        const overlay = document.getElementById('imageLightbox');
+        if (overlay) {
+            overlay.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeImageLightbox();
+    });
     </script>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>

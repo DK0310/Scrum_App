@@ -125,40 +125,53 @@ if ($action === 'create') {
 
     $renterId = $_SESSION['user_id'];
     $vehicleId = $input['vehicle_id'] ?? '';
-    $bookingType = $input['booking_type'] ?? 'self-drive';
+    $bookingType = $input['booking_type'] ?? 'with-driver';
     $pickupDate = $input['pickup_date'] ?? '';
     $returnDate = $input['return_date'] ?? null;
     $pickupLocation = $input['pickup_location'] ?? '';
     $returnLocation = $input['return_location'] ?? '';
-    $airportName = $input['airport_name'] ?? null;
     $specialRequests = $input['special_requests'] ?? '';
     $promoCode = $input['promo_code'] ?? '';
     $paymentMethod = $input['payment_method'] ?? 'cash';
     $distanceKm = isset($input['distance_km']) ? floatval($input['distance_km']) : null;
-    $frontendTransferCost = isset($input['transfer_cost']) ? floatval($input['transfer_cost']) : null;
+    $rideTier = $input['ride_tier'] ?? null; // 'eco', 'standard', 'premium'
+    $frontendRideFare = isset($input['ride_fare']) ? floatval($input['ride_fare']) : null;
+    $serviceType = $input['service_type'] ?? 'local'; // 'local', 'long-distance', 'airport-transfer', 'hotel-transfer'
 
     // Validate required fields
-    if (empty($vehicleId) || empty($pickupDate) || empty($pickupLocation)) {
-        echo json_encode(['success' => false, 'message' => 'Vehicle, pickup date, and pickup location are required.']);
+    if (empty($pickupDate) || empty($pickupLocation)) {
+        echo json_encode(['success' => false, 'message' => 'Pickup date and pickup location are required.']);
         exit;
     }
 
     // Validate booking type
-    if (!in_array($bookingType, ['self-drive', 'with-driver', 'airport'])) {
+    if (!in_array($bookingType, ['minicab', 'with-driver'])) {
         echo json_encode(['success' => false, 'message' => 'Invalid booking type.']);
         exit;
     }
 
-    // For self-drive and with-driver, return_date is required
-    if (in_array($bookingType, ['self-drive', 'with-driver']) && empty($returnDate)) {
-        echo json_encode(['success' => false, 'message' => 'Return date is required for this booking type.']);
-        exit;
+    // For with-driver, vehicle_id and return_date are required
+    if ($bookingType === 'with-driver') {
+        if (empty($vehicleId)) {
+            echo json_encode(['success' => false, 'message' => 'Vehicle is required for with-driver booking.']);
+            exit;
+        }
+        if (empty($returnDate)) {
+            echo json_encode(['success' => false, 'message' => 'Return date is required for with-driver booking.']);
+            exit;
+        }
     }
 
-    // For airport, airport_name is required
-    if ($bookingType === 'airport' && empty($airportName)) {
-        echo json_encode(['success' => false, 'message' => 'Airport name is required for airport transfer.']);
-        exit;
+    // For minicab, ride_tier is required
+    if ($bookingType === 'minicab') {
+        if (empty($rideTier) || !in_array($rideTier, ['eco', 'standard', 'premium'])) {
+            echo json_encode(['success' => false, 'message' => 'Please select a valid ride tier (eco, standard, premium).']);
+            exit;
+        }
+        if (empty($returnLocation)) {
+            echo json_encode(['success' => false, 'message' => 'Destination location is required for with-driver booking.']);
+            exit;
+        }
     }
 
     // Validate payment method
@@ -169,47 +182,83 @@ if ($action === 'create') {
     }
 
     try {
-        // Get vehicle info
-        $stmt = $pdo->prepare("SELECT id, owner_id, price_per_day, price_per_week, price_per_month, category, status FROM vehicles WHERE id = ?");
-        $stmt->execute([$vehicleId]);
-        $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$vehicle) {
-            echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
-            exit;
-        }
-
-        if ($vehicle['status'] !== 'available') {
-            echo json_encode(['success' => false, 'message' => 'This vehicle is not currently available.']);
-            exit;
-        }
-
-        if ($vehicle['owner_id'] === $renterId) {
-            echo json_encode(['success' => false, 'message' => 'You cannot book your own vehicle.']);
-            exit;
-        }
-
-        // Calculate pricing
-        $pricePerDay = (float)$vehicle['price_per_day'];
+        $vehicle = null;
+        $pricePerDay = 0;
         $totalDays = 1;
-        $subtotal = $pricePerDay;
+        $subtotal = 0;
 
-        if ($bookingType === 'airport') {
-            $totalDays = 1;
-            // Airport transfer: use distance-based cost sent from frontend
-            if ($frontendTransferCost !== null && $frontendTransferCost > 0) {
-                $subtotal = $frontendTransferCost;
-            } elseif ($distanceKm !== null && $distanceKm > 0) {
-                // Fallback: calculate based on category rate
-                $category = strtolower($vehicle['category'] ?? 'sedan');
-                $ratePerKm = 1; // default
-                if (in_array($category, ['minibus', 'van', 'sport'])) $ratePerKm = 2;
-                elseif ($category === 'luxury') $ratePerKm = 5;
+        if ($bookingType === 'minicab') {
+            // ==== MINICAB: Auto-assign vehicle based on tier ====
+            $tierRates = ['eco' => 1, 'standard' => 2, 'premium' => 5];
+            $ratePerKm = $tierRates[$rideTier] ?? 1;
+
+            // Determine price range for tier
+            // Eco: price_per_day <= 40, seats = 5 (always 5-seat)
+            // Standard: 40 < price_per_day <= 100
+            // Premium: price_per_day > 100
+            $tierConditions = '';
+            $tierParams = [];
+            if ($rideTier === 'eco') {
+                $tierConditions = "v.price_per_day <= 40 AND v.seats = 5";
+            } elseif ($rideTier === 'standard') {
+                $tierConditions = "v.price_per_day > 40 AND v.price_per_day <= 100";
+            } elseif ($rideTier === 'premium') {
+                $tierConditions = "v.price_per_day > 100";
+            }
+
+            // Find a random available vehicle matching the tier (exclude own vehicles)
+            $stmt = $pdo->prepare("
+                SELECT v.id, v.owner_id, v.price_per_day, v.price_per_week, v.price_per_month, v.category, v.status, v.brand, v.model, v.seats
+                FROM vehicles v
+                WHERE v.status = 'available' AND {$tierConditions} AND v.owner_id != ?
+                ORDER BY RANDOM()
+                LIMIT 1
+            ");
+            $stmt->execute([$renterId]);
+            $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$vehicle) {
+                echo json_encode(['success' => false, 'message' => 'No available vehicles found for the ' . ucfirst($rideTier) . ' tier. Please try another tier.']);
+                exit;
+            }
+
+            $vehicleId = $vehicle['id'];
+            $pricePerDay = (float)$vehicle['price_per_day'];
+
+            // Calculate fare based on distance × rate per km
+            if ($distanceKm !== null && $distanceKm > 0) {
                 $subtotal = round($distanceKm * $ratePerKm, 2);
+            } elseif ($frontendRideFare !== null && $frontendRideFare > 0) {
+                $subtotal = $frontendRideFare;
             } else {
                 $subtotal = $pricePerDay; // fallback to daily rate
             }
+            $totalDays = 1; // single trip
+            $returnDate = null;
+
         } else {
+            // ==== WITH-DRIVER: Use pre-selected vehicle with assigned driver ====
+            $stmt = $pdo->prepare("SELECT id, owner_id, price_per_day, price_per_week, price_per_month, category, status, brand, model FROM vehicles WHERE id = ?");
+            $stmt->execute([$vehicleId]);
+            $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$vehicle) {
+                echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
+                exit;
+            }
+
+            if ($vehicle['status'] !== 'available') {
+                echo json_encode(['success' => false, 'message' => 'This vehicle is not currently available.']);
+                exit;
+            }
+
+            if ($vehicle['owner_id'] === $renterId) {
+                echo json_encode(['success' => false, 'message' => 'You cannot book your own vehicle.']);
+                exit;
+            }
+
+            $pricePerDay = (float)$vehicle['price_per_day'];
+
             $d1 = new DateTime($pickupDate);
             $d2 = new DateTime($returnDate);
             $diff = $d1->diff($d2);
@@ -243,7 +292,9 @@ if ($action === 'create') {
             $promo = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($promo) {
-                if ($totalDays >= (int)$promo['min_booking_days']) {
+                $minDays = (int)$promo['min_booking_days'];
+                // For minicab (single trip), always treat as 1 day
+                if ($totalDays >= $minDays || $minDays <= 1) {
                     if ($promo['discount_type'] === 'percentage') {
                         $discountAmount = round($subtotal * (float)$promo['discount_value'] / 100, 2);
                     } else {
@@ -259,15 +310,20 @@ if ($action === 'create') {
 
         $totalAmount = max(0, $subtotal - $discountAmount);
 
+        // Ensure service_type column exists for minicab bookings
+        try {
+            $pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_type VARCHAR(50) DEFAULT 'local'");
+        } catch (PDOException $ignore) {}
+
         // Create booking
         $stmt = $pdo->prepare("
             INSERT INTO bookings (renter_id, vehicle_id, owner_id, booking_type, pickup_date, return_date, 
-                pickup_location, return_location, airport_name, total_days, price_per_day, subtotal, 
-                discount_amount, total_amount, promo_code, special_requests, driver_requested, distance_km, transfer_cost, status)
+                pickup_location, return_location, total_days, price_per_day, subtotal, 
+                discount_amount, total_amount, promo_code, special_requests, driver_requested, distance_km, transfer_cost, service_type, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
             RETURNING id, created_at
         ");
-        $driverRequested = ($bookingType === 'with-driver') ? 't' : 'f';
+        $driverRequested = 't'; // all booking types include a driver
         $stmt->execute([
             $renterId,
             $vehicleId,
@@ -277,7 +333,6 @@ if ($action === 'create') {
             $returnDate,
             $pickupLocation,
             $returnLocation,
-            $airportName,
             $totalDays,
             $pricePerDay,
             $subtotal,
@@ -287,7 +342,8 @@ if ($action === 'create') {
             $specialRequests,
             $driverRequested,
             $distanceKm,
-            ($bookingType === 'airport' && $frontendTransferCost !== null) ? $frontendTransferCost : null
+            ($bookingType === 'minicab') ? $subtotal : null,
+            ($bookingType === 'minicab') ? $serviceType : null
         ]);
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -303,22 +359,20 @@ if ($action === 'create') {
         ]);
 
         // --- Notifications ---
-        // Get vehicle name for notification
-        $vStmt = $pdo->prepare("SELECT brand, model FROM vehicles WHERE id = ?");
-        $vStmt->execute([$vehicleId]);
-        $vInfo = $vStmt->fetch(PDO::FETCH_ASSOC);
-        $vehicleName = ($vInfo ? $vInfo['brand'] . ' ' . $vInfo['model'] : 'Vehicle');
+        $vehicleName = ($vehicle ? $vehicle['brand'] . ' ' . $vehicle['model'] : 'Vehicle');
 
         // Notify renter: booking created
+        $tierLabel = $rideTier ? ' (' . ucfirst($rideTier) . ' tier)' : '';
+        $serviceLabel = ($bookingType === 'minicab' && $serviceType) ? ' — ' . str_replace('-', ' ', ucfirst($serviceType)) : '';
         createNotification($pdo, $renterId, 'booking',
             '📋 Booking Created',
-            "Your booking for {$vehicleName} has been submitted. Pickup: {$pickupDate}. Total: \${$totalAmount}. Waiting for owner confirmation."
+            "Your {$bookingType} booking for {$vehicleName}{$tierLabel}{$serviceLabel} has been submitted. Pickup: {$pickupDate}. Total: \${$totalAmount}. Waiting for owner confirmation."
         );
 
         // Notify owner: new booking request
         createNotification($pdo, $vehicle['owner_id'], 'booking',
             '🆕 New Booking Request',
-            "You have a new booking request for your {$vehicleName}. Pickup: {$pickupDate}. Amount: \${$totalAmount}."
+            "You have a new {$bookingType} booking request for your {$vehicleName}. Pickup: {$pickupDate}. Amount: \${$totalAmount}."
         );
 
         echo json_encode([
@@ -332,7 +386,10 @@ if ($action === 'create') {
                 'total' => $totalAmount,
                 'promo_applied' => $appliedPromo,
                 'payment_method' => $paymentMethod,
-                'status' => 'pending'
+                'status' => 'pending',
+                'vehicle_name' => $vehicleName,
+                'ride_tier' => $rideTier,
+                'service_type' => ($bookingType === 'minicab') ? $serviceType : null
             ]
         ]);
     } catch (PDOException $e) {
@@ -356,20 +413,23 @@ if ($action === 'my-orders') {
                    b.discount_amount, b.total_amount, b.promo_code, b.status,
                    b.special_requests, b.driver_requested, b.created_at,
                    b.confirmed_at, b.completed_at, b.cancelled_at,
-                   b.distance_km, b.transfer_cost,
+                   b.distance_km, b.transfer_cost, b.service_type,
                    v.brand, v.model, v.year, v.category,
                    u_renter.full_name AS renter_name,
                    u_renter.email AS renter_email,
                    p.method AS payment_method,
-                   p.status AS payment_status
+                   p.status AS payment_status,
+                   rev.id AS review_id,
+                   rev.rating AS review_rating
             FROM bookings b
             JOIN vehicles v ON b.vehicle_id = v.id
             LEFT JOIN users u_renter ON b.renter_id = u_renter.id
             LEFT JOIN payments p ON p.booking_id = b.id
+            LEFT JOIN reviews rev ON rev.booking_id = b.id AND rev.user_id = ?
             WHERE b.renter_id = ? OR b.owner_id = ?
             ORDER BY b.created_at DESC
         ");
-        $stmt->execute([$userId, $userId]);
+        $stmt->execute([$userId, $userId, $userId]);
         $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Get vehicle thumbnails & set role flags
@@ -380,10 +440,15 @@ if ($action === 'my-orders') {
 
             // Get vehicle thumbnail
             try {
-                $imgStmt = $pdo->prepare("SELECT image_data, mime_type FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, created_at ASC LIMIT 1");
+                $imgStmt = $pdo->prepare("SELECT storage_path, image_data, mime_type FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, created_at ASC LIMIT 1");
                 $imgStmt->execute([$order['vehicle_id']]);
                 $img = $imgStmt->fetch(PDO::FETCH_ASSOC);
-                if ($img && $img['image_data']) {
+                if ($img && !empty($img['storage_path'])) {
+                    // Use Supabase storage URL
+                    require_once __DIR__ . '/supabase-storage.php';
+                    $storageHelper = new SupabaseStorage();
+                    $order['thumbnail_url'] = $storageHelper->getPublicUrl($img['storage_path']);
+                } elseif ($img && $img['image_data']) {
                     $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
                     $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
                 } else {
@@ -546,4 +611,122 @@ if ($action === 'update-status') {
     exit;
 }
 
+// ==========================================================
+// SUBMIT REVIEW (Renter only, for completed orders)
+// ==========================================================
+if ($action === 'submit-review') {
+    requireAuth();
+    $userId = $_SESSION['user_id'];
+    $bookingId = trim($input['booking_id'] ?? '');
+    $rating = (int)($input['rating'] ?? 0);
+    $content = trim($input['content'] ?? '');
+
+    if (empty($bookingId) || $rating < 1 || $rating > 5 || empty($content)) {
+        echo json_encode(['success' => false, 'message' => 'Booking ID, rating (1-5), and review content are required.']);
+        exit;
+    }
+
+    try {
+        // Verify booking exists, belongs to renter, and is completed
+        $stmt = $pdo->prepare("SELECT id, renter_id, vehicle_id, status FROM bookings WHERE id = ?");
+        $stmt->execute([$bookingId]);
+        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$booking) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found.']);
+            exit;
+        }
+        if ($booking['renter_id'] !== $userId) {
+            echo json_encode(['success' => false, 'message' => 'Only the renter can review this booking.']);
+            exit;
+        }
+        if ($booking['status'] !== 'completed') {
+            echo json_encode(['success' => false, 'message' => 'You can only review completed orders.']);
+            exit;
+        }
+
+        // Check if already reviewed
+        $checkStmt = $pdo->prepare("SELECT id FROM reviews WHERE booking_id = ? AND user_id = ?");
+        $checkStmt->execute([$bookingId, $userId]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['success' => false, 'message' => 'You have already reviewed this booking.']);
+            exit;
+        }
+
+        // Insert review
+        $insertStmt = $pdo->prepare("
+            INSERT INTO reviews (user_id, vehicle_id, booking_id, rating, content, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+        ");
+        $insertStmt->execute([$userId, $booking['vehicle_id'], $bookingId, $rating, $content]);
+
+        // Update vehicle average rating
+        $avgStmt = $pdo->prepare("SELECT ROUND(AVG(rating)::numeric, 1) as avg_rating, COUNT(*) as total FROM reviews WHERE vehicle_id = ?");
+        $avgStmt->execute([$booking['vehicle_id']]);
+        $avgData = $avgStmt->fetch(PDO::FETCH_ASSOC);
+        if ($avgData) {
+            $pdo->prepare("UPDATE vehicles SET avg_rating = ?, total_reviews = ? WHERE id = ?")
+                ->execute([$avgData['avg_rating'], $avgData['total'], $booking['vehicle_id']]);
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Review submitted successfully! Thank you for your feedback.']);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// GET REVIEWS (public, for reviews page & homepage)
+// ==========================================================
+if ($action === 'get-reviews') {
+    $limit = (int)($_GET['limit'] ?? $input['limit'] ?? 50);
+    $vehicleId = $_GET['vehicle_id'] ?? $input['vehicle_id'] ?? '';
+
+    try {
+        $sql = "
+            SELECT r.id, r.rating, r.content, r.created_at,
+                   u.full_name, u.avatar_url,
+                   v.brand, v.model, v.year,
+                   b.pickup_location, b.return_location, b.booking_type
+            FROM reviews r
+            JOIN users u ON r.user_id = u.id
+            JOIN vehicles v ON r.vehicle_id = v.id
+            LEFT JOIN bookings b ON r.booking_id = b.id
+        ";
+        $params = [];
+
+        if (!empty($vehicleId)) {
+            $sql .= " WHERE r.vehicle_id = ?";
+            $params[] = $vehicleId;
+        }
+
+        $sql .= " ORDER BY r.created_at DESC LIMIT " . max(1, min($limit, 100));
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Compute stats
+        $statsStmt = $pdo->prepare("
+            SELECT COUNT(*) as total, 
+                   ROUND(AVG(rating)::numeric, 1) as avg_rating,
+                   COUNT(*) FILTER (WHERE rating = 5) as stars_5,
+                   COUNT(*) FILTER (WHERE rating = 4) as stars_4,
+                   COUNT(*) FILTER (WHERE rating = 3) as stars_3,
+                   COUNT(*) FILTER (WHERE rating = 2) as stars_2,
+                   COUNT(*) FILTER (WHERE rating = 1) as stars_1
+            FROM reviews" . (!empty($vehicleId) ? " WHERE vehicle_id = ?" : "")
+        );
+        $statsStmt->execute(!empty($vehicleId) ? [$vehicleId] : []);
+        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+
+        echo json_encode(['success' => true, 'reviews' => $reviews, 'stats' => $stats]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 echo json_encode(['success' => false, 'message' => 'Unknown action: ' . $action]);
+

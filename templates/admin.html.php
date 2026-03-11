@@ -227,16 +227,66 @@
             padding: 4px 10px; font-size: 0.75rem; border-radius: var(--radius);
             border: none; cursor: pointer; font-weight: 600; transition: var(--transition);
         }
+        .btn-xs:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-xs.danger { background: #fef2f2; color: #dc2626; }
-        .btn-xs.danger:hover { background: #dc2626; color: white; }
+        .btn-xs.danger:hover:not(:disabled) { background: #dc2626; color: white; }
         .btn-xs.edit { background: #eff6ff; color: #2563eb; }
-        .btn-xs.edit:hover { background: #2563eb; color: white; }
+        .btn-xs.edit:hover:not(:disabled) { background: #2563eb; color: white; }
         .btn-xs.toggle { background: #f0fdf4; color: #16a34a; }
-        .btn-xs.toggle:hover { background: #16a34a; color: white; }
+        .btn-xs.toggle:hover:not(:disabled) { background: #16a34a; color: white; }
+
+        /* Admin inline notification banner */
+        .admin-alert {
+            display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+            border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.875rem;
+            font-weight: 500; animation: adminAlertIn 0.35s ease;
+        }
+        .admin-alert.success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .admin-alert.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .admin-alert.warning { background: #fefce8; color: #854d0e; border: 1px solid #fef08a; }
+        .admin-alert-close { background: none; border: none; cursor: pointer; font-size: 1.1rem; margin-left: auto; opacity: 0.6; }
+        .admin-alert-close:hover { opacity: 1; }
+        @keyframes adminAlertIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
+
+    <!-- Admin alert container (always visible, inside admin page) -->
+    <div id="adminAlertContainer" style="position:fixed;top:80px;right:24px;z-index:10002;display:flex;flex-direction:column;gap:10px;max-width:420px;"></div>
 
     <script>
         const ADMIN_API = '/api/admin.php';
+
+        // ===== ADMIN NOTIFICATION (self-contained, doesn't depend on footer showToast) =====
+        function adminNotify(message, type = 'success') {
+            const container = document.getElementById('adminAlertContainer');
+            const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+            const colors = {
+                success: 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;',
+                error: 'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;',
+                warning: 'background:#fefce8;color:#854d0e;border:1px solid #fef08a;',
+                info: 'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;'
+            };
+
+            const alert = document.createElement('div');
+            alert.style.cssText = (colors[type] || colors.info) + 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:12px;font-size:0.875rem;font-weight:600;box-shadow:0 10px 25px rgba(0,0,0,0.15);animation:adminAlertIn 0.35s ease;min-width:300px;';
+            alert.innerHTML = `<span style="font-size:1.2rem;">${icons[type] || 'ℹ️'}</span><span style="flex:1;">${message}</span><button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:1.1rem;opacity:0.6;">✕</button>`;
+
+            container.appendChild(alert);
+
+            // Auto-remove after 4 seconds
+            setTimeout(() => {
+                if (alert.parentElement) {
+                    alert.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                    alert.style.opacity = '0';
+                    alert.style.transform = 'translateX(20px)';
+                    setTimeout(() => alert.remove(), 300);
+                }
+            }, 4000);
+
+            // Also call showToast if available (as backup)
+            if (typeof showToast === 'function') {
+                try { showToast(message, type); } catch(e) {}
+            }
+        }
 
         // ===== TAB SWITCHING =====
         function switchTab(tab) {
@@ -261,7 +311,7 @@
         async function uploadHeroSlide() {
             const fileInput = document.getElementById('heroImageFile');
             if (!fileInput.files[0]) {
-                showToast('Please select an image.', 'error');
+                adminNotify('Please select an image.', 'error');
                 return;
             }
 
@@ -275,7 +325,7 @@
                 const res = await fetch(ADMIN_API + '?action=hero-slide-upload', { method: 'POST', body: fd });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('Slide uploaded!', 'success');
+                    adminNotify('Slide uploaded!', 'success');
                     document.getElementById('heroUploadForm').style.display = 'none';
                     fileInput.value = '';
                     document.getElementById('heroTitle').value = '';
@@ -283,10 +333,10 @@
                     document.getElementById('heroSortOrder').value = '0';
                     loadHeroSlides();
                 } else {
-                    showToast(data.message, 'error');
+                    adminNotify(data.message, 'error');
                 }
             } catch (e) {
-                showToast('Upload failed.', 'error');
+                adminNotify('Upload failed.', 'error');
             }
         }
 
@@ -343,9 +393,9 @@
                     body: JSON.stringify({ action: 'hero-slide-update', slide_id: id, is_active: active })
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadHeroSlides();
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         async function deleteSlide(id) {
@@ -357,9 +407,9 @@
                     body: JSON.stringify({ action: 'hero-slide-delete', slide_id: id })
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadHeroSlides();
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         // ===== PROMOTIONS =====
@@ -375,9 +425,9 @@
                 document.getElementById('promoDescription').value = promo.description || '';
                 document.getElementById('promoDiscountType').value = promo.discount_type || 'percentage';
                 document.getElementById('promoDiscountValue').value = promo.discount_value || '';
-                document.getElementById('promoStartDate').value = promo.start_date ? promo.start_date.substring(0, 10) : '';
-                document.getElementById('promoEndDate').value = promo.end_date ? promo.end_date.substring(0, 10) : '';
-                document.getElementById('promoUsageLimit').value = promo.usage_limit || '';
+                document.getElementById('promoStartDate').value = promo.starts_at ? promo.starts_at.substring(0, 10) : '';
+                document.getElementById('promoEndDate').value = promo.expires_at ? promo.expires_at.substring(0, 10) : '';
+                document.getElementById('promoUsageLimit').value = promo.max_uses || '';
             } else {
                 document.getElementById('promoFormTitle').textContent = 'Add Promotion';
                 document.getElementById('promoSaveBtn').textContent = 'Add';
@@ -403,7 +453,7 @@
             const discountValue = document.getElementById('promoDiscountValue').value;
 
             if (!code || !description || !discountValue) {
-                showToast('Code, description and discount value are required.', 'error');
+                adminNotify('Code, description and discount value are required.', 'error');
                 return;
             }
 
@@ -425,9 +475,9 @@
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) { hidePromoForm(); loadPromotions(); }
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         async function loadPromotions() {
@@ -457,9 +507,9 @@
                 </tr></thead>
                 <tbody>${promos.map(p => {
                     const discount = p.discount_type === 'percentage' ? p.discount_value + '%' : '$' + p.discount_value;
-                    const start = p.start_date ? p.start_date.substring(0, 10) : '—';
-                    const end = p.end_date ? p.end_date.substring(0, 10) : '—';
-                    const usage = (p.usage_count || 0) + (p.usage_limit ? '/' + p.usage_limit : '');
+                    const start = p.starts_at ? p.starts_at.substring(0, 10) : '—';
+                    const end = p.expires_at ? p.expires_at.substring(0, 10) : '—';
+                    const usage = (p.total_used || 0) + (p.max_uses ? '/' + p.max_uses : '');
                     return `<tr>
                         <td><strong>${p.code}</strong></td>
                         <td>${p.description}</td>
@@ -484,9 +534,9 @@
                     body: JSON.stringify({ action: 'promotion-delete', promotion_id: id })
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadPromotions();
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         // ===== VEHICLES =====
@@ -581,9 +631,9 @@
                     body: JSON.stringify({ action: 'admin-delete-vehicle', vehicle_id: id })
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadAdminVehicles();
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         // ===== BOOKINGS =====
@@ -674,9 +724,9 @@
                     body: JSON.stringify({ action: 'admin-delete-booking', booking_id: id })
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadAdminBookings();
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         // ===== USERS =====
@@ -757,8 +807,8 @@
                         <td>
                             <div style="display:flex;gap:4px;">
                                 <button class="btn-xs toggle" onclick="adminToggleUser('${u.id}', ${!u.is_active})">${u.is_active ? 'Disable' : 'Enable'}</button>
-                                <button class="btn-xs edit" onclick="adminChangeRole('${u.id}', '${u.role}', '${(u.full_name || '').replace(/'/g, "\\'")}')"">Role</button>
-                                <button class="btn-xs danger" onclick="adminDeleteUser('${u.id}', '${(u.full_name || '').replace(/'/g, "\\'")}')"">Del</button>
+                                <button class="btn-xs edit" onclick="adminChangeRole('${u.id}', '${u.role}', '${(u.full_name || '').replace(/'/g, "\\'")}')">Role</button>
+                                <button class="btn-xs danger" onclick="adminDeleteUser('${u.id}', '${(u.full_name || '').replace(/'/g, "\\'")}')">Del</button>
                             </div>
                         </td>
                     </tr>`;
@@ -773,16 +823,16 @@
                     body: JSON.stringify({ action: 'admin-update-user', user_id: id, is_active: active })
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadAdminUsers();
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         function adminChangeRole(id, currentRole, name) {
             const newRole = prompt(`Change role for "${name}":\nCurrent: ${currentRole}\n\nEnter new role (renter, owner, admin):`, currentRole);
             if (!newRole || newRole === currentRole) return;
             if (!['renter', 'owner', 'admin'].includes(newRole)) {
-                showToast('Invalid role. Use: renter, owner, or admin.', 'error');
+                adminNotify('Invalid role. Use: renter, owner, or admin.', 'error');
                 return;
             }
 
@@ -793,10 +843,10 @@
             })
             .then(r => r.json())
             .then(data => {
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadAdminUsers();
             })
-            .catch(() => showToast('Failed.', 'error'));
+            .catch(() => adminNotify('Failed.', 'error'));
         }
 
         async function adminDeleteUser(id, name) {
@@ -808,9 +858,9 @@
                     body: JSON.stringify({ action: 'admin-delete-user', user_id: id })
                 });
                 const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'error');
+                adminNotify(data.message, data.success ? 'success' : 'error');
                 if (data.success) loadAdminUsers();
-            } catch (e) { showToast('Failed.', 'error'); }
+            } catch (e) { adminNotify('Failed.', 'error'); }
         }
 
         // ===== INIT =====

@@ -1,18 +1,18 @@
 <?php
 /**
  * Vehicles API - DriveNow
- * Handles vehicle CRUD operations with BLOB image storage
+ * Handles vehicle CRUD operations with Supabase Storage for images
  * - Owners can add/edit/delete their vehicles
  * - Anyone can view/list vehicles
- * - Images stored as BYTEA in vehicle_images table
+ * - Images stored in Supabase Storage bucket "DriveNow" under vehicles/ folder
  */
 
-// Check if this is an image request BEFORE setting JSON content-type
+// Check if this is an image request — redirect to Supabase Storage public URL
 $action = $_GET['action'] ?? '';
 if ($action === 'get-image') {
-    // Handle image serving without JSON headers
     session_start();
     require_once __DIR__ . '/../Database/db.php';
+    require_once __DIR__ . '/supabase-storage.php';
 
     $imageId = $_GET['id'] ?? '';
     if (empty($imageId)) {
@@ -22,32 +22,22 @@ if ($action === 'get-image') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT image_data, mime_type, file_name FROM vehicle_images WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT storage_path, mime_type, file_name FROM vehicle_images WHERE id = ?");
         $stmt->execute([$imageId]);
         $img = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$img) {
+        if (!$img || empty($img['storage_path'])) {
             http_response_code(404);
             echo 'Image not found';
             exit;
         }
 
-        // Handle PostgreSQL bytea format
-        $imageData = $img['image_data'];
-        if (is_resource($imageData)) {
-            $imageData = stream_get_contents($imageData);
-        }
-        // If PDO returns bytea as hex-escaped string (e.g. \x89504e47...)
-        if (is_string($imageData) && substr($imageData, 0, 2) === '\\x') {
-            $imageData = hex2bin(substr($imageData, 2));
-        }
-
-        header('Content-Type: ' . $img['mime_type']);
-        header('Content-Length: ' . strlen($imageData));
-        header('Cache-Control: public, max-age=86400'); // cache 24h
-        header('Content-Disposition: inline; filename="' . ($img['file_name'] ?? 'image') . '"');
-        echo $imageData;
-    } catch (PDOException $e) {
+        // Redirect to Supabase Storage public URL
+        $storage = new SupabaseStorage();
+        $publicUrl = $storage->getPublicUrl($img['storage_path']);
+        header('Location: ' . $publicUrl, true, 302);
+        header('Cache-Control: public, max-age=86400');
+    } catch (Exception $e) {
         http_response_code(500);
         echo 'Server error';
     }
@@ -65,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 session_start();
 require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/supabase-storage.php';
 
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
@@ -91,12 +82,19 @@ function requireOwner() {
     }
 }
 
-// Helper: get image URLs for a vehicle (returns array of API endpoint URLs)
+// Helper: get image URLs for a vehicle (returns Supabase Storage public URLs)
 function getVehicleImageUrls($pdo, $vehicleId) {
-    $stmt = $pdo->prepare("SELECT id FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, sort_order ASC, created_at ASC");
+    $storage = new SupabaseStorage();
+    $stmt = $pdo->prepare("SELECT id, storage_path FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, sort_order ASC, created_at ASC");
     $stmt->execute([$vehicleId]);
-    $imageIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    return array_map(fn($id) => '/api/vehicles.php?action=get-image&id=' . $id, $imageIds);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return array_map(function($row) use ($storage) {
+        if (!empty($row['storage_path'])) {
+            return $storage->getPublicUrl($row['storage_path']);
+        }
+        // Fallback for legacy BYTEA images not yet migrated
+        return '/api/vehicles.php?action=get-image&id=' . $row['id'];
+    }, $rows);
 }
 
 // Helper: get image IDs for a vehicle
@@ -201,7 +199,7 @@ if ($action === 'list') {
     $offset       = max((int)($_GET['offset'] ?? $input['offset'] ?? 0), 0);
 
     try {
-        $where = ["v.status = 'available'"];
+        $where = ["v.status IN ('available', 'rented')"];
         $params = [];
 
         if ($category) {
@@ -614,6 +612,15 @@ if ($action === 'delete') {
             exit;
         }
 
+        // Delete images from Supabase Storage first
+        $imgStmt = $pdo->prepare("SELECT storage_path FROM vehicle_images WHERE vehicle_id = ? AND storage_path IS NOT NULL");
+        $imgStmt->execute([$vehicleId]);
+        $storagePaths = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
+        if (!empty($storagePaths)) {
+            $storage = new SupabaseStorage();
+            $storage->deleteMultiple($storagePaths);
+        }
+
         // vehicle_images will be deleted via ON DELETE CASCADE
         $stmt = $pdo->prepare("DELETE FROM vehicles WHERE id = ? AND owner_id = ?");
         $stmt->execute([$vehicleId, $ownerId]);
@@ -631,7 +638,7 @@ if ($action === 'delete') {
 }
 
 // ==========================================================
-// UPLOAD IMAGE (owner only - stores as BYTEA in DB)
+// UPLOAD IMAGE (owner only - stores in Supabase Storage)
 // ==========================================================
 if ($action === 'upload-image') {
     requireOwner();
@@ -655,45 +662,50 @@ if ($action === 'upload-image') {
         exit;
     }
 
-    // Read binary data from the uploaded file
     $imageData = file_get_contents($file['tmp_name']);
     if ($imageData === false) {
         echo json_encode(['success' => false, 'message' => 'Failed to read uploaded file.']);
         exit;
     }
 
-    $vehicleId = $_POST['vehicle_id'] ?? null; // optional — can link later during add/update
+    $vehicleId = $_POST['vehicle_id'] ?? null;
 
     try {
+        $storage = new SupabaseStorage();
+        $uniqueName = SupabaseStorage::uniqueName($file['name']);
+        $folder = $vehicleId ? 'vehicles/' . $vehicleId : 'vehicles/unlinked';
+        $storagePath = $folder . '/' . $uniqueName;
+
+        // Upload to Supabase Storage
+        $uploadResult = $storage->upload($storagePath, $imageData, $file['type']);
+        if (!$uploadResult['success']) {
+            echo json_encode(['success' => false, 'message' => 'Storage upload failed: ' . ($uploadResult['message'] ?? 'Unknown error')]);
+            exit;
+        }
+
+        // Save metadata to DB (no BYTEA data)
         $stmt = $pdo->prepare("
-            INSERT INTO vehicle_images (vehicle_id, image_data, mime_type, file_name, file_size)
-            VALUES (:vid, :imgdata, :mime, :fname, :fsize)
+            INSERT INTO vehicle_images (vehicle_id, storage_path, mime_type, file_name, file_size)
+            VALUES (:vid, :spath, :mime, :fname, :fsize)
             RETURNING id
         ");
-        // Use PDO::PARAM_LOB for binary data to avoid UTF-8 encoding error
         $vid = $vehicleId ?: null;
-        $mimeType = $file['type'];
-        $fileName = $file['name'];
-        $fileSize = $file['size'];
-
         $stmt->bindParam(':vid', $vid);
-        $stmt->bindParam(':imgdata', $imageData, PDO::PARAM_LOB);
-        $stmt->bindParam(':mime', $mimeType);
-        $stmt->bindParam(':fname', $fileName);
-        $stmt->bindParam(':fsize', $fileSize, PDO::PARAM_INT);
+        $stmt->bindParam(':spath', $storagePath);
+        $stmt->bindParam(':mime', $file['type']);
+        $stmt->bindParam(':fname', $file['name']);
+        $stmt->bindParam(':fsize', $file['size'], PDO::PARAM_INT);
         $stmt->execute();
         $imageId = $stmt->fetchColumn();
-
-        $imageUrl = '/api/vehicles.php?action=get-image&id=' . $imageId;
 
         echo json_encode([
             'success' => true,
             'message' => 'Image uploaded successfully!',
             'image_id' => $imageId,
-            'url' => $imageUrl
+            'url' => $uploadResult['public_url']
         ]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -711,22 +723,30 @@ if ($action === 'delete-image') {
     }
 
     try {
-        // Verify the image belongs to a vehicle owned by this user
+        // Verify the image belongs to a vehicle owned by this user & get storage_path
         $stmt = $pdo->prepare("
-            SELECT vi.id FROM vehicle_images vi
+            SELECT vi.id, vi.storage_path FROM vehicle_images vi
             LEFT JOIN vehicles v ON vi.vehicle_id = v.id
             WHERE vi.id = ? AND (v.owner_id = ? OR vi.vehicle_id IS NULL)
         ");
         $stmt->execute([$imageId, $_SESSION['user_id']]);
-        if (!$stmt->fetch()) {
+        $img = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$img) {
             echo json_encode(['success' => false, 'message' => 'Image not found or access denied.']);
             exit;
         }
 
+        // Delete from Supabase Storage
+        if (!empty($img['storage_path'])) {
+            $storage = new SupabaseStorage();
+            $storage->delete($img['storage_path']);
+        }
+
+        // Delete DB record
         $pdo->prepare("DELETE FROM vehicle_images WHERE id = ?")->execute([$imageId]);
         echo json_encode(['success' => true, 'message' => 'Image deleted.']);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }

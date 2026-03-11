@@ -9,10 +9,11 @@
                     Find Your Perfect <span>Drive</span> Today
                 </h1>
                 <p class="hero-description">
-                    Book premium cars from trusted owners worldwide. Self-drive or with driver, online or by phone — your journey starts here.
+                    Book minicabs or hire cars with professional drivers. Local journeys, airport transfers, hotel pickups — your ride starts here.
                 </p>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
                     <a href="cars.php" class="btn btn-primary btn-lg">🔍 Browse Cars</a>
+                    <a href="booking.php?mode=minicab" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(4px);">🚕 Book a Minicab</a>
                     <a href="#how-it-works" class="btn btn-outline btn-lg" style="border-color:rgba(255,255,255,0.3);color:white;">Learn More →</a>
                 </div>
                 <div class="hero-stats">
@@ -101,7 +102,7 @@
                 <a href="cars.php" class="section-link">View All Cars →</a>
             </div>
 
-            <div class="car-grid" id="carGrid">
+            <div class="car-grid" id="featuredCarGrid">
                 <!-- Cars loaded dynamically from API -->
                 <div style="grid-column:1/-1;text-align:center;padding:40px 20px;">
                     <div style="width:36px;height:36px;border:3px solid var(--gray-200);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
@@ -241,7 +242,8 @@
                 </div>
                 <a href="reviews.php" class="section-link">All Reviews →</a>
             </div>
-            <div class="review-grid">
+            <div class="review-grid" id="homeReviewGrid">
+                <!-- Fallback static reviews (replaced dynamically if DB reviews exist) -->
                 <div class="review-card">
                     <div class="review-stars">★★★★★</div>
                     <p class="review-text">"Best car rental experience ever! The booking process was seamless, and the car was in perfect condition."</p>
@@ -439,10 +441,11 @@
         let heroCurrentIndex = 0;
         let heroTimer = null;
 
-        // Load featured cars AND hero slides on page load
+        // Load featured cars AND hero slides AND reviews on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadFeaturedCars();
             loadHeroSlides();
+            loadHomeReviews();
         });
 
         // ===== HERO SLIDESHOW =====
@@ -554,7 +557,7 @@
         }
 
         function renderFeaturedCars(cars) {
-            const grid = document.getElementById('carGrid');
+            const grid = document.getElementById('featuredCarGrid');
             grid.innerHTML = cars.map(car => {
                 const images = car.images || [];
                 const imageHTML = images.length > 0
@@ -595,7 +598,7 @@
         }
 
         function renderEmptyFeatured() {
-            const grid = document.getElementById('carGrid');
+            const grid = document.getElementById('featuredCarGrid');
             grid.innerHTML = `
                 <div style="grid-column:1/-1;text-align:center;padding:60px 20px;">
                     <div style="font-size:3rem;margin-bottom:12px;">🚗</div>
@@ -776,6 +779,52 @@
         function applyPromo(code) {
             showToast('Promo code "' + code + '" copied! Apply it during booking.', 'success');
             window.location.href = 'booking.php?promo=' + encodeURIComponent(code);
+        }
+
+        // ===== HOME REVIEWS (load from DB, fallback to static) =====
+        async function loadHomeReviews() {
+            try {
+                const res = await fetch('/api/bookings.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get-reviews', limit: 3 })
+                });
+                const data = await res.json();
+                if (data.success && data.reviews && data.reviews.length > 0) {
+                    const grid = document.getElementById('homeReviewGrid');
+                    grid.innerHTML = data.reviews.map(r => {
+                        const name = r.full_name || 'Anonymous';
+                        const initials = name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                        const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+                        const trip = (r.brand || '') + ' ' + (r.model || '');
+                        const avatarHtml = r.avatar_url
+                            ? '<img src="' + r.avatar_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="' + name + '">'
+                            : initials;
+                        const div = document.createElement('div');
+                        div.textContent = r.content || '';
+                        const safeContent = div.innerHTML;
+                        div.textContent = name;
+                        const safeName = div.innerHTML;
+                        div.textContent = trip;
+                        const safeTrip = div.innerHTML;
+
+                        return `<div class="review-card">
+                            <div class="review-stars">${stars}</div>
+                            <p class="review-text">"${safeContent}"</p>
+                            <div class="review-author">
+                                <div class="review-avatar">${avatarHtml}</div>
+                                <div class="review-author-info">
+                                    <div class="review-author-name">${safeName}</div>
+                                    <div class="review-author-trip">${safeTrip}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+                // If no reviews from DB, static fallback remains
+            } catch (e) {
+                // Static fallback stays visible
+            }
         }
     </script>
 

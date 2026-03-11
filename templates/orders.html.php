@@ -181,9 +181,9 @@
                     cancelled: '❌ Cancelled'
                 };
                 const typeLabels = {
-                    'self-drive': 'Self-Drive',
+                    'minicab': 'Minicab',
                     'with-driver': 'With Driver',
-                    'airport': 'Airport Transfer'
+                    'self-drive': 'Self-Drive'
                 };
                 const pmLabels = {
                     cash: '💵 Cash',
@@ -219,6 +219,15 @@
                     actionsHtml = '<button class="btn btn-danger btn-sm" onclick="updateOrderStatus(\'' + order.id + '\', \'cancelled\')">❌ Cancel</button>';
                 }
 
+                // Renter: can review if completed and not yet reviewed
+                if (order.is_renter && order.status === 'completed' && !order.review_id) {
+                    actionsHtml += '<button class="btn btn-primary btn-sm" onclick="openReviewModal(\'' + order.id + '\', \'' + (order.brand + ' ' + order.model).replace(/'/g, "\\'") + '\')">⭐ Rate & Review</button>';
+                }
+                // Show "Reviewed" badge if already reviewed
+                if (order.is_renter && order.status === 'completed' && order.review_id) {
+                    actionsHtml += '<span style="display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:999px;font-size:0.78rem;font-weight:700;background:#dcfce7;color:#166534;">⭐ Reviewed (' + order.review_rating + '/5)</span>';
+                }
+
                 // Renter info for owner view
                 let renterInfoHtml = '';
                 if (order.is_owner && order.renter_name) {
@@ -231,7 +240,7 @@
                             '<div class="order-car-thumb">' + thumbHtml + '</div>' +
                             '<div class="order-car-info">' +
                                 '<h4>' + carName + '</h4>' +
-                                '<p>' + (typeLabels[order.booking_type] || order.booking_type) + ' · Order #' + order.id.substring(0, 8) + '</p>' +
+                                '<p>' + (typeLabels[order.booking_type] || order.booking_type) + (order.service_type ? ' · ' + order.service_type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '') + ' · Order #' + order.id.substring(0, 8) + '</p>' +
                             '</div>' +
                         '</div>' +
                         '<div class="order-status-badge status-' + order.status + '">' + (statusLabels[order.status] || order.status) + '</div>' +
@@ -241,7 +250,7 @@
                         '<div class="order-detail-item"><div class="order-detail-label">Pick-up Date</div><div class="order-detail-value">' + formatDate(order.pickup_date) + '</div></div>' +
                         (order.return_date ? '<div class="order-detail-item"><div class="order-detail-label">Return Date</div><div class="order-detail-value">' + formatDate(order.return_date) + '</div></div>' : '') +
                         '<div class="order-detail-item"><div class="order-detail-label">Pick-up Location</div><div class="order-detail-value">' + truncate(order.pickup_location || '-', 40) + '</div></div>' +
-                        (order.return_location && order.booking_type !== 'self-drive' ? '<div class="order-detail-item"><div class="order-detail-label">' + (order.booking_type === 'airport' ? 'Drop-off' : 'Destination') + '</div><div class="order-detail-value">' + truncate(order.return_location || '-', 40) + '</div></div>' : '') +
+                        (order.return_location && order.booking_type === 'minicab' ? '<div class="order-detail-item"><div class="order-detail-label">Destination</div><div class="order-detail-value">' + truncate(order.return_location || '-', 40) + '</div></div>' : '') +
                         (order.distance_km ? '<div class="order-detail-item"><div class="order-detail-label">📏 Distance</div><div class="order-detail-value">' + parseFloat(order.distance_km).toFixed(1) + ' km</div></div>' : '') +
                         '<div class="order-detail-item"><div class="order-detail-label">Payment</div><div class="order-detail-value">' + (pmLabels[order.payment_method] || order.payment_method || 'N/A') + '</div></div>' +
                         '<div class="order-detail-item"><div class="order-detail-label">Booked On</div><div class="order-detail-value">' + formatDate(order.created_at) + '</div></div>' +
@@ -285,6 +294,141 @@
         function truncate(str, max) {
             return str.length > max ? str.substring(0, max) + '...' : str;
         }
+
+        // ===== REVIEW MODAL =====
+        let reviewBookingId = null;
+        let reviewRating = 0;
+
+        function openReviewModal(bookingId, carName) {
+            reviewBookingId = bookingId;
+            reviewRating = 0;
+            document.getElementById('reviewCarName').textContent = carName;
+            document.getElementById('reviewContent').value = '';
+            renderStars(0);
+            document.getElementById('reviewModalOverlay').style.display = 'flex';
+        }
+
+        function closeReviewModal() {
+            document.getElementById('reviewModalOverlay').style.display = 'none';
+            reviewBookingId = null;
+            reviewRating = 0;
+        }
+
+        function setReviewRating(rating) {
+            reviewRating = rating;
+            renderStars(rating);
+        }
+
+        function renderStars(rating) {
+            const container = document.getElementById('reviewStarsInput');
+            container.innerHTML = '';
+            for (let i = 1; i <= 5; i++) {
+                const star = document.createElement('span');
+                star.textContent = i <= rating ? '★' : '☆';
+                star.className = 'review-star-btn' + (i <= rating ? ' active' : '');
+                star.onclick = () => setReviewRating(i);
+                container.appendChild(star);
+            }
+        }
+
+        async function submitOrderReview() {
+            if (!reviewBookingId) return;
+            if (reviewRating < 1) { showToast('Please select a rating (1-5 stars).', 'warning'); return; }
+            const content = document.getElementById('reviewContent').value.trim();
+            if (!content) { showToast('Please write your review.', 'warning'); return; }
+            if (content.length < 10) { showToast('Review must be at least 10 characters.', 'warning'); return; }
+
+            const btn = document.querySelector('#reviewModalOverlay .btn-primary');
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+
+            try {
+                const res = await fetch(BOOKINGS_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'submit-review',
+                        booking_id: reviewBookingId,
+                        rating: reviewRating,
+                        content: content
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('⭐ ' + data.message, 'success');
+                    closeReviewModal();
+                    loadOrders(); // Refresh to show "Reviewed" badge
+                } else {
+                    showToast('❌ ' + (data.message || 'Failed to submit review.'), 'error');
+                }
+            } catch (err) {
+                console.error('Submit review error:', err);
+                showToast('Connection error. Please try again.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '⭐ Submit Review';
+            }
+        }
     </script>
+
+    <!-- ===== REVIEW MODAL ===== -->
+    <div class="review-modal-overlay" id="reviewModalOverlay" style="display:none;">
+        <div class="review-modal">
+            <div class="review-modal-header">
+                <div style="font-size:2.5rem;margin-bottom:8px;">⭐</div>
+                <h3 style="font-size:1.15rem;font-weight:800;color:var(--gray-900);margin-bottom:4px;">Rate Your Experience</h3>
+                <p style="font-size:0.85rem;color:var(--gray-500);" id="reviewCarName"></p>
+            </div>
+            <div class="review-modal-body">
+                <div style="margin-bottom:20px;">
+                    <label style="font-size:0.8rem;font-weight:600;color:var(--gray-600);display:block;margin-bottom:8px;">Your Rating</label>
+                    <div class="review-stars-input" id="reviewStarsInput"></div>
+                </div>
+                <div>
+                    <label style="font-size:0.8rem;font-weight:600;color:var(--gray-600);display:block;margin-bottom:8px;">Your Review</label>
+                    <textarea class="form-input" id="reviewContent" rows="4" placeholder="Tell us about your experience — the car condition, service quality, and anything else you'd like to share..." style="resize:vertical;min-height:100px;font-size:0.875rem;"></textarea>
+                </div>
+            </div>
+            <div class="review-modal-footer">
+                <button class="btn btn-primary" onclick="submitOrderReview()" style="flex:1;">⭐ Submit Review</button>
+                <button class="btn btn-secondary" onclick="closeReviewModal()" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .review-modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+            animation: reviewOverlayIn 0.25s ease;
+        }
+        @keyframes reviewOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+        .review-modal {
+            background: white; border-radius: 20px; width: 95%; max-width: 460px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.25); overflow: hidden;
+            animation: reviewModalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes reviewModalIn { from { opacity: 0; transform: scale(0.85) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .review-modal-header {
+            text-align: center; padding: 28px 28px 16px;
+            background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
+            border-bottom: 1px solid #fcd34d;
+        }
+        .review-modal-body { padding: 24px 28px; }
+        .review-modal-footer { display: flex; gap: 10px; padding: 16px 28px 28px; }
+
+        .review-stars-input {
+            display: flex; gap: 6px; justify-content: center;
+        }
+        .review-star-btn {
+            font-size: 2.2rem; cursor: pointer; color: var(--gray-300);
+            transition: all 0.15s; user-select: none; line-height: 1;
+        }
+        .review-star-btn:hover, .review-star-btn.active {
+            color: #f59e0b; transform: scale(1.15);
+        }
+        .review-star-btn:hover { text-shadow: 0 0 12px rgba(245,158,11,0.4); }
+    </style>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>

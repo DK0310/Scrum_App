@@ -21,9 +21,10 @@ if (!$isLoggedIn) {
     exit;
 }
 
-// Get car_id from URL
+// Get car_id from URL (not required for with-driver mode)
 $carId = $_GET['car_id'] ?? '';
 $promoCode = $_GET['promo'] ?? '';
+$bookingMode = $_GET['mode'] ?? '';
 
 include '../templates/booking.html.php';
 ?>
