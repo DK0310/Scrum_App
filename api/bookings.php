@@ -16,6 +16,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 
+// Include repositories
+require_once __DIR__ . '/../lib/repositories/BookingRepository.php';
+require_once __DIR__ . '/../lib/repositories/PromotionRepository.php';
+require_once __DIR__ . '/../lib/repositories/VehicleRepository.php';
+require_once __DIR__ . '/../lib/repositories/VehicleImageRepository.php';
+require_once __DIR__ . '/../lib/repositories/UserRepository.php';
+
+// Initialize repositories
+$bookingRepo = new BookingRepository($pdo);
+$promotionRepo = new PromotionRepository($pdo);
+$vehicleRepo = new VehicleRepository($pdo);
+$vehicleImageRepo = new VehicleImageRepository($pdo);
+$userRepo = new UserRepository($pdo);
+
 // Include notification helper functions
 require_once __DIR__ . '/notification-helpers.php';
 
@@ -46,14 +60,7 @@ if ($action === 'validate-promo') {
     }
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT id, code, title, description, discount_type, discount_value, 
-                   min_booking_days, max_uses, total_used, starts_at, expires_at, is_active
-            FROM promotions
-            WHERE UPPER(code) = ? AND is_active = true
-        ");
-        $stmt->execute([$code]);
-        $promo = $stmt->fetch(PDO::FETCH_ASSOC);
+        $promo = $promotionRepo->findByCode($code);
 
         if (!$promo) {
             echo json_encode(['success' => false, 'message' => 'Invalid or expired promo code.']);
@@ -94,23 +101,25 @@ if ($action === 'validate-promo') {
 // ==========================================================
 if ($action === 'active-promos') {
     try {
-        $stmt = $pdo->query("
-            SELECT code, title, description, discount_type, discount_value, 
-                   min_booking_days, expires_at
-            FROM promotions
-            WHERE is_active = true 
-              AND (expires_at IS NULL OR expires_at > NOW())
-              AND (max_uses IS NULL OR total_used < max_uses)
-            ORDER BY discount_value DESC
-        ");
-        $promos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $promos = $promotionRepo->listAll();
+        
+        // Filter for active, non-expired, not max-used
+        $promos = array_filter($promos, function($p) {
+            if (!$p['is_active']) return false;
+            if ($p['expires_at'] && strtotime($p['expires_at']) < time()) return false;
+            if ($p['max_uses'] && (int)$p['total_used'] >= (int)$p['max_uses']) return false;
+            return true;
+        });
 
         foreach ($promos as &$p) {
             $p['discount_value'] = (float)$p['discount_value'];
             $p['min_booking_days'] = (int)$p['min_booking_days'];
         }
 
-        echo json_encode(['success' => true, 'promos' => $promos]);
+        // Sort by discount value
+        usort($promos, fn($a, $b) => (float)$b['discount_value'] - (float)$a['discount_value']);
+        
+        echo json_encode(['success' => true, 'promos' => array_values($promos)]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error.']);
     }
@@ -192,30 +201,8 @@ if ($action === 'create') {
             $tierRates = ['eco' => 1, 'standard' => 2, 'premium' => 5];
             $ratePerKm = $tierRates[$rideTier] ?? 1;
 
-            // Determine price range for tier
-            // Eco: price_per_day <= 40, seats = 5 (always 5-seat)
-            // Standard: 40 < price_per_day <= 100
-            // Premium: price_per_day > 100
-            $tierConditions = '';
-            $tierParams = [];
-            if ($rideTier === 'eco') {
-                $tierConditions = "v.price_per_day <= 40 AND v.seats = 5";
-            } elseif ($rideTier === 'standard') {
-                $tierConditions = "v.price_per_day > 40 AND v.price_per_day <= 100";
-            } elseif ($rideTier === 'premium') {
-                $tierConditions = "v.price_per_day > 100";
-            }
-
             // Find a random available vehicle matching the tier (exclude own vehicles)
-            $stmt = $pdo->prepare("
-                SELECT v.id, v.owner_id, v.price_per_day, v.price_per_week, v.price_per_month, v.category, v.status, v.brand, v.model, v.seats
-                FROM vehicles v
-                WHERE v.status = 'available' AND {$tierConditions} AND v.owner_id != ?
-                ORDER BY RANDOM()
-                LIMIT 1
-            ");
-            $stmt->execute([$renterId]);
-            $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
+            $vehicle = $bookingRepo->findVehicleForTier($rideTier, $renterId);
 
             if (!$vehicle) {
                 echo json_encode(['success' => false, 'message' => 'No available vehicles found for the ' . ucfirst($rideTier) . ' tier. Please try another tier.']);
@@ -238,9 +225,7 @@ if ($action === 'create') {
 
         } else {
             // ==== WITH-DRIVER: Use pre-selected vehicle with assigned driver ====
-            $stmt = $pdo->prepare("SELECT id, owner_id, price_per_day, price_per_week, price_per_month, category, status, brand, model FROM vehicles WHERE id = ?");
-            $stmt->execute([$vehicleId]);
-            $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
+            $vehicle = $bookingRepo->getVehicleForBooking($vehicleId);
 
             if (!$vehicle) {
                 echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
@@ -282,14 +267,7 @@ if ($action === 'create') {
         $discountAmount = 0;
         $appliedPromo = null;
         if (!empty($promoCode)) {
-            $stmt = $pdo->prepare("
-                SELECT * FROM promotions
-                WHERE UPPER(code) = ? AND is_active = true
-                  AND (expires_at IS NULL OR expires_at > NOW())
-                  AND (max_uses IS NULL OR total_used < max_uses)
-            ");
-            $stmt->execute([strtoupper($promoCode)]);
-            $promo = $stmt->fetch(PDO::FETCH_ASSOC);
+            $promo = $promotionRepo->findByCode($promoCode);
 
             if ($promo) {
                 $minDays = (int)$promo['min_booking_days'];
@@ -303,60 +281,57 @@ if ($action === 'create') {
                     $appliedPromo = $promo['code'];
 
                     // Increment usage count
-                    $pdo->prepare("UPDATE promotions SET total_used = total_used + 1 WHERE id = ?")->execute([$promo['id']]);
+                    $promotionRepo->incrementUsageCount($promo['id']);
                 }
             }
         }
 
         $totalAmount = max(0, $subtotal - $discountAmount);
 
-        // Ensure service_type column exists for minicab bookings
-        try {
-            $pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_type VARCHAR(50) DEFAULT 'local'");
-        } catch (PDOException $ignore) {}
+        // Ensure booking columns exist
+        $bookingRepo->ensureBookingColumnsExist();
 
-        // Create booking
-        $stmt = $pdo->prepare("
-            INSERT INTO bookings (renter_id, vehicle_id, owner_id, booking_type, pickup_date, return_date, 
-                pickup_location, return_location, total_days, price_per_day, subtotal, 
-                discount_amount, total_amount, promo_code, special_requests, driver_requested, distance_km, transfer_cost, service_type, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-            RETURNING id, created_at
-        ");
-        $driverRequested = 't'; // all booking types include a driver
-        $stmt->execute([
-            $renterId,
-            $vehicleId,
-            $vehicle['owner_id'],
-            $bookingType,
-            $pickupDate,
-            $returnDate,
-            $pickupLocation,
-            $returnLocation,
-            $totalDays,
-            $pricePerDay,
-            $subtotal,
-            $discountAmount,
-            $totalAmount,
-            $appliedPromo,
-            $specialRequests,
-            $driverRequested,
-            $distanceKm,
-            ($bookingType === 'minicab') ? $subtotal : null,
-            ($bookingType === 'minicab') ? $serviceType : null
+        // Create booking via repository
+        $numberOfPassengers = (int)($input['number_of_passengers'] ?? 1);
+        $booking = $bookingRepo->createBooking([
+            'renter_id' => $renterId,
+            'vehicle_id' => $vehicleId,
+            'owner_id' => $vehicle['owner_id'],
+            'booking_type' => $bookingType,
+            'pickup_date' => $pickupDate,
+            'return_date' => $returnDate,
+            'pickup_location' => $pickupLocation,
+            'return_location' => $returnLocation,
+            'total_days' => $totalDays,
+            'price_per_day' => $pricePerDay,
+            'subtotal' => $subtotal,
+            'discount_amount' => $discountAmount,
+            'total_amount' => $totalAmount,
+            'promo_code' => $appliedPromo,
+            'special_requests' => $specialRequests,
+            'driver_requested' => 't',
+            'distance_km' => $distanceKm,
+            'transfer_cost' => ($bookingType === 'minicab') ? $subtotal : null,
+            'service_type' => ($bookingType === 'minicab') ? $serviceType : null,
+            'number_of_passengers' => $numberOfPassengers,
+            'ride_tier' => ($bookingType === 'minicab') ? $rideTier : null,
         ]);
-        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // For minicab bookings, create an active_trip record for real-time tracking
+        if ($bookingType === 'minicab') {
+            $bookingRepo->createActiveTrip(
+                $booking['id'],
+                $renterId,
+                $vehicleId,
+                $pickup_coords['lat'] ?? null,
+                $pickup_coords['lng'] ?? null,
+                $destination_coords['lat'] ?? null,
+                $destination_coords['lng'] ?? null
+            );
+        }
 
         // Create payment record
-        $pdo->prepare("
-            INSERT INTO payments (booking_id, user_id, amount, method, status)
-            VALUES (?, ?, ?, ?::payment_method, 'pending')
-        ")->execute([
-            $booking['id'],
-            $renterId,
-            $totalAmount,
-            $paymentMethod
-        ]);
+        $bookingRepo->createPayment($booking['id'], $renterId, $totalAmount, $paymentMethod);
 
         // --- Notifications ---
         $vehicleName = ($vehicle ? $vehicle['brand'] . ' ' . $vehicle['model'] : 'Vehicle');
@@ -366,18 +341,103 @@ if ($action === 'create') {
         $serviceLabel = ($bookingType === 'minicab' && $serviceType) ? ' — ' . str_replace('-', ' ', ucfirst($serviceType)) : '';
         createNotification($pdo, $renterId, 'booking',
             '📋 Booking Created',
-            "Your {$bookingType} booking for {$vehicleName}{$tierLabel}{$serviceLabel} has been submitted. Pickup: {$pickupDate}. Total: \${$totalAmount}. Waiting for owner confirmation."
+            "Your {$bookingType} booking for {$vehicleName}{$tierLabel}{$serviceLabel} has been submitted. Pickup: {$pickupDate}. Total: \${$totalAmount}. Waiting for driver confirmation."
         );
 
-        // Notify owner: new booking request
-        createNotification($pdo, $vehicle['owner_id'], 'booking',
-            '🆕 New Booking Request',
-            "You have a new {$bookingType} booking request for your {$vehicleName}. Pickup: {$pickupDate}. Amount: \${$totalAmount}."
-        );
+        // For minicab, notify all available drivers
+        if ($bookingType === 'minicab') {
+            $drivers = $bookingRepo->getActiveDrivers(20);
+
+            foreach ($drivers as $driver) {
+                $bookingRepo->createDriverNotification(
+                    $driver['id'],
+                    $booking['id'],
+                    "🚗 New {$rideTier} Minicab Booking",
+                    "Pick up at {$pickupLocation}. Destination: {$returnLocation}. Passengers: " . ($input['number_of_passengers'] ?? 1),
+                    'minicab_request'
+                );
+            }
+        } else {
+            // Notify owner: new booking request
+            createNotification($pdo, $vehicle['owner_id'], 'booking',
+                '🆕 New Booking Request',
+                "You have a new {$bookingType} booking request for your {$vehicleName}. Pickup: {$pickupDate}. Amount: \${$totalAmount}."
+            );
+        }
+
+        // === Mark vehicle as rented (with-driver only) ===
+        if ($bookingType === 'with-driver' && !empty($vehicleId)) {
+            $bookingRepo->markVehicleRented($vehicleId);
+        }
+
+        // === Send invoice email immediately after customer books (best-effort; do not break booking flow) ===
+        // NOTE: Payment row may still be 'pending' at this time.
+        try {
+            require_once __DIR__ . '/../lib/invoice_mpdf.php';
+            require_once __DIR__ . '/../lib/mailer.php';
+
+            $customerEmail = '';
+            $customerName = '';
+            $customerPhone = '';
+            $customerAddress = '';
+            try {
+                $uRow = $bookingRepo->getUserInfo($renterId);
+                if ($uRow) {
+                    $customerEmail = (string)($uRow['email'] ?? '');
+                    $customerName = (string)($uRow['full_name'] ?? '');
+                    $customerPhone = (string)($uRow['phone'] ?? '');
+                    $customerAddress = (string)($uRow['address'] ?? '');
+                }
+            } catch (Exception $ignore) {
+                $customerEmail = '';
+            }
+
+            if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+                $invoiceBooking = [
+                    'id' => $booking['id'],
+                    'subtotal' => $subtotal,
+                    'discount_amount' => $discountAmount,
+                    'total_amount' => $totalAmount,
+                    'payment_method' => $paymentMethod,
+                    'payment_status' => 'pending',
+                    'vehicle_name' => $vehicleName,
+                    'license_plate' => $vehicle['license_plate'] ?? '',
+                    'pickup_date' => $pickupDate,
+                    'return_date' => $returnDate,
+                    'pickup_location' => $pickupLocation,
+                    'return_location' => $returnLocation,
+                    'customer_name' => $customerName,
+                    'customer_email' => $customerEmail,
+                    'customer_phone' => $customerPhone,
+                    'customer_address' => $customerAddress,
+                ];
+
+                $pdf = privatehire_generate_invoice_pdf_local($invoiceBooking);
+
+                $subject = 'PrivateHire - Invoice for booking #' . $booking['id'];
+                $html = "<p>Dear " . htmlspecialchars($customerName ?: 'Customer') . ",</p>" .
+                        "<p>Thank you for your booking. Please find your invoice attached.</p>" .
+                        "<p><strong>Vehicle:</strong> " . htmlspecialchars($vehicleName) . "</p>" .
+                        "<p><strong>License plate:</strong> " . htmlspecialchars((string)($vehicle['license_plate'] ?? '')) . "</p>" .
+                        "<p><strong>Pickup date:</strong> " . htmlspecialchars((string)$pickupDate) . "</p>" .
+                        "<p><strong>Return date:</strong> " . htmlspecialchars((string)($returnDate ?? '')) . "</p>" .
+                        "<p><strong>Booking ID:</strong> " . htmlspecialchars((string)$booking['id']) . "</p>" .
+                        "<p>Payment status: <strong>Pending</strong></p>" .
+                        "<p>Regards,<br>PrivateHire</p>";
+
+                privatehire_send_email($customerEmail, $subject, $html, [
+                    'content' => $pdf,
+                    'filename' => 'invoice_' . $booking['id'] . '.pdf',
+                    'mime' => 'application/pdf'
+                ]);
+            }
+        } catch (Exception $e) {
+            error_log('Invoice email failed (create): ' . $e->getMessage());
+        }
 
         echo json_encode([
             'success' => true,
-            'message' => 'Booking created successfully! You will receive a confirmation email shortly.',
+            'message' => 'Booking created successfully!',
             'booking' => [
                 'id' => $booking['id'],
                 'total_days' => $totalDays,
@@ -406,31 +466,8 @@ if ($action === 'my-orders') {
     $userId = $_SESSION['user_id'];
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT b.id, b.renter_id, b.owner_id, b.vehicle_id, b.booking_type,
-                   b.pickup_date, b.return_date, b.pickup_location, b.return_location,
-                   b.airport_name, b.total_days, b.price_per_day, b.subtotal,
-                   b.discount_amount, b.total_amount, b.promo_code, b.status,
-                   b.special_requests, b.driver_requested, b.created_at,
-                   b.confirmed_at, b.completed_at, b.cancelled_at,
-                   b.distance_km, b.transfer_cost, b.service_type,
-                   v.brand, v.model, v.year, v.category,
-                   u_renter.full_name AS renter_name,
-                   u_renter.email AS renter_email,
-                   p.method AS payment_method,
-                   p.status AS payment_status,
-                   rev.id AS review_id,
-                   rev.rating AS review_rating
-            FROM bookings b
-            JOIN vehicles v ON b.vehicle_id = v.id
-            LEFT JOIN users u_renter ON b.renter_id = u_renter.id
-            LEFT JOIN payments p ON p.booking_id = b.id
-            LEFT JOIN reviews rev ON rev.booking_id = b.id AND rev.user_id = ?
-            WHERE b.renter_id = ? OR b.owner_id = ?
-            ORDER BY b.created_at DESC
-        ");
-        $stmt->execute([$userId, $userId, $userId]);
-        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Get bookings via repository
+        $orders = $bookingRepo->listUserBookings($userId);
 
         // Get vehicle thumbnails & set role flags
         foreach ($orders as &$order) {
@@ -438,19 +475,21 @@ if ($action === 'my-orders') {
             $order['is_renter'] = ($order['renter_id'] === $userId);
             $order['is_owner'] = ($order['owner_id'] === $userId);
 
-            // Get vehicle thumbnail
+            // Get vehicle thumbnail via VehicleImageRepository (refactored)
             try {
-                $imgStmt = $pdo->prepare("SELECT storage_path, image_data, mime_type FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, created_at ASC LIMIT 1");
-                $imgStmt->execute([$order['vehicle_id']]);
-                $img = $imgStmt->fetch(PDO::FETCH_ASSOC);
-                if ($img && !empty($img['storage_path'])) {
-                    // Use Supabase storage URL
-                    require_once __DIR__ . '/supabase-storage.php';
-                    $storageHelper = new SupabaseStorage();
-                    $order['thumbnail_url'] = $storageHelper->getPublicUrl($img['storage_path']);
-                } elseif ($img && $img['image_data']) {
-                    $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
-                    $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
+                $imgs = $vehicleImageRepo->listByVehicleId($order['vehicle_id']);
+                if ($imgs) {
+                    $img = $imgs[0]; // Get first image
+                    if (!empty($img['storage_path'])) {
+                        require_once __DIR__ . '/supabase-storage.php';
+                        $storageHelper = new SupabaseStorage();
+                        $order['thumbnail_url'] = $storageHelper->getPublicUrl($img['storage_path']);
+                    } elseif ($img['image_data']) {
+                        $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
+                        $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
+                    } else {
+                        $order['thumbnail_url'] = '';
+                    }
                 } else {
                     $order['thumbnail_url'] = '';
                 }
@@ -487,10 +526,8 @@ if ($action === 'update-status') {
     }
 
     try {
-        // Get booking
-        $stmt = $pdo->prepare("SELECT id, renter_id, owner_id, vehicle_id, status FROM bookings WHERE id = ?");
-        $stmt->execute([$bookingId]);
-        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Get booking via repository
+        $booking = $bookingRepo->getBookingWithUserAndDriver($bookingId);
 
         if (!$booking) {
             echo json_encode(['success' => false, 'message' => 'Booking not found.']);
@@ -520,45 +557,34 @@ if ($action === 'update-status') {
             exit;
         }
 
-        // Update status
-        $extraSql = '';
-        if ($newStatus === 'confirmed') $extraSql = ', confirmed_at = NOW()';
-        if ($newStatus === 'completed') $extraSql = ', completed_at = NOW()';
-        if ($newStatus === 'cancelled') $extraSql = ', cancelled_at = NOW()';
-
-        $pdo->prepare("UPDATE bookings SET status = ?::booking_status" . $extraSql . " WHERE id = ?")->execute([$newStatus, $bookingId]);
+        // Update status via repository
+        $bookingRepo->updateBookingStatus($bookingId, $newStatus);
 
         // Update vehicle status & stats based on booking transition
         $vehicleId = $booking['vehicle_id'];
 
-        if ($newStatus === 'in_progress') {
-            // Delivery started → vehicle is now rented, increment total_bookings
-            $pdo->prepare("UPDATE vehicles SET status = 'rented'::vehicle_status, total_bookings = total_bookings + 1 WHERE id = ?")->execute([$vehicleId]);
+        if ($newStatus === 'confirmed') {
+            $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
+            $bookingRepo->incrementVehicleStats($vehicleId, 'bookings');
+        } elseif ($newStatus === 'in_progress') {
+            $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
+        } elseif ($newStatus === 'completed') {
+            $bookingRepo->updateVehicleStatus($vehicleId, 'available');
+        } elseif ($newStatus === 'cancelled') {
+            // Check if already rented before reverting to available
+            $vehicleStatus = $bookingRepo->getVehicleStatus($vehicleId);
+            if ($vehicleStatus === 'rented') {
+                $bookingRepo->updateVehicleStatus($vehicleId, 'available');
+            }
         }
 
+        // Mark payment as paid if booking completed
         if ($newStatus === 'completed') {
-            // Order done → vehicle available again
-            $pdo->prepare("UPDATE vehicles SET status = 'available'::vehicle_status WHERE id = ?")->execute([$vehicleId]);
-        }
-
-        if ($newStatus === 'cancelled') {
-            // If vehicle was rented for this booking, make it available again
-            $pdo->prepare("UPDATE vehicles SET status = 'available'::vehicle_status WHERE id = ? AND status = 'rented'::vehicle_status")->execute([$vehicleId]);
-        }
-
-        // Update payment status if completed
-        if ($newStatus === 'completed') {
-            $pdo->prepare("UPDATE payments SET status = 'paid'::payment_status WHERE booking_id = ?")->execute([$bookingId]);
-        }
-        if ($newStatus === 'cancelled') {
-            $pdo->prepare("UPDATE payments SET status = 'failed'::payment_status WHERE booking_id = ?")->execute([$bookingId]);
+            $bookingRepo->markPaymentAsPaid($bookingId);
         }
 
         // --- Notifications for status changes ---
-        $vStmt = $pdo->prepare("SELECT v.brand, v.model FROM vehicles v WHERE v.id = ?");
-        $vStmt->execute([$booking['vehicle_id']]);
-        $vInfo = $vStmt->fetch(PDO::FETCH_ASSOC);
-        $vehicleName = ($vInfo ? $vInfo['brand'] . ' ' . $vInfo['model'] : 'Vehicle');
+        $vehicleName = ($booking ? $booking['user_name'] . ' ' . ($booking['user_phone'] ?? '') : 'Vehicle');
 
         $renterId = $booking['renter_id'];
         $ownerId = $booking['owner_id'];
@@ -566,40 +592,40 @@ if ($action === 'update-status') {
         if ($newStatus === 'confirmed') {
             createNotification($pdo, $renterId, 'booking',
                 '✅ Booking Confirmed',
-                "Your booking for {$vehicleName} has been confirmed by the owner. Get ready for pickup!"
+                "Your booking has been confirmed by the owner. Get ready for pickup!"
             );
             createNotification($pdo, $ownerId, 'booking',
                 '✅ Booking Confirmed',
-                "You confirmed a booking for your {$vehicleName}."
+                "You confirmed a booking."
             );
         } elseif ($newStatus === 'in_progress') {
             createNotification($pdo, $renterId, 'booking',
                 '🚗 Trip Started',
-                "Your trip with {$vehicleName} has started. Drive safely!"
+                "Your trip has started. Drive safely!"
             );
             createNotification($pdo, $ownerId, 'alert',
                 '🚗 Vehicle Delivered',
-                "Your {$vehicleName} has been delivered to the renter."
+                "Your vehicle has been delivered to the renter."
             );
         } elseif ($newStatus === 'completed') {
             createNotification($pdo, $renterId, 'payment',
                 '🎉 Trip Completed',
-                "Your trip with {$vehicleName} is complete. Payment has been processed. Thank you!"
+                "Your trip is complete. Payment has been processed. Thank you!"
             );
             createNotification($pdo, $ownerId, 'payment',
                 '💰 Payment Received',
-                "Your {$vehicleName} trip is completed. Payment has been received."
+                "Your trip is completed. Payment has been received."
             );
         } elseif ($newStatus === 'cancelled') {
             $cancelledBy = $isOwner ? 'owner' : ($isRenter ? 'you' : 'admin');
             createNotification($pdo, $renterId, 'alert',
                 '❌ Booking Cancelled',
-                "Your booking for {$vehicleName} has been cancelled" . ($isOwner ? " by the owner." : ".")
+                "Your booking has been cancelled" . ($isOwner ? " by the owner." : ".")
             );
             if (!$isOwner) {
                 createNotification($pdo, $ownerId, 'alert',
                     '❌ Booking Cancelled',
-                    "A booking for your {$vehicleName} has been cancelled" . ($isRenter ? " by the renter." : ".")
+                    "A booking has been cancelled" . ($isRenter ? " by the renter." : ".")
                 );
             }
         }
@@ -628,9 +654,7 @@ if ($action === 'submit-review') {
 
     try {
         // Verify booking exists, belongs to renter, and is completed
-        $stmt = $pdo->prepare("SELECT id, renter_id, vehicle_id, status FROM bookings WHERE id = ?");
-        $stmt->execute([$bookingId]);
-        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+        $booking = $bookingRepo->getBookingInfo($bookingId);
 
         if (!$booking) {
             echo json_encode(['success' => false, 'message' => 'Booking not found.']);
@@ -646,27 +670,18 @@ if ($action === 'submit-review') {
         }
 
         // Check if already reviewed
-        $checkStmt = $pdo->prepare("SELECT id FROM reviews WHERE booking_id = ? AND user_id = ?");
-        $checkStmt->execute([$bookingId, $userId]);
-        if ($checkStmt->fetch()) {
+        if ($bookingRepo->userHasReviewed($bookingId, $userId)) {
             echo json_encode(['success' => false, 'message' => 'You have already reviewed this booking.']);
             exit;
         }
 
         // Insert review
-        $insertStmt = $pdo->prepare("
-            INSERT INTO reviews (user_id, vehicle_id, booking_id, rating, content, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, NOW(), NOW())
-        ");
-        $insertStmt->execute([$userId, $booking['vehicle_id'], $bookingId, $rating, $content]);
+        $bookingRepo->insertReview($bookingId, $booking['vehicle_id'], $userId, $rating, $content);
 
         // Update vehicle average rating
-        $avgStmt = $pdo->prepare("SELECT ROUND(AVG(rating)::numeric, 1) as avg_rating, COUNT(*) as total FROM reviews WHERE vehicle_id = ?");
-        $avgStmt->execute([$booking['vehicle_id']]);
-        $avgData = $avgStmt->fetch(PDO::FETCH_ASSOC);
-        if ($avgData) {
-            $pdo->prepare("UPDATE vehicles SET avg_rating = ?, total_reviews = ? WHERE id = ?")
-                ->execute([$avgData['avg_rating'], $avgData['total'], $booking['vehicle_id']]);
+        $avgData = $bookingRepo->getVehicleReviewStats($booking['vehicle_id']);
+        if ($avgData['avg_rating'] !== null) {
+            $bookingRepo->updateVehicleRating($booking['vehicle_id'], (float)$avgData['avg_rating'], (int)$avgData['total']);
         }
 
         echo json_encode(['success' => true, 'message' => 'Review submitted successfully! Thank you for your feedback.']);
@@ -722,6 +737,109 @@ if ($action === 'get-reviews') {
         $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
 
         echo json_encode(['success' => true, 'reviews' => $reviews, 'stats' => $stats]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// MARK PAYMENT AS PAID (Renter confirms) + SEND INVOICE
+// ==========================================================
+if ($action === 'confirm-payment') {
+    requireAuth();
+    $userId = $_SESSION['user_id'];
+    $bookingId = $input['booking_id'] ?? '';
+
+    if (empty($bookingId)) {
+        echo json_encode(['success' => false, 'message' => 'Booking ID is required.']);
+        exit;
+    }
+
+    try {
+        // Verify booking belongs to renter via repository
+        $booking = $bookingRepo->getBookingWithUserAndDriver($bookingId);
+
+        if (!$booking) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found.']);
+            exit;
+        }
+
+        if ((string)$booking['renter_id'] !== (string)$userId) {
+            echo json_encode(['success' => false, 'message' => 'You are not allowed to confirm payment for this booking.']);
+            exit;
+        }
+
+        // Mark payment as paid via repository
+        $bookingRepo->markPaymentAsPaid($bookingId);
+
+        // Send invoice (best-effort)
+        try {
+            require_once __DIR__ . '/../lib/invoice_mpdf.php';
+            require_once __DIR__ . '/../lib/mailer.php';
+
+            // Customer info
+            $customerEmail = $booking['email'] ?? '';
+            $customerName = $booking['user_name'] ?? '';
+            $customerPhone = $booking['user_phone'] ?? '';
+            $customerAddress = '';
+            
+            try {
+                $userAddress = $bookingRepo->getUserAddress($userId);
+                if ($userAddress) {
+                    $customerAddress = (string)$userAddress;
+                }
+            } catch (Exception $ignore) {
+                $customerAddress = '';
+            }
+
+            if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+                // Get booking details
+                $bRow = $bookingRepo->getBookingFullInfo($bookingId) ?: [];
+
+                // Vehicle info
+                $vRow = $bookingRepo->getVehicleInfo($bRow['vehicle_id'] ?? '') ?: [];
+                $vehicleName = trim(((string)($vRow['brand'] ?? '')) . ' ' . ((string)($vRow['model'] ?? '')) . (empty($vRow['year']) ? '' : (' ' . $vRow['year'])));
+
+                // Payment method
+                $paymentMethod = (string)($bookingRepo->getPaymentMethod($bookingId) ?? '');
+
+                $invoiceBooking = [
+                    'id' => $bookingId,
+                    'subtotal' => $bRow['subtotal'] ?? '',
+                    'discount_amount' => $bRow['discount_amount'] ?? '',
+                    'total_amount' => $bRow['total_amount'] ?? '',
+                    'payment_method' => $paymentMethod,
+                    'payment_status' => 'paid',
+                    'vehicle_name' => $vehicleName,
+                    'license_plate' => $vRow['license_plate'] ?? '',
+                    'pickup_location' => $bRow['pickup_location'] ?? '',
+                    'return_location' => $bRow['return_location'] ?? '',
+                    'customer_name' => $customerName,
+                    'customer_email' => $customerEmail,
+                    'customer_phone' => $customerPhone,
+                    'customer_address' => $customerAddress,
+                ];
+
+                $pdf = privatehire_generate_invoice_pdf_local($invoiceBooking);
+
+                $subject = 'Invoice for booking #' . $bookingId;
+                $html = "<p>Dear " . htmlspecialchars($customerName ?: 'Customer') . ",</p>" .
+                        "<p>Thank you for your payment. Please find your invoice attached.</p>" .
+                        "<p><strong>Booking ID:</strong> " . htmlspecialchars((string)$bookingId) . "</p>" .
+                        "<p>Regards,<br>DriveNow</p>";
+
+                privatehire_send_email($customerEmail, $subject, $html, [
+                    'content' => $pdf,
+                    'filename' => 'invoice_' . $bookingId . '.pdf',
+                    'mime' => 'application/pdf'
+                ]);
+            }
+        } catch (Exception $e) {
+            error_log('Invoice email failed (confirm-payment): ' . $e->getMessage());
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Payment confirmed. Invoice email has been sent.']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }

@@ -14,7 +14,7 @@ require_once '../api/n8n.php';
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? $_SESSION['username'] : null;
 $userId = $_SESSION['user_id'] ?? null;
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 include '../templates/community.html.php';
 ?>

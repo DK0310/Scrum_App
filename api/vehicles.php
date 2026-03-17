@@ -13,6 +13,7 @@ if ($action === 'get-image') {
     session_start();
     require_once __DIR__ . '/../Database/db.php';
     require_once __DIR__ . '/supabase-storage.php';
+    require_once __DIR__ . '/../lib/repositories/VehicleImageRepository.php';
 
     $imageId = $_GET['id'] ?? '';
     if (empty($imageId)) {
@@ -22,9 +23,8 @@ if ($action === 'get-image') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT storage_path, mime_type, file_name FROM vehicle_images WHERE id = ?");
-        $stmt->execute([$imageId]);
-        $img = $stmt->fetch(PDO::FETCH_ASSOC);
+        $imgRepo = new VehicleImageRepository($pdo);
+        $img = $imgRepo->findById($imageId);
 
         if (!$img || empty($img['storage_path'])) {
             http_response_code(404);
@@ -56,8 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/supabase-storage.php';
+require_once __DIR__ . '/../lib/repositories/VehicleRepository.php';
+require_once __DIR__ . '/../lib/repositories/VehicleImageRepository.php';
 
-$input = json_decode(file_get_contents('php://input'), true);
+$vehicleRepo = new VehicleRepository($pdo);
+$vehicleImageRepo = new VehicleImageRepository($pdo);
+
+// $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
 if (empty($action)) {
@@ -73,11 +78,12 @@ function requireAuth() {
     }
 }
 
-// Helper: check if user is owner
-function requireOwner() {
+// Helper: check if user is staff or admin (vehicle management)
+function requireStaffOrAdmin() {
     requireAuth();
-    if (($_SESSION['role'] ?? '') !== 'owner') {
-        echo json_encode(['success' => false, 'message' => 'Only car owners can perform this action. Please upgrade your account to owner.']);
+    $role = $_SESSION['role'] ?? '';
+    if ($role !== 'staff' && $role !== 'admin') {
+        echo json_encode(['success' => false, 'message' => 'Only staff and administrators can perform this action.']);
         exit;
     }
 }
@@ -85,23 +91,18 @@ function requireOwner() {
 // Helper: get image URLs for a vehicle (returns Supabase Storage public URLs)
 function getVehicleImageUrls($pdo, $vehicleId) {
     $storage = new SupabaseStorage();
-    $stmt = $pdo->prepare("SELECT id, storage_path FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, sort_order ASC, created_at ASC");
-    $stmt->execute([$vehicleId]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $repo = new VehicleImageRepository($pdo);
+    $rows = $repo->listByVehicleId((string)$vehicleId);
     return array_map(function($row) use ($storage) {
-        if (!empty($row['storage_path'])) {
-            return $storage->getPublicUrl($row['storage_path']);
-        }
-        // Fallback for legacy BYTEA images not yet migrated
-        return '/api/vehicles.php?action=get-image&id=' . $row['id'];
+        // storage_path-only
+        return $storage->getPublicUrl($row['storage_path']);
     }, $rows);
 }
 
 // Helper: get image IDs for a vehicle
 function getVehicleImageIds($pdo, $vehicleId) {
-    $stmt = $pdo->prepare("SELECT id FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, sort_order ASC, created_at ASC");
-    $stmt->execute([$vehicleId]);
-    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $repo = new VehicleImageRepository($pdo);
+    return $repo->listIdsByVehicleId((string)$vehicleId);
 }
 
 // ==========================================================
@@ -109,13 +110,8 @@ function getVehicleImageIds($pdo, $vehicleId) {
 // ==========================================================
 if ($action === 'filter-options') {
     try {
-        // Get distinct brands from available vehicles
-        $stmt = $pdo->query("SELECT DISTINCT brand FROM vehicles WHERE status = 'available' AND brand IS NOT NULL AND brand != '' ORDER BY brand");
-        $brands = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-        // Get distinct categories from available vehicles
-        $stmt2 = $pdo->query("SELECT DISTINCT category FROM vehicles WHERE status = 'available' AND category IS NOT NULL AND category != '' ORDER BY category");
-        $categories = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+        $brands = $vehicleRepo->getDistinctAvailableBrands();
+        $categories = $vehicleRepo->getDistinctAvailableCategories();
 
         echo json_encode([
             'success' => true,
@@ -129,7 +125,7 @@ if ($action === 'filter-options') {
 }
 
 // ==========================================================
-// SEARCH SUGGESTIONS (public - autocomplete)
+// SEARCH SUGGESTIONS (public - brand-only autocomplete)
 // ==========================================================
 if ($action === 'search-suggestions') {
     $query = trim($_GET['q'] ?? $input['q'] ?? '');
@@ -141,40 +137,18 @@ if ($action === 'search-suggestions') {
     try {
         $q = '%' . strtolower($query) . '%';
 
-        // Get matching brands
+        // Brand-only suggestions from available vehicles
         $stmt = $pdo->prepare("
-            SELECT DISTINCT brand FROM vehicles 
-            WHERE status = 'available' AND LOWER(brand) ILIKE ? 
-            ORDER BY brand LIMIT 5
+            SELECT DISTINCT brand FROM vehicles
+            WHERE status = 'available' AND brand IS NOT NULL AND brand != '' AND LOWER(brand) ILIKE ?
+            ORDER BY brand LIMIT 8
         ");
         $stmt->execute([$q]);
         $brands = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-        // Get matching brand + model combos
-        $stmt2 = $pdo->prepare("
-            SELECT DISTINCT brand, model, category, year, price_per_day, id FROM vehicles 
-            WHERE status = 'available' AND (LOWER(brand) ILIKE ? OR LOWER(model) ILIKE ? OR LOWER(brand || ' ' || model) ILIKE ?)
-            ORDER BY brand, model LIMIT 8
-        ");
-        $stmt2->execute([$q, $q, $q]);
-        $vehicles = $stmt2->fetchAll(PDO::FETCH_ASSOC);
-
         $suggestions = [];
-
-        // Brand suggestions
         foreach ($brands as $b) {
-            $suggestions[] = ['type' => 'brand', 'text' => $b, 'label' => $b . ' (Brand)'];
-        }
-
-        // Vehicle suggestions
-        foreach ($vehicles as $v) {
-            $suggestions[] = [
-                'type' => 'vehicle',
-                'text' => $v['brand'] . ' ' . $v['model'],
-                'label' => $v['brand'] . ' ' . $v['model'] . ' ' . $v['year'],
-                'sub' => ucfirst($v['category']) . ' • $' . number_format($v['price_per_day']) . '/day',
-                'id' => $v['id']
-            ];
+            $suggestions[] = ['type' => 'brand', 'text' => $b, 'label' => $b];
         }
 
         echo json_encode(['success' => true, 'suggestions' => $suggestions]);
@@ -185,81 +159,57 @@ if ($action === 'search-suggestions') {
 }
 
 // ==========================================================
-// LIST VEHICLES (public - anyone can view)
+// LIST VEHICLES (public - minimal listing for homepage)
+// Only show vehicles that staff published (available)
 // ==========================================================
-if ($action === 'list') {
-    $category     = $_GET['category'] ?? $input['category'] ?? '';
-    $brand        = $_GET['brand'] ?? $input['brand'] ?? '';
-    $fuel         = $_GET['fuel'] ?? $input['fuel'] ?? '';
-    $transmission = $_GET['transmission'] ?? $input['transmission'] ?? '';
-    $maxPrice     = $_GET['max_price'] ?? $input['max_price'] ?? 9999;
-    $location     = $_GET['location'] ?? $input['location'] ?? '';
-    $search       = $_GET['search'] ?? $input['search'] ?? '';
-    $limit        = min((int)($_GET['limit'] ?? $input['limit'] ?? 20), 50);
-    $offset       = max((int)($_GET['offset'] ?? $input['offset'] ?? 0), 0);
+if ($action === 'public-list') {
+    $brand  = $_GET['brand'] ?? $input['brand'] ?? '';
+    $search = $_GET['search'] ?? $input['search'] ?? '';
+    $limit  = min((int)($_GET['limit'] ?? $input['limit'] ?? 50), 100);
 
     try {
-        $where = ["v.status IN ('available', 'rented')"];
-        $params = [];
+        $vehicles = $vehicleRepo->listPublic(['brand' => (string)$brand, 'search' => (string)$search, 'limit' => (int)$limit]);
 
-        if ($category) {
-            $where[] = "LOWER(v.category) = LOWER(?)";
-            $params[] = $category;
-        }
-        if ($brand) {
-            $where[] = "LOWER(v.brand) ILIKE ?";
-            $params[] = '%' . $brand . '%';
-        }
-        if ($fuel) {
-            $where[] = "LOWER(v.fuel_type) = LOWER(?)";
-            $params[] = $fuel;
-        }
-        if ($transmission) {
-            $where[] = "LOWER(v.transmission) = LOWER(?)";
-            $params[] = $transmission;
-        }
-        if ($maxPrice && $maxPrice < 9999) {
-            $where[] = "v.price_per_day <= ?";
-            $params[] = $maxPrice;
-        }
-        if ($location) {
-            $where[] = "(LOWER(v.location_city) ILIKE ? OR LOWER(v.location_address) ILIKE ?)";
-            $params[] = '%' . strtolower($location) . '%';
-            $params[] = '%' . strtolower($location) . '%';
-        }
-        if ($search) {
-            $where[] = "(LOWER(v.brand) ILIKE ? OR LOWER(v.model) ILIKE ? OR LOWER(v.category) ILIKE ? OR LOWER(v.brand || ' ' || v.model) ILIKE ? OR LOWER(v.brand || ' ' || v.model || ' ' || CAST(v.year AS TEXT)) ILIKE ?)";
-            $searchLike = '%' . strtolower($search) . '%';
-            $params[] = $searchLike;
-            $params[] = $searchLike;
-            $params[] = $searchLike;
-            $params[] = $searchLike;
-            $params[] = $searchLike;
+        // Attach first image (thumbnail if present) as vehicle_image
+        foreach ($vehicles as &$v) {
+            $v['price_per_day'] = isset($v['price_per_day']) ? (float)$v['price_per_day'] : null;
+            try {
+                $imgs = getVehicleImageUrls($pdo, $v['id']);
+                $v['vehicle_image'] = $imgs[0] ?? null;
+            } catch (Exception $ignore) {
+                $v['vehicle_image'] = null;
+            }
         }
 
-        $whereClause = implode(' AND ', $where);
-        $params[] = $limit;
-        $params[] = $offset;
+        echo json_encode(['success' => true, 'vehicles' => $vehicles]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error.']);
+    }
+    exit;
+}
 
-        $sql = "
-            SELECT v.*, u.full_name AS owner_name, u.avatar_url AS owner_avatar
-            FROM vehicles v
-            JOIN users u ON v.owner_id = u.id
-            WHERE {$whereClause}
-            ORDER BY v.created_at DESC
-            LIMIT ? OFFSET ?
-        ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $vehicles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// ==========================================================
+// LIST VEHICLES (public - anyone can view)
+// Tightened: only expose available vehicles to customers
+// ==========================================================
+if ($action === 'list') {
+    $filters = [
+        'category' => $_GET['category'] ?? $input['category'] ?? '',
+        'brand' => $_GET['brand'] ?? $input['brand'] ?? '',
+        'fuel' => $_GET['fuel'] ?? $input['fuel'] ?? '',
+        'transmission' => $_GET['transmission'] ?? $input['transmission'] ?? '',
+        'max_price' => $_GET['max_price'] ?? $input['max_price'] ?? 9999,
+        'location' => $_GET['location'] ?? $input['location'] ?? '',
+        'search' => $_GET['search'] ?? $input['search'] ?? '',
+        'limit' => $_GET['limit'] ?? $input['limit'] ?? 20,
+        'offset' => $_GET['offset'] ?? $input['offset'] ?? 0,
+    ];
 
-        // Get total count
-        $countSql = "SELECT COUNT(*) FROM vehicles v WHERE {$whereClause}";
-        $countStmt = $pdo->prepare($countSql);
-        $countStmt->execute(array_slice($params, 0, -2));
-        $total = $countStmt->fetchColumn();
+    try {
+        $res = $vehicleRepo->listAvailable($filters);
+        $vehicles = $res['vehicles'];
+        $total = $res['total'];
 
-        // Process each vehicle: get images from vehicle_images table
         foreach ($vehicles as &$v) {
             $v['images'] = getVehicleImageUrls($pdo, $v['id']);
             $v['image_ids'] = getVehicleImageIds($pdo, $v['id']);
@@ -267,8 +217,11 @@ if ($action === 'list') {
             $v['features'] = $v['features'] ? explode(',', str_replace('"', '', $v['features'])) : [];
             $v['price_per_day'] = (float)$v['price_per_day'];
             $v['avg_rating'] = (float)$v['avg_rating'];
-            unset($v['thumbnail_id']); // don't expose internal ID
+            unset($v['thumbnail_id']);
         }
+
+        $limit = min((int)($filters['limit'] ?? 20), 50);
+        $offset = max((int)($filters['offset'] ?? 0), 0);
 
         echo json_encode([
             'success' => true,
@@ -294,14 +247,7 @@ if ($action === 'get') {
     }
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT v.*, u.full_name AS owner_name, u.avatar_url AS owner_avatar, u.phone AS owner_phone
-            FROM vehicles v
-            JOIN users u ON v.owner_id = u.id
-            WHERE v.id = ?
-        ");
-        $stmt->execute([$vehicleId]);
-        $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
+        $vehicle = $vehicleRepo->getById((string)$vehicleId);
 
         if (!$vehicle) {
             echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
@@ -324,20 +270,14 @@ if ($action === 'get') {
 }
 
 // ==========================================================
-// MY VEHICLES (owner only - get their own vehicles)
+// MY VEHICLES (staff/admin only - get all vehicles)
 // ==========================================================
 if ($action === 'my-vehicles') {
-    requireOwner();
-    $ownerId = $_SESSION['user_id'];
+    requireStaffOrAdmin();
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT * FROM vehicles
-            WHERE owner_id = ?
-            ORDER BY created_at DESC
-        ");
-        $stmt->execute([$ownerId]);
-        $vehicles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // List all vehicles via repository
+        $vehicles = $vehicleRepo->listAll();
 
         foreach ($vehicles as &$v) {
             $v['images'] = getVehicleImageUrls($pdo, $v['id']);
@@ -357,16 +297,14 @@ if ($action === 'my-vehicles') {
 }
 
 // ==========================================================
-// ADD VEHICLE (owner only)
+// ADD VEHICLE (staff/admin only)
 // ==========================================================
 if ($action === 'add') {
-    requireOwner();
+    requireStaffOrAdmin();
     $ownerId = $_SESSION['user_id'];
 
     // Verify user still exists in DB (may have been deleted after schema reset)
-    $checkUser = $pdo->prepare("SELECT id FROM users WHERE id = ?");
-    $checkUser->execute([$ownerId]);
-    if (!$checkUser->fetch()) {
+    if (!$vehicleRepo->userExists($ownerId)) {
         // User's session is stale — force re-login
         session_destroy();
         echo json_encode(['success' => false, 'message' => 'Your session is invalid. The database may have been reset. Please log out and register/login again.', 'force_logout' => true]);
@@ -401,9 +339,7 @@ if ($action === 'add') {
 
     // Check for duplicate license plate BEFORE insert
     try {
-        $checkPlate = $pdo->prepare("SELECT id FROM vehicles WHERE LOWER(license_plate) = LOWER(?)");
-        $checkPlate->execute([$licensePlate]);
-        if ($checkPlate->fetch()) {
+        if ($vehicleRepo->licensePlateExists($licensePlate)) {
             echo json_encode(['success' => false, 'message' => 'A vehicle with license plate "' . $licensePlate . '" already exists. Each vehicle must have a unique license plate.']);
             exit;
         }
@@ -411,43 +347,34 @@ if ($action === 'add') {
         // If check fails, let the insert handle the unique constraint
     }
 
-    // Convert PHP arrays to PostgreSQL TEXT[] format
-    $featuresStr = '{' . implode(',', array_map(fn($f) => '"' . str_replace('"', '\\"', $f) . '"', $features)) . '}';
-
     try {
         $pdo->beginTransaction();
 
-        $stmt = $pdo->prepare("
-            INSERT INTO vehicles (
-                owner_id, brand, model, year, license_plate, category, transmission, fuel_type,
-                seats, color, engine_size, consumption, features,
-                price_per_day, price_per_week, price_per_month,
-                location_city, location_address
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?::TEXT[],
-                ?, ?, ?,
-                NULLIF(?, ''), NULLIF(?, '')
-            ) RETURNING id
-        ");
-        $stmt->execute([
-            $ownerId, $brand, $model, $year, $licensePlate, $category, $transmission, $fuelType,
-            $seats, $color, $engineSize, $consumption, $featuresStr,
-            $pricePerDay, $pricePerWeek, $pricePerMonth,
-            $locationCity, $locationAddr
+        // Create vehicle via repository
+        $vehicleId = $vehicleRepo->create([
+            'owner_id' => $ownerId,
+            'brand' => $brand,
+            'model' => $model,
+            'year' => $year,
+            'license_plate' => $licensePlate,
+            'category' => $category,
+            'transmission' => $transmission,
+            'fuel_type' => $fuelType,
+            'seats' => $seats,
+            'color' => $color,
+            'engine_size' => $engineSize,
+            'consumption' => $consumption,
+            'features' => $features,
+            'price_per_day' => $pricePerDay,
+            'price_per_week' => $pricePerWeek,
+            'price_per_month' => $pricePerMonth,
+            'location_city' => $locationCity,
+            'location_address' => $locationAddr
         ]);
-        $vehicleId = $stmt->fetchColumn();
 
         // Link uploaded images to this vehicle
         if (!empty($imageIds)) {
-            $updateStmt = $pdo->prepare("UPDATE vehicle_images SET vehicle_id = ?, sort_order = ? WHERE id = ?");
-            foreach ($imageIds as $i => $imgId) {
-                $updateStmt->execute([$vehicleId, $i, $imgId]);
-            }
-            // Set first image as thumbnail
-            $thumbStmt = $pdo->prepare("UPDATE vehicle_images SET is_thumbnail = TRUE WHERE id = ?");
-            $thumbStmt->execute([$imageIds[0]]);
-            $pdo->prepare("UPDATE vehicles SET thumbnail_id = ? WHERE id = ?")->execute([$imageIds[0], $vehicleId]);
+            $vehicleRepo->linkImagesToVehicle($vehicleId, $imageIds);
         }
 
         $pdo->commit();
@@ -469,10 +396,10 @@ if ($action === 'add') {
 }
 
 // ==========================================================
-// UPDATE VEHICLE (owner only - must own the vehicle)
+// UPDATE VEHICLE (staff/admin only)
 // ==========================================================
 if ($action === 'update') {
-    requireOwner();
+    requireStaffOrAdmin();
     $ownerId   = $_SESSION['user_id'];
     $vehicleId = $input['vehicle_id'] ?? '';
 
@@ -482,35 +409,21 @@ if ($action === 'update') {
     }
 
     // Verify ownership
-    try {
-        $stmt = $pdo->prepare("SELECT id FROM vehicles WHERE id = ? AND owner_id = ?");
-        $stmt->execute([$vehicleId, $ownerId]);
-        if (!$stmt->fetch()) {
-            echo json_encode(['success' => false, 'message' => 'Vehicle not found or you do not own this vehicle.']);
-            exit;
-        }
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    if (!$vehicleRepo->existsForUser($vehicleId, $ownerId)) {
+        echo json_encode(['success' => false, 'message' => 'Vehicle not found or you do not own this vehicle.']);
         exit;
     }
 
     // Check for duplicate license plate on update (exclude current vehicle)
     if (!empty($input['license_plate'])) {
-        try {
-            $checkPlate = $pdo->prepare("SELECT id FROM vehicles WHERE LOWER(license_plate) = LOWER(?) AND id != ?");
-            $checkPlate->execute([trim($input['license_plate']), $vehicleId]);
-            if ($checkPlate->fetch()) {
-                echo json_encode(['success' => false, 'message' => 'A vehicle with license plate "' . trim($input['license_plate']) . '" already exists. Each vehicle must have a unique license plate.']);
-                exit;
-            }
-        } catch (PDOException $e) {
-            // If check fails, let the update handle the unique constraint
+        if ($vehicleRepo->licensePlateExists(trim($input['license_plate']), $vehicleId)) {
+            echo json_encode(['success' => false, 'message' => 'A vehicle with license plate "' . trim($input['license_plate']) . '" already exists. Each vehicle must have a unique license plate.']);
+            exit;
         }
     }
 
-    // Build dynamic update
+    // Build fields to update
     $updates = [];
-    $params = [];
 
     $allowedFields = [
         'brand', 'model', 'year', 'license_plate', 'category', 'transmission', 'fuel_type',
@@ -521,44 +434,25 @@ if ($action === 'update') {
 
     foreach ($allowedFields as $field) {
         if (isset($input[$field])) {
-            $updates[] = "$field = ?";
-            $params[] = $input[$field];
+            $updates[$field] = $input[$field];
         }
     }
 
     // Handle arrays specially
     if (isset($input['features'])) {
-        $featuresStr = '{' . implode(',', array_map(fn($f) => '"' . str_replace('"', '\\"', $f) . '"', $input['features'])) . '}';
-        $updates[] = "features = ?::TEXT[]";
-        $params[] = $featuresStr;
+        $updates['features'] = $input['features'];
     }
 
     // Handle image_ids: update which images belong to this vehicle
     if (isset($input['image_ids'])) {
         $imageIds = $input['image_ids'];
-
-        // Remove images that are no longer in the list
-        $currentIds = getVehicleImageIds($pdo, $vehicleId);
-        $removedIds = array_diff($currentIds, $imageIds);
-        if (!empty($removedIds)) {
-            $placeholders = implode(',', array_fill(0, count($removedIds), '?'));
-            $pdo->prepare("DELETE FROM vehicle_images WHERE id IN ($placeholders)")->execute(array_values($removedIds));
-        }
-
-        // Update sort order for remaining images
-        $updateSort = $pdo->prepare("UPDATE vehicle_images SET sort_order = ?, vehicle_id = ? WHERE id = ?");
-        foreach ($imageIds as $i => $imgId) {
-            $updateSort->execute([$i, $vehicleId, $imgId]);
-        }
-
-        // Reset thumbnails and set new thumbnail
-        $pdo->prepare("UPDATE vehicle_images SET is_thumbnail = FALSE WHERE vehicle_id = ?")->execute([$vehicleId]);
+        $vehicleRepo->updateVehicleImages($vehicleId, $imageIds);
+        
+        // Set thumbnail in updates
         if (!empty($imageIds)) {
-            $pdo->prepare("UPDATE vehicle_images SET is_thumbnail = TRUE WHERE id = ?")->execute([$imageIds[0]]);
-            $updates[] = "thumbnail_id = ?";
-            $params[] = $imageIds[0];
+            $updates['thumbnail_id'] = $imageIds[0];
         } else {
-            $updates[] = "thumbnail_id = NULL";
+            $updates['thumbnail_id'] = null;
         }
     }
 
@@ -567,15 +461,9 @@ if ($action === 'update') {
         exit;
     }
 
-    $updates[] = "updated_at = NOW()";
-    $params[] = $vehicleId;
-    $params[] = $ownerId;
-
     try {
-        $sql = "UPDATE vehicles SET " . implode(', ', $updates) . " WHERE id = ? AND owner_id = ? RETURNING *";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $vehicle = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Update vehicle via repository
+        $vehicle = $vehicleRepo->updateVehicle($vehicleId, $ownerId, $updates);
 
         echo json_encode([
             'success' => true,
@@ -589,10 +477,10 @@ if ($action === 'update') {
 }
 
 // ==========================================================
-// DELETE VEHICLE (owner only - must own the vehicle)
+// DELETE VEHICLE (staff/admin only)
 // ==========================================================
 if ($action === 'delete') {
-    requireOwner();
+    requireStaffOrAdmin();
     $ownerId   = $_SESSION['user_id'];
     $vehicleId = $input['vehicle_id'] ?? '';
 
@@ -603,29 +491,23 @@ if ($action === 'delete') {
 
     try {
         // Check for active bookings
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE vehicle_id = ? AND status IN ('pending', 'confirmed', 'in_progress')");
-        $stmt->execute([$vehicleId]);
-        $activeBookings = $stmt->fetchColumn();
-
+        $activeBookings = $vehicleRepo->countActiveBookings($vehicleId);
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete vehicle with active bookings. Please cancel or complete all bookings first.']);
             exit;
         }
 
         // Delete images from Supabase Storage first
-        $imgStmt = $pdo->prepare("SELECT storage_path FROM vehicle_images WHERE vehicle_id = ? AND storage_path IS NOT NULL");
-        $imgStmt->execute([$vehicleId]);
-        $storagePaths = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
+        $storagePaths = $vehicleRepo->getImageStoragePaths($vehicleId);
         if (!empty($storagePaths)) {
             $storage = new SupabaseStorage();
             $storage->deleteMultiple($storagePaths);
         }
 
-        // vehicle_images will be deleted via ON DELETE CASCADE
-        $stmt = $pdo->prepare("DELETE FROM vehicles WHERE id = ? AND owner_id = ?");
-        $stmt->execute([$vehicleId, $ownerId]);
+        // Delete vehicle via repository
+        $deleted = $vehicleRepo->deleteVehicle($vehicleId, $ownerId);
 
-        if ($stmt->rowCount() === 0) {
+        if (!$deleted) {
             echo json_encode(['success' => false, 'message' => 'Vehicle not found or you do not own this vehicle.']);
             exit;
         }
@@ -638,10 +520,10 @@ if ($action === 'delete') {
 }
 
 // ==========================================================
-// UPLOAD IMAGE (owner only - stores in Supabase Storage)
+// UPLOAD IMAGE (staff/admin only - stores in Supabase Storage)
 // ==========================================================
 if ($action === 'upload-image') {
-    requireOwner();
+    requireStaffOrAdmin();
 
     if (!isset($_FILES['image'])) {
         echo json_encode(['success' => false, 'message' => 'No image file provided.']);
@@ -671,37 +553,25 @@ if ($action === 'upload-image') {
     $vehicleId = $_POST['vehicle_id'] ?? null;
 
     try {
+        // storage_path-only
         $storage = new SupabaseStorage();
         $uniqueName = SupabaseStorage::uniqueName($file['name']);
         $folder = $vehicleId ? 'vehicles/' . $vehicleId : 'vehicles/unlinked';
         $storagePath = $folder . '/' . $uniqueName;
 
-        // Upload to Supabase Storage
         $uploadResult = $storage->upload($storagePath, $imageData, $file['type']);
         if (!$uploadResult['success']) {
             echo json_encode(['success' => false, 'message' => 'Storage upload failed: ' . ($uploadResult['message'] ?? 'Unknown error')]);
             exit;
         }
 
-        // Save metadata to DB (no BYTEA data)
-        $stmt = $pdo->prepare("
-            INSERT INTO vehicle_images (vehicle_id, storage_path, mime_type, file_name, file_size)
-            VALUES (:vid, :spath, :mime, :fname, :fsize)
-            RETURNING id
-        ");
-        $vid = $vehicleId ?: null;
-        $stmt->bindParam(':vid', $vid);
-        $stmt->bindParam(':spath', $storagePath);
-        $stmt->bindParam(':mime', $file['type']);
-        $stmt->bindParam(':fname', $file['name']);
-        $stmt->bindParam(':fsize', $file['size'], PDO::PARAM_INT);
-        $stmt->execute();
-        $imageId = $stmt->fetchColumn();
+        $imageId = $vehicleRepo->insertImage($vehicleId, $storagePath, $file['type'], $file['name'], $file['size']);
 
         echo json_encode([
             'success' => true,
             'message' => 'Image uploaded successfully!',
             'image_id' => $imageId,
+            'storage_path' => $storagePath,
             'url' => $uploadResult['public_url']
         ]);
     } catch (Exception $e) {
@@ -711,10 +581,10 @@ if ($action === 'upload-image') {
 }
 
 // ==========================================================
-// DELETE IMAGE (owner only)
+// DELETE IMAGE (staff/admin only)
 // ==========================================================
 if ($action === 'delete-image') {
-    requireOwner();
+    requireStaffOrAdmin();
 
     $imageId = $input['image_id'] ?? '';
     if (empty($imageId)) {
@@ -724,26 +594,23 @@ if ($action === 'delete-image') {
 
     try {
         // Verify the image belongs to a vehicle owned by this user & get storage_path
-        $stmt = $pdo->prepare("
-            SELECT vi.id, vi.storage_path FROM vehicle_images vi
-            LEFT JOIN vehicles v ON vi.vehicle_id = v.id
-            WHERE vi.id = ? AND (v.owner_id = ? OR vi.vehicle_id IS NULL)
-        ");
-        $stmt->execute([$imageId, $_SESSION['user_id']]);
-        $img = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$img) {
+        $img = $vehicleRepo->getImage($imageId);
+        if (!$img || ($img['owner_id'] && $img['owner_id'] !== $_SESSION['user_id'])) {
             echo json_encode(['success' => false, 'message' => 'Image not found or access denied.']);
             exit;
         }
 
-        // Delete from Supabase Storage
-        if (!empty($img['storage_path'])) {
-            $storage = new SupabaseStorage();
-            $storage->delete($img['storage_path']);
+        if (empty($img['storage_path'])) {
+            echo json_encode(['success' => false, 'message' => 'Image storage path missing.']);
+            exit;
         }
 
+        // Delete from Supabase Storage
+        $storage = new SupabaseStorage();
+        $storage->delete($img['storage_path']);
+
         // Delete DB record
-        $pdo->prepare("DELETE FROM vehicle_images WHERE id = ?")->execute([$imageId]);
+        $vehicleRepo->deleteImage($imageId);
         echo json_encode(['success' => true, 'message' => 'Image deleted.']);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);

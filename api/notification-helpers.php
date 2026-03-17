@@ -52,17 +52,11 @@ if (!function_exists('createNotificationForAll')) {
                 $type = 'system';
             }
 
-            $stmt = $pdo->query("SELECT id FROM users WHERE is_active = true");
-            $users = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-            $insertStmt = $pdo->prepare("
-                INSERT INTO notifications (user_id, type, title, message)
-                VALUES (?, ?::notification_type, ?, ?)
-            ");
+            $users = $userRepo->getAllActiveUserIds();
 
             $count = 0;
             foreach ($users as $uid) {
-                $insertStmt->execute([$uid, $type, $title, $message]);
+                $userRepo->createNotification($uid, $type, $title, $message);
                 $count++;
             }
             return $count;

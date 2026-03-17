@@ -1,837 +1,302 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $title ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+<!-- REGISTER MODAL OVERLAY -->
+<div id="registerModalOverlay" class="modal-overlay" style="display: none;">
+    <div class="modal" style="max-width: 550px;">
+        <!-- Close Button -->
+        <button onclick="closeRegisterModal()" class="modal-close" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">✕</button>
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #0f172a 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .container { width: 100%; max-width: 520px; }
-
-        .brand { text-align: center; margin-bottom: 24px; }
-        .brand a { color: white; text-decoration: none; font-size: 1.75rem; font-weight: 800; }
-
-        .card {
-            background: #fff;
-            border-radius: 20px;
-            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
-
-        .card-header {
-            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-            color: white;
-            padding: 28px;
-            text-align: center;
-        }
-        .card-header h1 { font-size: 1.5rem; margin-bottom: 6px; font-weight: 800; }
-        .card-header p { opacity: 0.85; font-size: 0.875rem; }
-        .card-body { padding: 28px; }
-
-        /* Step Indicator */
-        .steps {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            margin-bottom: 28px;
-        }
-        .step-dot {
-            width: 12px; height: 12px;
-            border-radius: 50%;
-            background: #e2e8f0;
-            transition: all 0.3s;
-        }
-        .step-dot.active { background: #2563eb; transform: scale(1.2); }
-        .step-dot.done { background: #22c55e; }
-        .step-label {
-            display: flex;
-            justify-content: center;
-            gap: 32px;
-            margin-bottom: 24px;
-            font-size: 0.75rem;
-            color: #94a3b8;
-        }
-        .step-label span { transition: color 0.3s; }
-        .step-label span.active { color: #2563eb; font-weight: 600; }
-        .step-label span.done { color: #22c55e; }
-
-        /* Form Elements */
-        .form-group { margin-bottom: 18px; }
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            color: #1e293b;
-            font-size: 0.875rem;
-        }
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 0.875rem;
-            font-family: 'Inter', sans-serif;
-            transition: border-color 0.3s;
-            background: #fff;
-        }
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        /* Password wrapper */
-        .password-wrapper {
-            position: relative;
-        }
-        .password-wrapper input {
-            padding-right: 48px;
-        }
-        .toggle-password {
-            position: absolute;
-            right: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.1rem;
-            color: #94a3b8;
-            padding: 4px;
-        }
-        .toggle-password:hover { color: #2563eb; }
-
-        .password-hint {
-            font-size: 0.75rem;
-            color: #94a3b8;
-            margin-top: 4px;
-        }
-
-        /* OTP Input */
-        .otp-container {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            margin: 24px 0;
-        }
-        .otp-input {
-            width: 48px; height: 56px;
-            text-align: center;
-            font-size: 1.5rem;
-            font-weight: 700;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            font-family: 'Inter', sans-serif;
-            transition: all 0.3s;
-        }
-        .otp-input:focus {
-            outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-
-        /* Role Selection */
-        .role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
-        .role-card {
-            border: 2px solid #e2e8f0;
-            border-radius: 16px;
-            padding: 24px 16px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .role-card:hover { border-color: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
-        .role-card.selected { border-color: #2563eb; background: #eff6ff; box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
-        .role-icon { font-size: 2.5rem; margin-bottom: 12px; }
-        .role-title { font-weight: 700; color: #1e293b; margin-bottom: 4px; font-size: 1rem; }
-        .role-desc { color: #64748b; font-size: 0.75rem; line-height: 1.5; }
-        .role-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.688rem;
-            font-weight: 600;
-            margin-top: 8px;
-        }
-        .role-card:first-child .role-badge { background: #dbeafe; color: #1d4ed8; }
-        .role-card:last-child .role-badge { background: #dcfce7; color: #166534; }
-
-        /* Buttons */
-        .btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 10px;
-            font-family: 'Inter', sans-serif;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-            color: white;
-        }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4); }
-        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-        .btn-outline {
-            background: transparent;
-            color: #2563eb;
-            border: 2px solid #2563eb;
-        }
-        .btn-outline:hover { background: #eff6ff; }
-
-        /* Status Bar */
-        .status-bar {
-            padding: 12px 16px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            font-size: 0.875rem;
-            text-align: center;
-            font-weight: 500;
-            display: none;
-        }
-        .status-bar.show { display: block; }
-        .status-loading { background: #fef3c7; color: #92400e; }
-        .status-success { background: #dcfce7; color: #166534; }
-        .status-error { background: #fee2e2; color: #991b1b; }
-        .status-info { background: #dbeafe; color: #1e40af; }
-
-        /* Links */
-        .links {
-            text-align: center;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #f1f5f9;
-            font-size: 0.875rem;
-            color: #64748b;
-        }
-        .links a { color: #2563eb; text-decoration: none; font-weight: 600; }
-        .links a:hover { text-decoration: underline; }
-
-        /* Timer */
-        .otp-timer {
-            text-align: center;
-            color: #64748b;
-            font-size: 0.813rem;
-            margin-bottom: 16px;
-        }
-        .otp-timer strong { color: #2563eb; }
-        .resend-link {
-            color: #2563eb;
-            cursor: pointer;
-            font-weight: 600;
-            background: none;
-            border: none;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.813rem;
-        }
-        .resend-link:disabled { color: #94a3b8; cursor: not-allowed; }
-
-        /* Dev OTP display */
-        .dev-otp {
-            background: #fef3c7;
-            border: 2px dashed #f59e0b;
-            border-radius: 12px;
-            padding: 12px;
-            text-align: center;
-            margin-bottom: 16px;
-            font-size: 0.813rem;
-            color: #92400e;
-        }
-        .dev-otp strong {
-            font-size: 1.25rem;
-            color: #d97706;
-            letter-spacing: 4px;
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 18px; height: 18px;
-            border: 2px solid currentColor;
-            border-top-color: transparent;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .hidden { display: none !important; }
-
-        /* Success animation */
-        .success-icon {
-            width: 80px; height: 80px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.5rem;
-            margin: 0 auto 20px;
-            animation: popIn 0.5s ease;
-            color: white;
-        }
-        @keyframes popIn {
-            0% { transform: scale(0); }
-            70% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-
-        .field-error {
-            font-size: 0.78rem;
-            color: #ef4444;
-            margin-top: 4px;
-            min-height: 18px;
-            font-weight: 500;
-            transition: opacity 0.2s;
-        }
-        .field-error:empty { opacity: 0; }
-        .field-error:not(:empty) { opacity: 1; }
-
-        input.input-error {
-            border-color: #ef4444 !important;
-            box-shadow: 0 0 0 3px rgba(239,68,68,0.1) !important;
-        }
-        input.input-valid {
-            border-color: #22c55e !important;
-            box-shadow: 0 0 0 3px rgba(34,197,94,0.1) !important;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="brand"><a href="index.php">🚗 DriveNow</a></div>
-        <div class="card">
-            <div class="card-header">
-                <h1>📝 Create Your Account</h1>
-                <p>Join DriveNow — Rent or List your car today</p>
+        <div style="padding: 40px;">
+            <!-- Progress Indicator -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; gap: 10px;">
+                <div class="step-dot active" data-step="1" style="width: 40px; height: 40px; border-radius: 50%; background: #0f766e; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer;" onclick="regGoToStep(1)">1</div>
+                <div style="flex: 1; height: 2px; background: #ddd;"></div>
+                <div class="step-dot" data-step="2" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer;" onclick="regGoToStep(2)">2</div>
+                <div style="flex: 1; height: 2px; background: #ddd;"></div>
+                <div class="step-dot" data-step="3" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer;" onclick="regGoToStep(3)">3</div>
+                <div style="flex: 1; height: 2px; background: #ddd;"></div>
+                <div class="step-dot" data-step="4" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600;">4</div>
             </div>
 
-            <div class="card-body">
-                <!-- Step Indicator -->
-                <div class="steps">
-                    <div class="step-dot active" id="dot1"></div>
-                    <div class="step-dot" id="dot2"></div>
-                    <div class="step-dot" id="dot3"></div>
-                </div>
-                <div class="step-label">
-                    <span class="active" id="label1">Info</span>
-                    <span id="label2">Verify</span>
-                    <span id="label3">Role</span>
-                </div>
+            <!-- ===== STEP 1: PERSONAL INFO ===== -->
+            <div id="regStep1" style="display: block;">
+                <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 24px; font-weight: 600;">Create Account</h2>
+                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 1 of 4: Your Information</p>
 
-                <!-- Status Bar -->
-                <div id="statusBar" class="status-bar"></div>
-
-                <!-- ===== STEP 1: Personal Info + Password ===== -->
-                <div id="step1">
-                    <div class="form-group">
-                        <label>👤 Full Name *</label>
-                        <input type="text" id="fullName" required>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>📧 Email *</label>
-                            <input type="email" id="email" required onblur="checkDuplicate('email')">
-                            <div class="field-error" id="emailError"></div>
-                        </div>
-                        <div class="form-group">
-                            <label>📱 Phone *</label>
-                            <input type="tel" id="phone" required onblur="checkDuplicate('phone')">
-                            <div class="field-error" id="phoneError"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>🎂 Date of Birth * <span style="font-weight:400;font-size:0.75rem;color:#94a3b8;">(Must be 18+)</span></label>
-                            <input type="date" id="dob" required>
-                        </div>
-                        <div class="form-group">
-                            <label>📍 Address</label>
-                            <input type="text" id="address">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>🔒 Password *</label>
-                        <div class="password-wrapper">
-                            <input type="password" id="password" required autocomplete="new-password">
-                            <button type="button" class="toggle-password" onclick="togglePassword('password')">👁️</button>
-                        </div>
-                        <div class="password-hint">At least 6 characters</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>🔒 Confirm Password *</label>
-                        <div class="password-wrapper">
-                            <input type="password" id="confirmPassword" required autocomplete="new-password">
-                            <button type="button" class="toggle-password" onclick="togglePassword('confirmPassword')">👁️</button>
-                        </div>
-                    </div>
-
-                    <button type="button" class="btn btn-primary" onclick="goToStep2()">
-                        Continue → Verify Email
-                    </button>
+                <!-- Full Name -->
+                <div style="margin-bottom: 18px;">
+                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Full Name</label>
+                    <input type="text" id="regFullName" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           placeholder="Enter your full name"
+                           onblur="this.style.borderColor = '#ddd'"
+                           onfocus="this.style.borderColor = '#0f766e'">
                 </div>
 
-                <!-- ===== STEP 2: Email OTP Verification ===== -->
-                <div id="step2" class="hidden">
-                    <div style="text-align:center;margin-bottom:20px;">
-                        <div style="font-size:3rem;margin-bottom:12px;">📧</div>
-                        <h3 style="color:#1e293b;margin-bottom:8px;">Check Your Email</h3>
-                        <p style="color:#64748b;font-size:0.875rem;">
-                            We've sent a 6-digit code to<br>
-                            <strong id="verifyEmail" style="color:#2563eb;"></strong>
-                        </p>
-                    </div>
+                <!-- Email -->
+                <div style="margin-bottom: 18px;">
+                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Email Address</label>
+                    <input type="email" id="regEmail" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           placeholder="you@example.com"
+                           onblur="this.style.borderColor = '#ddd'"
+                           onfocus="this.style.borderColor = '#0f766e'">
+                </div>
 
-                    <div class="otp-container">
-                        <input type="text" class="otp-input" maxlength="1" id="otp1" oninput="otpInput(this, 'otp2')" onkeydown="otpKeydown(event, this, null)">
-                        <input type="text" class="otp-input" maxlength="1" id="otp2" oninput="otpInput(this, 'otp3')" onkeydown="otpKeydown(event, this, 'otp1')">
-                        <input type="text" class="otp-input" maxlength="1" id="otp3" oninput="otpInput(this, 'otp4')" onkeydown="otpKeydown(event, this, 'otp2')">
-                        <input type="text" class="otp-input" maxlength="1" id="otp4" oninput="otpInput(this, 'otp5')" onkeydown="otpKeydown(event, this, 'otp3')">
-                        <input type="text" class="otp-input" maxlength="1" id="otp5" oninput="otpInput(this, 'otp6')" onkeydown="otpKeydown(event, this, 'otp4')">
-                        <input type="text" class="otp-input" maxlength="1" id="otp6" oninput="otpInput(this, null)" onkeydown="otpKeydown(event, this, 'otp5')">
-                    </div>
+                <!-- Phone -->
+                <div style="margin-bottom: 18px;">
+                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Phone Number</label>
+                    <input type="tel" id="regPhone" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           placeholder="Your phone number"
+                           onblur="this.style.borderColor = '#ddd'"
+                           onfocus="this.style.borderColor = '#0f766e'">
+                </div>
 
-                    <div class="otp-timer" id="otpTimer">
-                        Code expires in <strong id="countdown">5:00</strong>
-                    </div>
+                <!-- Date of Birth -->
+                <div style="margin-bottom: 18px;">
+                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Date of Birth</label>
+                    <input type="date" id="regDOB" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           onblur="this.style.borderColor = '#ddd'"
+                           onfocus="this.style.borderColor = '#0f766e'">
+                </div>
 
-                    <button type="button" class="btn btn-primary" id="verifyBtn" onclick="verifyOtp()">
-                        ✅ Verify Email
-                    </button>
-
-                    <div style="text-align:center;margin-top:12px;">
-                        <button class="resend-link" id="resendBtn" onclick="resendOtp()" disabled>
-                            Resend Code
+                <!-- Password -->
+                <div style="margin-bottom: 18px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <label style="color: #333; font-weight: 500; font-size: 14px;">Password</label>
+                        <button type="button" onclick="toggleRegPassword('regPassword')" 
+                                style="background: none; border: none; color: #0f766e; cursor: pointer; font-size: 12px;">
+                            <span id="regPasswordToggle1">Show</span>
                         </button>
-                        <span style="color:#94a3b8;font-size:0.75rem;" id="resendTimer"> (wait 30s)</span>
                     </div>
+                    <input type="password" id="regPassword" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           placeholder="At least 6 characters"
+                           onblur="this.style.borderColor = '#ddd'"
+                           onfocus="this.style.borderColor = '#0f766e'">
+                </div>
 
-                    <button type="button" class="btn btn-outline" style="margin-top:12px;" onclick="backToStep1()">
-                        ← Back to Edit Info
+                <!-- Confirm Password -->
+                <div style="margin-bottom: 25px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <label style="color: #333; font-weight: 500; font-size: 14px;">Confirm Password</label>
+                        <button type="button" onclick="toggleRegPassword('regConfirmPassword')" 
+                                style="background: none; border: none; color: #0f766e; cursor: pointer; font-size: 12px;">
+                            <span id="regPasswordToggle2">Show</span>
+                        </button>
+                    </div>
+                    <input type="password" id="regConfirmPassword" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           placeholder="Confirm your password"
+                           onblur="this.style.borderColor = '#ddd'"
+                           onfocus="this.style.borderColor = '#0f766e'">
+                </div>
+
+                <!-- Status Message -->
+                <div id="regStep1Status" style="display: none; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center;"></div>
+
+                <!-- Next Button -->
+                <button type="button" onclick="regGoToStep2()" 
+                        style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;"
+                        onmouseover="this.style.filter = 'brightness(1.1)'"
+                        onmouseout="this.style.filter = 'brightness(1)'">
+                    Next: Verify Email →
+                </button>
+
+                <!-- Sign In Link -->
+                <div style="text-align: center; margin-top: 15px; font-size: 14px; color: #666;">
+                    Already have an account? 
+                    <button type="button" onclick="switchAuthModal('login')" 
+                            style="background: none; border: none; color: #0f766e; cursor: pointer; font-weight: 600;">
+                        Sign In
                     </button>
                 </div>
+            </div>
 
-                <!-- ===== STEP 3: Choose Role ===== -->
-                <div id="step3" class="hidden">
-                    <div style="text-align:center;margin-bottom:20px;">
-                        <div style="font-size:3rem;margin-bottom:12px;">🎯</div>
-                        <h3 style="color:#1e293b;margin-bottom:8px;">How Will You Use DriveNow?</h3>
-                        <p style="color:#64748b;font-size:0.875rem;">Choose your primary role. You can change this later.</p>
-                    </div>
+            <!-- ===== STEP 2: EMAIL OTP ===== -->
+            <div id="regStep2" style="display: none;">
+                <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 24px; font-weight: 600;">Verify Email</h2>
+                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 2 of 4: Enter the code sent to your email</p>
 
-                    <div class="role-grid">
-                        <div class="role-card" id="roleRenter" onclick="selectRole('renter')">
-                            <div class="role-icon">🚗</div>
-                            <div class="role-title">Renter</div>
-                            <div class="role-desc">I want to rent cars for my trips and daily commute</div>
-                            <span class="role-badge">Rent a Car</span>
-                        </div>
-                        <div class="role-card" id="roleOwner" onclick="selectRole('owner')">
-                            <div class="role-icon">🏠</div>
-                            <div class="role-title">Car Owner</div>
-                            <div class="role-desc">I want to list my car and earn money from rentals</div>
-                            <span class="role-badge">Earn Money</span>
-                        </div>
-                    </div>
+                <!-- Email Display -->
+                <div style="padding: 12px; background: #f0fdfa; border-radius: 8px; margin-bottom: 25px; color: #333; font-size: 14px; text-align: center;">
+                    <span id="regOtpEmail" style="font-weight: 600;"></span>
+                </div>
 
-                    <button type="button" class="btn btn-primary" id="createBtn" onclick="createAccount()" disabled>
-                        🚀 Create My Account
+                <!-- OTP Input Fields -->
+                <div id="otpInputContainer" style="display: flex; gap: 10px; justify-content: center; margin-bottom: 25px;"></div>
+
+                <!-- Resend OTP -->
+                <div style="text-align: center; margin-bottom: 25px; font-size: 13px; color: #666;">
+                    Didn't receive the code? 
+                    <button type="button" id="resendOtpBtn" onclick="regResendOtp()" 
+                            style="background: none; border: none; color: #0f766e; cursor: pointer; font-weight: 600; padding: 0;">
+                        Resend OTP
+                    </button>
+                    <span id="otpCountdown" style="margin-left: 10px; color: #999;"></span>
+                </div>
+
+                <!-- Status Message -->
+                <div id="regStep2Status" style="display: none; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center;"></div>
+
+                <!-- Buttons -->
+                <div style="display: flex; gap: 15px;">
+                    <button type="button" onclick="regGoToStep(1)" 
+                            style="flex: 1; padding: 12px; border: 2px solid #ddd; background: white; border-radius: 8px; font-size: 16px; font-weight: 600; color: #333; cursor: pointer;">
+                        ← Back
+                    </button>
+                    <button type="button" onclick="regVerifyOtp()" 
+                            style="flex: 1; padding: 12px; background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                        Verify Code
                     </button>
                 </div>
+            </div>
 
-                <!-- ===== STEP 4: Success ===== -->
-                <div id="step4" class="hidden">
-                    <div style="text-align:center;padding:20px 0;">
-                        <div class="success-icon">✓</div>
-                        <h2 style="color:#1e293b;margin-bottom:8px;">Welcome to DriveNow! 🎉</h2>
-                        <p style="color:#64748b;margin-bottom:24px;" id="successMsg">Your account has been created successfully.</p>
-                        <a href="index.php" class="btn btn-primary" style="display:inline-block;width:auto;padding:14px 40px;">
-                            🏠 Go to Homepage
-                        </a>
+            <!-- ===== STEP 3: ROLE SELECTION ===== -->
+            <div id="regStep3" style="display: none;">
+                <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 24px; font-weight: 600;">Choose Role</h2>
+                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 3 of 4: What's your primary role?</p>
+
+                <!-- Role Cards -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                    <!-- Renter Card -->
+                    <div class="role-card" data-role="renter" onclick="selectRole('renter')" 
+                         style="padding: 25px; border: 2px solid #ddd; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: white;">
+                        <div style="font-size: 40px; margin-bottom: 10px;">👤</div>
+                        <div style="font-weight: 600; color: #333; font-size: 16px;">Renter</div>
+                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Looking to rent a car</div>
+                    </div>
+
+                    <!-- Owner Card -->
+                    <div class="role-card" data-role="owner" onclick="selectRole('owner')" 
+                         style="padding: 25px; border: 2px solid #ddd; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: white;">
+                        <div style="font-size: 40px; margin-bottom: 10px;">🚗</div>
+                        <div style="font-weight: 600; color: #333; font-size: 16px;">Car Owner</div>
+                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Looking to rent out your car</div>
                     </div>
                 </div>
 
-                <!-- Links -->
-                <div class="links" id="regLinks">
-                    Already have an account? <a href="login.php">Sign In</a>
-                    <br><br>
-                    <a href="index.php">← Back to Home</a>
+                <!-- Status Message -->
+                <div id="regStep3Status" style="display: none; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center;"></div>
+
+                <!-- Buttons -->
+                <div style="display: flex; gap: 15px;">
+                    <button type="button" onclick="regGoToStep(2)" 
+                            style="flex: 1; padding: 12px; border: 2px solid #ddd; background: white; border-radius: 8px; font-size: 16px; font-weight: 600; color: #333; cursor: pointer;">
+                        ← Back
+                    </button>
+                    <button type="button" id="regNextBtn" onclick="regGoToStep4()" 
+                            style="flex: 1; padding: 12px; background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; opacity: 0.5;"
+                            disabled>
+                        Next: Confirm →
+                    </button>
                 </div>
+            </div>
+
+            <!-- ===== STEP 4: SUCCESS ===== -->
+            <div id="regStep4" style="display: none; text-align: center;">
+                <div style="margin-bottom: 30px;">
+                    <div style="width: 80px; height: 80px; background: #dcfce7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; margin-bottom: 20px;">
+                        <span style="font-size: 40px;">✓</span>
+                    </div>
+                </div>
+
+                <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 28px; font-weight: 600;">Account Created! 🎉</h2>
+                <p style="margin: 0 0 25px 0; color: #666; font-size: 16px;">Welcome to PrivateHire</p>
+
+                <div style="padding: 15px; background: #f0fdfa; border-radius: 8px; margin-bottom: 25px; font-size: 14px; color: #333;">
+                    <p style="margin: 0;">Your account has been successfully created. You'll be redirected shortly...</p>
+                </div>
+
+                <button type="button" onclick="window.location.reload()" 
+                        style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                    Go to Dashboard →
+                </button>
             </div>
         </div>
     </div>
+</div>
 
-    <script>
-        // ========== STATE ==========
-        let currentStep = 1;
-        let selectedRole = '';
-        let emailVerified = false;
-        let countdownInterval = null;
-        let resendInterval = null;
+<style>
+    #registerModalOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        overflow-y: auto;
+        animation: fadeIn 0.3s ease;
+    }
 
-        // Set DOB max date to 18 years ago
-        (function() {
-            const d = new Date();
-            d.setFullYear(d.getFullYear() - 18);
-            document.getElementById('dob').max = d.toISOString().split('T')[0];
-        })();
+    #registerModalOverlay .modal {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        animation: slideUp 0.3s ease;
+        margin: 20px auto;
+    }
 
-        // ========== TOGGLE PASSWORD ==========
-        function togglePassword(fieldId) {
-            const input = document.getElementById(fieldId);
-            const btn = input.nextElementSibling;
-            if (input.type === 'password') {
-                input.type = 'text';
-                btn.textContent = '🙈';
-            } else {
-                input.type = 'password';
-                btn.textContent = '👁️';
-            }
+    .role-card:hover {
+        border-color: #0f766e;
+        box-shadow: 0 4px 12px rgba(15, 118, 110, 0.1);
+    }
+
+    .role-card.selected {
+        border-color: #0f766e;
+        background: #f0fdfa;
+    }
+
+    .otp-input {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+        text-align: center;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .otp-input:focus {
+        border-color: #0f766e;
+        outline: none;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @media (max-width: 600px) {
+        #registerModalOverlay .modal {
+            width: 90%;
+            max-width: 100%;
         }
 
-        // ========== STEP NAVIGATION ==========
-        function setStep(step) {
-            currentStep = step;
-            for (let i = 1; i <= 4; i++) {
-                const el = document.getElementById('step' + i);
-                if (el) el.classList.toggle('hidden', i !== step);
-            }
-            // Update dots
-            for (let i = 1; i <= 3; i++) {
-                const dot = document.getElementById('dot' + i);
-                const label = document.getElementById('label' + i);
-                dot.className = 'step-dot';
-                label.className = '';
-                if (i < step) { dot.classList.add('done'); label.classList.add('done'); }
-                else if (i === step && step <= 3) { dot.classList.add('active'); label.classList.add('active'); }
-            }
-            // Hide links on success
-            if (step === 4) document.getElementById('regLinks').classList.add('hidden');
+        .role-card {
+            padding: 20px !important;
         }
 
-        // ========== REALTIME DUPLICATE CHECK ==========
-        let duplicateFlags = { email: false, phone: false };
-
-        async function checkDuplicate(field) {
-            const input = document.getElementById(field);
-            const errorEl = document.getElementById(field + 'Error');
-            const value = input.value.trim();
-
-            // Clear state if empty
-            if (!value) {
-                errorEl.textContent = '';
-                input.classList.remove('input-error', 'input-valid');
-                duplicateFlags[field] = false;
-                return;
-            }
-
-            // Basic format check before API call
-            if (field === 'email' && !value.includes('@')) {
-                errorEl.textContent = '';
-                input.classList.remove('input-error', 'input-valid');
-                duplicateFlags[field] = false;
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/auth.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'check-duplicate', field, value })
-                });
-                const data = await res.json();
-
-                if (data.success && data.exists) {
-                    const label = field === 'email' ? 'email' : 'phone number';
-                    errorEl.textContent = '⚠️ This ' + label + ' is already registered.';
-                    input.classList.add('input-error');
-                    input.classList.remove('input-valid');
-                    duplicateFlags[field] = true;
-                } else {
-                    errorEl.textContent = '';
-                    input.classList.remove('input-error');
-                    input.classList.add('input-valid');
-                    duplicateFlags[field] = false;
-                }
-            } catch (err) {
-                console.error('Duplicate check error:', err);
-            }
+        .otp-input {
+            width: 40px;
+            height: 40px;
+            font-size: 18px;
         }
-
-        // ========== STEP 1 → 2: Validate & Send OTP ==========
-        async function goToStep2() {
-            const fullName = document.getElementById('fullName').value.trim();
-            const email = document.getElementById('email').value.trim();
-            const phone = document.getElementById('phone').value.trim();
-            const dob = document.getElementById('dob').value;
-            const password = document.getElementById('password').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-
-            // Validation
-            if (!fullName) return showStatus('error', 'Please enter your full name.');
-            if (!email || !email.includes('@')) return showStatus('error', 'Please enter a valid email address.');
-            if (!phone) return showStatus('error', 'Please enter your phone number.');
-            if (!dob) return showStatus('error', 'Please select your date of birth.');
-
-            // Age must be 18+
-            const birthDate = new Date(dob);
-            const today = new Date();
-            let age = today.getFullYear() - birthDate.getFullYear();
-            const monthDiff = today.getMonth() - birthDate.getMonth();
-            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
-            if (age < 18) return showStatus('error', 'You must be at least 18 years old to register.');
-
-            if (!password || password.length < 6) return showStatus('error', 'Password must be at least 6 characters.');
-            if (password !== confirmPassword) return showStatus('error', 'Passwords do not match.');
-
-            // Block if duplicate flags are set
-            if (duplicateFlags.email) return showStatus('error', 'This email is already registered. Please use a different email.');
-            if (duplicateFlags.phone) return showStatus('error', 'This phone number is already registered. Please use a different number.');
-
-            showStatus('loading', '<span class="spinner"></span> Sending verification code...');
-
-            try {
-                const res = await fetch('/api/auth.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'email-send-otp', email: email })
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    hideStatus();
-                    document.getElementById('verifyEmail').textContent = email;
-                    setStep(2);
-
-                    startCountdown();
-                    startResendTimer();
-                    document.getElementById('otp1').focus();
-                } else {
-                    showStatus('error', data.message);
-                }
-            } catch (err) {
-                showStatus('error', 'Connection error: ' + err.message);
-            }
-        }
-
-        // ========== OTP INPUT HELPERS ==========
-        function otpInput(el, nextId) {
-            el.value = el.value.replace(/[^0-9]/g, '');
-            if (el.value && nextId) {
-                document.getElementById(nextId).focus();
-            }
-            // Auto-verify when all 6 digits entered
-            if (!nextId && el.value) {
-                const otp = getOtpValue();
-                if (otp.length === 6) verifyOtp();
-            }
-        }
-
-        function otpKeydown(e, el, prevId) {
-            if (e.key === 'Backspace' && !el.value && prevId) {
-                document.getElementById(prevId).focus();
-            }
-        }
-
-        function getOtpValue() {
-            let otp = '';
-            for (let i = 1; i <= 6; i++) {
-                otp += document.getElementById('otp' + i).value;
-            }
-            return otp;
-        }
-
-        // ========== STEP 2: Verify OTP ==========
-        async function verifyOtp() {
-            const otp = getOtpValue();
-            if (otp.length !== 6) return showStatus('error', 'Please enter the complete 6-digit code.');
-
-            const email = document.getElementById('email').value.trim();
-            showStatus('loading', '<span class="spinner"></span> Verifying...');
-            document.getElementById('verifyBtn').disabled = true;
-
-            try {
-                const res = await fetch('/api/auth.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'email-verify-otp', email: email, otp: otp })
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    emailVerified = true;
-                    hideStatus();
-                    clearInterval(countdownInterval);
-                    setStep(3);
-                } else {
-                    showStatus('error', data.message);
-                    document.getElementById('verifyBtn').disabled = false;
-                    // Clear OTP inputs
-                    for (let i = 1; i <= 6; i++) document.getElementById('otp' + i).value = '';
-                    document.getElementById('otp1').focus();
-                }
-            } catch (err) {
-                showStatus('error', 'Connection error: ' + err.message);
-                document.getElementById('verifyBtn').disabled = false;
-            }
-        }
-
-        // ========== RESEND OTP ==========
-        async function resendOtp() {
-            const email = document.getElementById('email').value.trim();
-            showStatus('loading', '<span class="spinner"></span> Resending code...');
-
-            try {
-                const res = await fetch('/api/auth.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'email-send-otp', email: email })
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    showStatus('success', '✅ New code sent!');
-                    // Reset inputs & timers
-                    for (let i = 1; i <= 6; i++) document.getElementById('otp' + i).value = '';
-                    document.getElementById('otp1').focus();
-                    startCountdown();
-                    startResendTimer();
-                    setTimeout(hideStatus, 2000);
-                } else {
-                    showStatus('error', data.message);
-                }
-            } catch (err) {
-                showStatus('error', 'Connection error: ' + err.message);
-            }
-        }
-
-        // ========== STEP 3: Select Role ==========
-        function selectRole(role) {
-            selectedRole = role;
-            document.getElementById('roleRenter').classList.toggle('selected', role === 'renter');
-            document.getElementById('roleOwner').classList.toggle('selected', role === 'owner');
-            document.getElementById('createBtn').disabled = false;
-        }
-
-        // ========== STEP 3 → 4: Create Account ==========
-        async function createAccount() {
-            if (!selectedRole) return showStatus('error', 'Please select a role.');
-            if (!emailVerified) return showStatus('error', 'Email not verified. Please go back and verify.');
-
-            showStatus('loading', '<span class="spinner"></span> Creating your account...');
-            document.getElementById('createBtn').disabled = true;
-
-            const payload = {
-                action: 'register',
-                full_name: document.getElementById('fullName').value.trim(),
-                email: document.getElementById('email').value.trim(),
-                phone: document.getElementById('phone').value.trim(),
-                date_of_birth: document.getElementById('dob').value,
-                address: document.getElementById('address').value.trim(),
-                password: document.getElementById('password').value,
-                role: selectedRole
-            };
-
-            try {
-                const res = await fetch('/api/auth.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    hideStatus();
-                    const roleName = selectedRole === 'owner' ? 'Car Owner' : 'Renter';
-                    document.getElementById('successMsg').innerHTML =
-                        `Welcome, <strong>${data.user.full_name}</strong>! You're registered as a <strong>${roleName}</strong>. Start exploring DriveNow now.`;
-                    setStep(4);
-                } else {
-                    showStatus('error', data.message);
-                    document.getElementById('createBtn').disabled = false;
-                }
-            } catch (err) {
-                showStatus('error', 'Connection error: ' + err.message);
-                document.getElementById('createBtn').disabled = false;
-            }
-        }
-
-        // ========== BACK TO STEP 1 ==========
-        function backToStep1() {
-            clearInterval(countdownInterval);
-            clearInterval(resendInterval);
-            hideStatus();
-            setStep(1);
-        }
-
-        // ========== TIMERS ==========
-        function startCountdown() {
-            let seconds = 300; // 5 minutes
-            clearInterval(countdownInterval);
-            countdownInterval = setInterval(() => {
-                seconds--;
-                const m = Math.floor(seconds / 60);
-                const s = seconds % 60;
-                document.getElementById('countdown').textContent = m + ':' + String(s).padStart(2, '0');
-                if (seconds <= 0) {
-                    clearInterval(countdownInterval);
-                    document.getElementById('otpTimer').innerHTML = '<span style="color:#dc2626;">⏰ Code expired. Please resend.</span>';
-                }
-            }, 1000);
-        }
-
-        function startResendTimer() {
-            let resendSec = 30;
-            const btn = document.getElementById('resendBtn');
-            const timer = document.getElementById('resendTimer');
-            btn.disabled = true;
-            clearInterval(resendInterval);
-            resendInterval = setInterval(() => {
-                resendSec--;
-                timer.textContent = ` (wait ${resendSec}s)`;
-                if (resendSec <= 0) {
-                    clearInterval(resendInterval);
-                    btn.disabled = false;
-                    timer.textContent = '';
-                }
-            }, 1000);
-        }
-
-        // ========== STATUS HELPERS ==========
-        function showStatus(type, message) {
-            const bar = document.getElementById('statusBar');
-            bar.className = 'status-bar status-' + type + ' show';
-            bar.innerHTML = message;
-        }
-
-        function hideStatus() {
-            document.getElementById('statusBar').classList.remove('show');
-        }
-    </script>
-</body>
-</html>
+    }
+</style>

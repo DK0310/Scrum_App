@@ -12,7 +12,7 @@ require_once '../Database/db.php';
 
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? $_SESSION['username'] : null;
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 include '../templates/reviews.html.php';
 ?>

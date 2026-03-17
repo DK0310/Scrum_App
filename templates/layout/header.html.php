@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $title ?? 'DriveNow - Premium Car Rental Platform' ?></title>
+    <title><?= $title ?? 'PrivateHire - Premium Car Rental Platform' ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="base.css">
@@ -13,7 +13,7 @@
     <!-- ===== NAVBAR ===== -->
     <nav class="navbar" id="navbar">
         <div class="navbar-inner">
-            <a href="index.php" class="navbar-brand">DriveNow</a>
+            <a href="index.php" class="navbar-brand">PrivateHire</a>
 
             <!-- ===== NAVBAR SEARCH BAR (center) ===== -->
             <div class="navbar-search-wrapper" id="navbarSearchWrapper">
@@ -39,14 +39,13 @@
                         <span class="notification-badge" id="notifCount" style="display:none;">0</span>
                     </button>
                     <a href="profile.php" class="navbar-profile-link" <?= ($currentPage ?? '') === 'profile' ? 'style="background:var(--primary-50);color:var(--primary);"' : '' ?>>👤 <?= htmlspecialchars($currentUser) ?></a>
+                    <?php if (!in_array(($userRole ?? ''), ['admin', 'staff'])): ?>
                     <a href="orders.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'orders' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">📋 My Orders</a>
-                    <?php if (($userRole ?? '') === 'owner'): ?>
-                    <a href="my-vehicles.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'my-vehicles' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">🚗 My Vehicles</a>
                     <?php endif; ?>
                     <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
                 <?php else: ?>
-                    <a href="login.php" class="btn btn-outline btn-sm">Sign In</a>
-                    <a href="register.php" class="btn btn-primary btn-sm">Sign Up</a>
+                    <button class="btn btn-outline btn-sm" onclick="showAuthModal('login'); return false;">Sign In</button>
+                    <button class="btn btn-primary btn-sm" onclick="showAuthModal('register'); return false;">Sign Up</button>
                 <?php endif; ?>
 
                 <!-- Side Menu Toggle Button -->
@@ -70,9 +69,11 @@
             <a href="cars.php" class="side-menu-item <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚗</span> Cars
             </a>
+            <?php if (!in_array(($userRole ?? ''), ['admin', 'staff'])): ?>
             <a href="booking.php?mode=minicab" class="side-menu-item <?= ($currentPage ?? '') === 'booking' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚕</span> Book a Minicab
             </a>
+            <?php endif; ?>
             <a href="index.php#how-it-works" class="side-menu-item <?= ($currentPage ?? '') === 'how-it-works' ? 'active' : '' ?>">
                 <span class="side-menu-icon">📖</span> How It Works
             </a>
@@ -93,12 +94,9 @@
             <a href="profile.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'profile' ? 'active' : '' ?>">
                 <span class="side-menu-icon">👤</span> My Profile
             </a>
+            <?php if (!in_array(($userRole ?? ''), ['admin', 'staff'])): ?>
             <a href="orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
                 <span class="side-menu-icon">📋</span> My Orders
-            </a>
-            <?php if (($userRole ?? '') === 'owner'): ?>
-            <a href="my-vehicles.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'my-vehicles' ? 'active' : '' ?>">
-                <span class="side-menu-icon">🚙</span> My Vehicles
             </a>
             <?php endif; ?>
             <?php endif; ?>
@@ -108,6 +106,21 @@
                 <span class="side-menu-icon">⚙️</span> Admin Dashboard
             </a>
             <?php endif; ?>
+
+            <?php if (isset($isLoggedIn) && $isLoggedIn && ($userRole ?? '') === 'staff'): ?>
+            <div class="side-menu-divider"></div>
+            <a href="staff.php" class="side-menu-item side-menu-staff <?= ($currentPage ?? '') === 'staff' ? 'active' : '' ?>">
+                <span class="side-menu-icon">⚙️</span> Staff Dashboard
+            </a>
+            <?php endif; ?>
+
+            <?php if (isset($isLoggedIn) && $isLoggedIn && ($userRole ?? '') === 'driver'): ?>
+            <div class="side-menu-divider"></div>
+            <a href="driver.php" class="side-menu-item side-menu-driver <?= ($currentPage ?? '') === 'driver' ? 'active' : '' ?>">
+                <span class="side-menu-icon">🚗</span> Driver Dashboard
+            </a>
+            <?php endif; ?>
+
         </nav>
         <div class="side-menu-footer">
             <p>© <?= date('Y') ?> DriveNow</p>

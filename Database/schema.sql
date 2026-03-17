@@ -11,8 +11,15 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- 1. ENUM TYPES
 -- =====================================================
 
--- User roles: renter (thuê xe) vs owner (cho thuê xe) vs admin
-DO $$ BEGIN CREATE TYPE user_role AS ENUM ('renter', 'owner', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- OLD: User roles (deprecated - kept for migration reference)
+-- DO $$ BEGIN CREATE TYPE user_role AS ENUM ('renter', 'owner', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- NEW: User roles v2 - 4 role system
+-- user:  Customer who books rides/cars (replaces 'renter')
+-- driver: Driver who operates vehicles (NEW)
+-- staff:  Staff who manage drivers/vehicles (replaces 'owner')
+-- admin:  System administrator (unchanged)
+DO $$ BEGIN CREATE TYPE user_role_v2 AS ENUM ('user', 'driver', 'staff', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Auth providers
 DO $$ BEGIN CREATE TYPE auth_provider AS ENUM ('google', 'phone', 'faceid', 'email'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -49,7 +56,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash   VARCHAR(255),              -- optional, for future email/password
     
     -- Role
-    role            user_role NOT NULL DEFAULT 'renter',
+    role            user_role_v2 NOT NULL DEFAULT 'user',
     
     -- Profile (required fields filled after first login)
     full_name       VARCHAR(255),
@@ -523,6 +530,18 @@ INSERT INTO promotions (code, title, description, discount_type, discount_value,
 ('SUMMER25', 'Summer Road Trip', 'Hit the road this summer with 25% off any SUV rental. Limited time.', 'percentage', 25, 3, '2026-08-31 23:59:59+00'),
 ('EV15', 'Go Electric', 'Get 15% off all electric vehicle rentals. Save the planet, save money.', 'percentage', 15, 1, '2026-12-31 23:59:59+00'),
 ('REFER20', 'Refer a Friend', 'Refer a friend and both get $20 off your next booking.', 'fixed', 20, 1, NULL);
+
+-- =====================================================
+-- 18b. SEED DATA - DEFAULT ADMIN & STAFF USERS
+-- =====================================================
+INSERT INTO users (email, full_name, auth_provider, role, profile_completed, email_verified, password_hash) VALUES
+('admin1@drivenow.local', 'Administrator', 'email', 'admin'::user_role_v2, true, true, '$2y$10$hRY0TwzUrQK2d42oXUAE9Ob9DN2yhbB6LhKE8Hrx/fZ9S2a.CJyx6'),
+('staff1@drivenow.local', 'Staff Manager', 'email', 'staff'::user_role_v2, true, true, '$2y$10$5lVYyPIeTHWnQo0A4eW4QOrbfI4Zj5R7zbS6pvtuf.6jbmhaC.3hi');
+
+-- Note: Password hashes above are bcrypt hashes for:
+-- admin1@drivenow.local: admin123
+-- staff1@drivenow.local: staff123
+-- You can verify/recreate them using PHP: password_hash('admin123', PASSWORD_BCRYPT)
 
 -- =====================================================
 -- 19. ROW LEVEL SECURITY (Supabase)

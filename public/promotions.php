@@ -13,7 +13,7 @@ require_once '../api/n8n.php';
 
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? $_SESSION['username'] : null;
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 // Sample promotions data (replace with DB queries later)
 $promotions = [

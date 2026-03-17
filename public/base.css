@@ -1,6 +1,5 @@
 /* ===================================
-   DriveNow - Car Rental Platform
-   Professional Car Rental CSS
+   PrivateHire - Shared Base Styles (canonical in /public)
    =================================== */
 
 /* Reset & Base */
@@ -11,22 +10,27 @@
 }
 
 :root {
-    --primary: #2563eb;
-    --primary-dark: #1d4ed8;
-    --primary-light: #3b82f6;
-    --primary-50: #eff6ff;
-    --primary-100: #dbeafe;
-    --secondary: #0f172a;
-    --accent: #f59e0b;
-    --accent-dark: #d97706;
-    --success: #10b981;
-    --success-light: #d1fae5;
+    /* refreshed PrivateHire palette */
+    --primary: #0f766e;           /* teal-700 */
+    --primary-dark: #115e59;      /* teal-800 */
+    --primary-light: #14b8a6;     /* teal-500 */
+    --primary-50: #f0fdfa;        /* teal-50 */
+    --primary-100: #ccfbf1;       /* teal-100 */
+
+    --secondary: #0b1220;         /* deep navy */
+
+    --accent: #7c3aed;            /* violet-600 */
+    --accent-dark: #6d28d9;       /* violet-700 */
+
+    --success: #16a34a;
+    --success-light: #dcfce7;
     --danger: #ef4444;
     --danger-light: #fee2e2;
     --warning: #f59e0b;
     --warning-light: #fef3c7;
     --info: #06b6d4;
     --info-light: #cffafe;
+
     --gray-50: #f8fafc;
     --gray-100: #f1f5f9;
     --gray-200: #e2e8f0;
@@ -37,18 +41,21 @@
     --gray-700: #334155;
     --gray-800: #1e293b;
     --gray-900: #0f172a;
+
     --white: #ffffff;
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
     --radius-sm: 6px;
     --radius: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-xl: 24px;
     --radius-full: 9999px;
+
     --transition: all 0.3s ease;
     --font: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -455,7 +462,7 @@ img { max-width: 100%; height: auto; }
 .subscription-card { background: white; border-radius: var(--radius-lg); padding: 32px; border: 1px solid var(--gray-100); text-align: center; transition: var(--transition); position: relative; }
 .subscription-card:hover { box-shadow: var(--shadow-xl); transform: translateY(-4px); }
 .subscription-card.popular { border-color: var(--primary); box-shadow: var(--shadow-lg); }
-.subscription-popular-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); padding: 4px 20px; background: var(--primary); color: white; font-size: 0.75rem; font-weight: 700; border-radius: var(--radius-full); text-transform: uppercase; }
+.subscription-popular-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); padding: 4px 20px; background: var(--primary); color: white; font-size: 0.75rem; font-weight: 700; border-radius: var(--radius-full); text-transform: var(--uppercase); }
 .subscription-name { font-size: 1.25rem; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
 .subscription-price { margin-bottom: 24px; }
 .subscription-price .amount { font-size: 2.5rem; font-weight: 900; color: var(--primary); }
@@ -679,3 +686,183 @@ img { max-width: 100%; height: auto; }
 .mb-4 { margin-bottom: 32px; }
 .hidden { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+/* ===== AUTH FORM UTILITIES ===== */
+.form-input,
+.form-select {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 0.938rem;
+    font-family: 'Inter', sans-serif;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.form-input:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 480px;
+    width: 100%;
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--gray-400);
+    z-index: 1001;
+}
+
+.modal-close:hover {
+    color: var(--gray-600);
+}
+
+/* Status Messages */
+.status-message {
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: center;
+    display: none;
+}
+
+.status-message.show {
+    display: block;
+}
+
+.status-loading {
+    background: var(--warning-light);
+    color: var(--warning);
+}
+
+.status-success {
+    background: var(--success-light);
+    color: var(--success);
+}
+
+.status-error {
+    background: var(--danger-light);
+    color: var(--danger);
+}
+
+/* Step Indicators */
+.step-indicator {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--gray-200);
+    transition: all 0.3s;
+}
+
+.step-dot.active {
+    background: var(--primary);
+    width: 24px;
+    border-radius: 5px;
+}
+
+/* OTP Input Boxes */
+.otp-inputs {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.otp-input {
+    padding: 12px;
+    border: 2px solid var(--gray-200);
+    border-radius: 10px;
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    transition: all 0.3s;
+}
+
+.otp-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+/* Role Selection Cards */
+.role-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.role-card {
+    padding: 16px;
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.role-card:hover {
+    border-color: var(--primary);
+    background: var(--primary-50);
+}
+
+.role-card.selected {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.role-card-icon {
+    font-size: 2rem;
+    margin-bottom: 8px;
+}
+
+.role-card-label {
+    font-weight: 600;
+    font-size: 0.875rem;
+}

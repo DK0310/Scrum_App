@@ -22,6 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/notification-helpers.php';
+require_once __DIR__ . '/../lib/repositories/NotificationRepository.php';
+
+$notificationRepo = new NotificationRepository($pdo);
 
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
@@ -50,15 +53,7 @@ if ($action === 'list') {
     $limit = min($limit, 100);
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT id, type, title, message, is_read, created_at
-            FROM notifications
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-        ");
-        $stmt->execute([$userId, $limit, $offset]);
-        $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $notifications = $notificationRepo->listWithPagination($userId, $limit, $offset);
 
         // Format
         foreach ($notifications as &$n) {
@@ -67,9 +62,7 @@ if ($action === 'list') {
         }
 
         // Unread count
-        $stmt2 = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = false");
-        $stmt2->execute([$userId]);
-        $unreadCount = (int)$stmt2->fetchColumn();
+        $unreadCount = $notificationRepo->getUnreadCount($userId);
 
         echo json_encode([
             'success' => true,
@@ -90,10 +83,7 @@ if ($action === 'unread-count') {
     $userId = $_SESSION['user_id'];
 
     try {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = false");
-        $stmt->execute([$userId]);
-        $count = (int)$stmt->fetchColumn();
-
+        $count = $notificationRepo->getUnreadCount($userId);
         echo json_encode(['success' => true, 'count' => $count]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'count' => 0]);
@@ -115,9 +105,7 @@ if ($action === 'mark-read') {
     }
 
     try {
-        $stmt = $pdo->prepare("UPDATE notifications SET is_read = true WHERE id = ? AND user_id = ?");
-        $stmt->execute([$notifId, $userId]);
-
+        $notificationRepo->markAsRead($notifId, $userId);
         echo json_encode(['success' => true]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error.']);
@@ -133,10 +121,7 @@ if ($action === 'mark-all-read') {
     $userId = $_SESSION['user_id'];
 
     try {
-        $stmt = $pdo->prepare("UPDATE notifications SET is_read = true WHERE user_id = ? AND is_read = false");
-        $stmt->execute([$userId]);
-        $count = $stmt->rowCount();
-
+        $count = $notificationRepo->markAllAsRead($userId);
         echo json_encode(['success' => true, 'marked' => $count]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error.']);
@@ -158,9 +143,7 @@ if ($action === 'delete') {
     }
 
     try {
-        $stmt = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
-        $stmt->execute([$notifId, $userId]);
-
+        $notificationRepo->delete($notifId, $userId);
         echo json_encode(['success' => true]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error.']);
@@ -176,10 +159,8 @@ if ($action === 'clear-all') {
     $userId = $_SESSION['user_id'];
 
     try {
-        $stmt = $pdo->prepare("DELETE FROM notifications WHERE user_id = ?");
-        $stmt->execute([$userId]);
-
-        echo json_encode(['success' => true, 'deleted' => $stmt->rowCount()]);
+        $count = $notificationRepo->deleteAll($userId);
+        echo json_encode(['success' => true, 'deleted' => $count]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error.']);
     }

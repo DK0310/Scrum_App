@@ -12,11 +12,11 @@ require_once '../Database/db.php';
 
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? ($_SESSION['full_name'] ?? $_SESSION['username'] ?? null) : null;
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 // Require login
 if (!$isLoggedIn) {
-    header('Location: login.php?redirect=profile.php');
+    header('Location: /auth?mode=login&redirect=profile.php');
     exit;
 }
 

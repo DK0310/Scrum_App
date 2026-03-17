@@ -36,9 +36,7 @@ if ($preAction === 'get-avatar') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT avatar_storage_path, avatar_url FROM users WHERE id = ?");
-        $stmt->execute([$targetUserId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $row = $userRepo->getAvatarInfo($targetUserId);
 
         if (!$row || empty($row['avatar_storage_path'])) {
             http_response_code(404);
@@ -72,10 +70,14 @@ require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/notification-helpers.php';
 require_once __DIR__ . '/supabase-storage.php';
+require_once __DIR__ . '/../lib/repositories/UserRepository.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
+
+// Instantiate UserRepository
+$userRepo = new UserRepository($pdo);
 
 // Run migration: add avatar_storage_path if not exist
 try {
@@ -116,11 +118,9 @@ if ($action === 'check-duplicate') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE $field = ? LIMIT 1");
-        $stmt->execute([$value]);
-        $exists = (bool)$stmt->fetch();
+        $exists = $userRepo->existsByField($field, $value);
         echo json_encode(['success' => true, 'exists' => $exists]);
-    } catch (PDOException $e) {
+    } catch (Throwable $e) {
         echo json_encode(['success' => false, 'message' => 'Database error.']);
     }
     exit;
@@ -142,31 +142,24 @@ if ($action === 'google-login') {
 
     try {
         // Check if user already exists by google_id or email
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE google_id = ? OR email = ? LIMIT 1");
-        $stmt->execute([$googleId, $email]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = $userRepo->findByGoogleIdOrEmail($googleId, $email);
 
         $isNewUser = false;
 
         if ($user) {
             // Existing user - update google_id if not set, update last login
             if (empty($user['google_id'])) {
-                $upd = $pdo->prepare("UPDATE users SET google_id = ?, auth_provider = 'google', last_login_at = NOW() WHERE id = ?");
-                $upd->execute([$googleId, $user['id']]);
+                $userRepo->updateGoogleIdAndSetProvider($user['id'], $googleId);
             } else {
-                $upd = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
-                $upd->execute([$user['id']]);
+                $userRepo->touchLastLogin($user['id']);
             }
         } else {
             // New user - register
             $isNewUser = true;
-            $stmt = $pdo->prepare("
-                INSERT INTO users (email, google_id, auth_provider, full_name, avatar_url, email_verified, last_login_at)
-                VALUES (?, ?, 'google', ?, ?, TRUE, NOW())
-                RETURNING *
-            ");
-            $stmt->execute([$email, $googleId, $fullName, $avatarUrl]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            $user = $userRepo->createGoogleUser($email, $googleId, $fullName, $avatarUrl);
+            if (!$user) {
+                throw new RuntimeException('Failed to create user');
+            }
         }
 
         // Set session
@@ -193,6 +186,8 @@ if ($action === 'google-login') {
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Server error.']);
     }
     exit;
 }
@@ -263,26 +258,20 @@ if ($action === 'phone-verify-otp') {
 
     try {
         // Check if user exists by phone
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone = ? LIMIT 1");
-        $stmt->execute([$phone]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = $userRepo->findByPhone($phone);
 
         $isNewUser = false;
 
         if ($user) {
             // Existing user
-            $upd = $pdo->prepare("UPDATE users SET phone_verified = TRUE, last_login_at = NOW() WHERE id = ?");
-            $upd->execute([$user['id']]);
+            $userRepo->markPhoneVerifiedAndTouchLastLogin($user['id']);
         } else {
             // New user via phone
             $isNewUser = true;
-            $stmt = $pdo->prepare("
-                INSERT INTO users (phone, auth_provider, phone_verified, last_login_at)
-                VALUES (?, 'phone', TRUE, NOW())
-                RETURNING *
-            ");
-            $stmt->execute([$phone]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            $user = $userRepo->createPhoneUser($phone);
+            if (!$user) {
+                throw new RuntimeException('Failed to create user');
+            }
         }
 
         // Set session
@@ -309,6 +298,8 @@ if ($action === 'phone-verify-otp') {
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Server error.']);
     }
     exit;
 }
@@ -341,7 +332,7 @@ if ($action === 'email-send-otp') {
     $smtpUser = \EnvLoader::get('SMTP_USERNAME', '');
     $smtpPass = \EnvLoader::get('SMTP_PASSWORD', '');
     $fromEmail = \EnvLoader::get('SMTP_FROM_EMAIL', $smtpUser);
-    $fromName = \EnvLoader::get('SMTP_FROM_NAME', 'DriveNow');
+    $fromName = \EnvLoader::get('SMTP_FROM_NAME', 'PrivateHire');
 
     $emailSent = false;
 
@@ -360,11 +351,11 @@ if ($action === 'email-send-otp') {
             $mail->addAddress($email);
 
             $mail->isHTML(true);
-            $mail->Subject = "DriveNow - Your Verification Code: $otp";
+            $mail->Subject = "PrivateHire - Your Verification Code: $otp";
             $mail->Body = "
                 <div style='font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;'>
                     <div style='text-align:center;margin-bottom:24px;'>
-                        <h1 style='color:#2563eb;font-size:1.5rem;'>🚗 DriveNow</h1>
+                        <h1 style='color:#2563eb;font-size:1.5rem;'>🚗 PrivateHire</h1>
                     </div>
                     <div style='background:#f8fafc;border-radius:16px;padding:32px;text-align:center;'>
                         <h2 style='color:#1e293b;margin-bottom:8px;'>Email Verification</h2>
@@ -374,10 +365,10 @@ if ($action === 'email-send-otp') {
                         </div>
                         <p style='color:#94a3b8;font-size:0.813rem;'>If you didn't request this code, please ignore this email.</p>
                     </div>
-                    <p style='text-align:center;color:#94a3b8;font-size:0.75rem;margin-top:24px;'>© 2026 DriveNow. All rights reserved.</p>
+                    <p style='text-align:center;color:#94a3b8;font-size:0.75rem;margin-top:24px;'>© 2026 PrivateHire. All rights reserved.</p>
                 </div>
             ";
-            $mail->AltBody = "Your DriveNow verification code is: $otp (expires in 5 minutes)";
+            $mail->AltBody = "Your PrivateHire verification code is: $otp (expires in 5 minutes)";
 
             $mail->send();
             $emailSent = true;
@@ -475,38 +466,30 @@ if ($action === 'register') {
         exit;
     }
 
-    // Admin role can only be set directly in the database
-    if (!in_array($role, ['renter', 'owner']) || $role === 'admin') {
-        echo json_encode(['success' => false, 'message' => 'Role must be "renter" or "owner".']);
+    // Only user, driver, staff can be selected during registration (admin only via database)
+    if (!in_array($role, ['user', 'driver', 'staff']) || $role === 'admin') {
+        echo json_encode(['success' => false, 'message' => 'Role must be "user", "driver", or "staff".']);
         exit;
     }
 
     try {
         // Check if user already exists
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
-        $stmt->execute([$email]);
-        if ($stmt->fetch()) {
+        if ($userRepo->emailExists($email)) {
             echo json_encode(['success' => false, 'message' => 'An account with this email already exists. Please sign in.']);
             exit;
         }
 
-        // Check phone
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE phone = ? LIMIT 1");
-        $stmt->execute([$phone]);
-        if ($stmt->fetch()) {
+        if ($userRepo->phoneExists($phone)) {
             echo json_encode(['success' => false, 'message' => 'An account with this phone number already exists.']);
             exit;
         }
 
         // Create user
         $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
-        $stmt = $pdo->prepare("
-            INSERT INTO users (full_name, email, phone, date_of_birth, role, address, auth_provider, password_hash, email_verified, profile_completed, last_login_at)
-            VALUES (?, ?, ?, ?::DATE, ?::user_role, NULLIF(?, ''), 'email', ?, TRUE, TRUE, NOW())
-            RETURNING *
-        ");
-        $stmt->execute([$fullName, $email, $phone, $dob, $role, $address, $hashedPassword]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = $userRepo->createLocalUser($fullName, $email, $phone, $dob, $role, $address, $hashedPassword);
+        if (!$user) {
+            throw new RuntimeException('Failed to create user');
+        }
 
         // Set session
         $_SESSION['logged_in'] = true;
@@ -533,6 +516,8 @@ if ($action === 'register') {
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Server error.']);
     }
     exit;
 }
@@ -551,9 +536,7 @@ if ($action === 'login') {
 
     try {
         // Search by email or full_name
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? OR full_name = ? LIMIT 1");
-        $stmt->execute([$identifier, $identifier]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = $userRepo->findByEmailOrFullName($identifier);
 
         if (!$user) {
             echo json_encode(['success' => false, 'message' => 'No account found. Please check your credentials or register.']);
@@ -571,8 +554,7 @@ if ($action === 'login') {
         }
 
         // Update last login
-        $upd = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
-        $upd->execute([$user['id']]);
+        $userRepo->touchLastLogin($user['id']);
 
         // Set session
         $_SESSION['logged_in'] = true;
@@ -596,6 +578,8 @@ if ($action === 'login') {
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Server error.']);
     }
     exit;
 }
@@ -623,9 +607,9 @@ if ($action === 'complete-profile') {
         exit;
     }
 
-    // Admin role can only be set directly in the database
-    if (!in_array($role, ['renter', 'owner']) || $role === 'admin') {
-        echo json_encode(['success' => false, 'message' => 'Role must be "renter" or "owner".']);
+    // Only user, driver, staff can be selected during profile completion (admin only via database)
+    if (!in_array($role, ['user', 'driver', 'staff']) || $role === 'admin') {
+        echo json_encode(['success' => false, 'message' => 'Role must be "user", "driver", or "staff".']);
         exit;
     }
 
@@ -640,35 +624,23 @@ if ($action === 'complete-profile') {
     $avatarUrl      = trim($input['avatar_url'] ?? '');
 
     try {
-        $stmt = $pdo->prepare("
-            UPDATE users SET
-                full_name = ?,
-                date_of_birth = ?,
-                phone = COALESCE(NULLIF(?, ''), phone),
-                email = COALESCE(NULLIF(?, ''), email),
-                role = ?::user_role,
-                address = NULLIF(?, ''),
-                city = NULLIF(?, ''),
-                country = NULLIF(?, ''),
-                driving_license = NULLIF(?, ''),
-                license_expiry = NULLIF(?, '')::DATE,
-                id_card_number = NULLIF(?, ''),
-                bio = NULLIF(?, ''),
-                avatar_url = COALESCE(NULLIF(?, ''), avatar_url),
-                profile_completed = TRUE,
-                updated_at = NOW()
-            WHERE id = ?
-            RETURNING *
-        ");
-        $stmt->execute([
-            $fullName, $dob, $phone, $email, $role,
-            $address, $city, $country,
-            $drivingLicense, $licenseExpiry, $idCardNumber,
-            $bio, $avatarUrl,
-            $userId
+        // Update profile via repository
+        $user = $userRepo->updateProfile($userId, [
+            'full_name' => $fullName,
+            'date_of_birth' => $dob,
+            'phone' => $phone ?: null,
+            'email' => $email ?: null,
+            'role' => $role,
+            'address' => $address ?: null,
+            'city' => $city ?: null,
+            'country' => $country ?: null,
+            'driving_license' => $drivingLicense ?: null,
+            'license_expiry' => $licenseExpiry ?: null,
+            'id_card_number' => $idCardNumber ?: null,
+            'bio' => $bio ?: null,
+            'avatar_url' => $avatarUrl ?: null,
+            'profile_completed' => true
         ]);
-
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         // Update session
         $_SESSION['username'] = $user['full_name'];
@@ -715,12 +687,7 @@ if ($action === 'enable-faceid') {
 
     try {
         // Check if this face matches any OTHER user's face descriptor
-        $stmt = $pdo->prepare("
-            SELECT id, full_name, face_descriptor FROM users 
-            WHERE faceid_enabled = TRUE AND face_descriptor IS NOT NULL AND id != ?
-        ");
-        $stmt->execute([$userId]);
-        $existingUsers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $existingUsers = $userRepo->getOtherUsersWithFaceId($userId);
 
         $duplicateThreshold = 0.45; // Stricter threshold for duplicate detection
         foreach ($existingUsers as $existing) {
@@ -743,14 +710,7 @@ if ($action === 'enable-faceid') {
             }
         }
 
-        $stmt = $pdo->prepare("
-            UPDATE users SET
-                face_descriptor = ?::JSONB,
-                faceid_enabled = TRUE,
-                updated_at = NOW()
-            WHERE id = ?
-        ");
-        $stmt->execute([json_encode($faceDescriptor), $userId]);
+        $userRepo->enableFaceId($userId, json_encode($faceDescriptor));
 
         // Notification
         createNotification($pdo, $userId, 'system', '🔐 Face ID Enabled', 'Face ID has been enabled on your account. You can now log in using facial recognition.');
@@ -777,14 +737,7 @@ if ($action === 'disable-faceid') {
     $userId = $_SESSION['user_id'];
 
     try {
-        $stmt = $pdo->prepare("
-            UPDATE users SET
-                face_descriptor = NULL,
-                faceid_enabled = FALSE,
-                updated_at = NOW()
-            WHERE id = ?
-        ");
-        $stmt->execute([$userId]);
+        $userRepo->disableFaceId($userId);
 
         // Notification
         createNotification($pdo, $userId, 'system', '🔓 Face ID Disabled', 'Face ID has been removed from your account. You can re-enable it anytime from your profile settings.');
@@ -809,8 +762,7 @@ if ($action === 'faceid-login') {
 
     try {
         // Get all users with Face ID enabled
-        $stmt = $pdo->query("SELECT id, full_name, email, phone, role, face_descriptor, profile_completed, avatar_url FROM users WHERE faceid_enabled = TRUE AND face_descriptor IS NOT NULL");
-        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $users = $userRepo->getAllWithFaceId();
 
         if (empty($users)) {
             echo json_encode(['success' => false, 'message' => 'No users have Face ID enabled.']);
@@ -856,10 +808,8 @@ if ($action === 'faceid-login') {
         $_SESSION['email'] = $bestMatch['email'];
         $_SESSION['role'] = $bestMatch['role'];
         $_SESSION['profile_completed'] = $bestMatch['profile_completed'];
-
         // Update last login
-        $upd = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
-        $upd->execute([$bestMatch['id']]);
+        $userRepo->updateLastLogin($bestMatch['id']);
 
         echo json_encode([
             'success' => true,
@@ -886,9 +836,7 @@ if ($action === 'faceid-login') {
 if ($action === 'check-session') {
     if (isset($_SESSION['logged_in']) && $_SESSION['logged_in']) {
         try {
-            $stmt = $pdo->prepare("SELECT id, full_name, email, phone, role, avatar_url, profile_completed, faceid_enabled, membership FROM users WHERE id = ?");
-            $stmt->execute([$_SESSION['user_id']]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            $user = $userRepo->getSessionInfo($_SESSION['user_id']);
 
             if ($user) {
                 echo json_encode([
@@ -930,15 +878,7 @@ if ($action === 'get-profile') {
     }
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT id, email, phone, auth_provider, role, full_name, date_of_birth, avatar_url,
-                   address, city, country, driving_license, license_expiry, id_card_number, bio,
-                   faceid_enabled, profile_completed, membership, email_verified, phone_verified,
-                   created_at, last_login_at
-            FROM users WHERE id = ?
-        ");
-        $stmt->execute([$_SESSION['user_id']]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = $userRepo->getFullProfile($_SESSION['user_id']);
 
         if ($user) {
             // Cast booleans
@@ -1006,11 +946,7 @@ if ($action === 'upload-avatar') {
         $publicUrl = $uploadResult['public_url'] . '?t=' . time();
         $avatarUrl = '/api/auth.php?action=get-avatar&id=' . $userId . '&t=' . time();
 
-        $stmt = $pdo->prepare("UPDATE users SET avatar_storage_path = :spath, avatar_url = :url, updated_at = NOW() WHERE id = :uid");
-        $stmt->bindParam(':spath', $storagePath);
-        $stmt->bindParam(':url', $avatarUrl);
-        $stmt->bindParam(':uid', $userId);
-        $stmt->execute();
+        $userRepo->updateAvatar($userId, $storagePath, $avatarUrl);
 
         // Notification
         createNotification($pdo, $userId, 'system', '📷 Avatar Updated', 'Your profile picture has been updated successfully.');
@@ -1053,9 +989,7 @@ if ($action === 'email-change-send-otp') {
     }
 
     // Check if new email already exists
-    $checkStmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-    $checkStmt->execute([$newEmail, $_SESSION['user_id']]);
-    if ($checkStmt->fetch()) {
+    if ($userRepo->emailExists($newEmail, $_SESSION['user_id'])) {
         echo json_encode(['success' => false, 'message' => 'This email is already registered to another account.']);
         exit;
     }
@@ -1077,7 +1011,7 @@ if ($action === 'email-change-send-otp') {
     $smtpUser = \EnvLoader::get('SMTP_USERNAME', '');
     $smtpPass = \EnvLoader::get('SMTP_PASSWORD', '');
     $fromEmail = \EnvLoader::get('SMTP_FROM_EMAIL', $smtpUser);
-    $fromName = \EnvLoader::get('SMTP_FROM_NAME', 'DriveNow');
+    $fromName = \EnvLoader::get('SMTP_FROM_NAME', 'PrivateHire');
 
     $sentOld = false;
     $sentNew = false;
@@ -1176,8 +1110,10 @@ if ($action === 'email-change-verify') {
     $userId = $_SESSION['user_id'];
 
     try {
-        $stmt = $pdo->prepare("UPDATE users SET email = ?, email_verified = true, updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$newEmail, $userId]);
+        // Update email via repository
+        $user = $userRepo->updateProfile($userId, [
+            'email' => $newEmail
+        ]);
 
         // Update session
         $_SESSION['email'] = $newEmail;
@@ -1211,7 +1147,6 @@ if ($action === 'update-profile') {
 
     // Only update provided fields
     $updates = [];
-    $params = [];
 
     $allowedFields = [
         'full_name', 'date_of_birth', 'phone', 'email', 'address', 'city',
@@ -1220,15 +1155,13 @@ if ($action === 'update-profile') {
 
     foreach ($allowedFields as $field) {
         if (isset($input[$field])) {
-            $updates[] = "$field = ?";
-            $params[] = trim($input[$field]) ?: null;
+            $updates[$field] = trim($input[$field]) ?: null;
         }
     }
 
     // Role change
     if (isset($input['role']) && in_array($input['role'], ['renter', 'owner'])) {
-        $updates[] = "role = ?::user_role";
-        $params[] = $input['role'];
+        $updates['role'] = $input['role'];
     }
 
     if (empty($updates)) {
@@ -1236,28 +1169,22 @@ if ($action === 'update-profile') {
         exit;
     }
 
-    $updates[] = "updated_at = NOW()";
-    $params[] = $userId;
-
     try {
-        $sql = "UPDATE users SET " . implode(', ', $updates) . " WHERE id = ? RETURNING *";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Update profile via repository
+        $user = $userRepo->updateProfile($userId, $updates);
 
         // Update session
         $_SESSION['username'] = $user['full_name'] ?? $_SESSION['username'];
-        $_SESSION['full_name'] = $user['full_name'] ?? $_SESSION['full_name'] ?? $_SESSION['username'];
         $_SESSION['email'] = $user['email'] ?? $_SESSION['email'];
-        $_SESSION['role'] = $user['role'];
+        $_SESSION['role'] = $user['role'] ?? $_SESSION['role'];
 
         // --- Notification: profile updated ---
         $changedFields = [];
-        if (isset($input['full_name'])) $changedFields[] = 'name';
-        if (isset($input['phone'])) $changedFields[] = 'phone';
-        if (isset($input['address'])) $changedFields[] = 'address';
-        if (isset($input['role'])) $changedFields[] = 'role to ' . $input['role'];
-        if (isset($input['bio'])) $changedFields[] = 'bio';
+        if (isset($updates['full_name'])) $changedFields[] = 'name';
+        if (isset($updates['phone'])) $changedFields[] = 'phone';
+        if (isset($updates['address'])) $changedFields[] = 'address';
+        if (isset($updates['role'])) $changedFields[] = 'role to ' . $updates['role'];
+        if (isset($updates['bio'])) $changedFields[] = 'bio';
         $fieldsSummary = !empty($changedFields) ? implode(', ', $changedFields) : 'profile info';
         createNotification($pdo, $userId, 'system',
             '✏️ Profile Updated',

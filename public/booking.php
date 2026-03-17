@@ -13,11 +13,11 @@ require_once '../Database/db.php';
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? ($_SESSION['full_name'] ?? $_SESSION['username'] ?? null) : null;
 $currentEmail = $isLoggedIn ? ($_SESSION['email'] ?? '') : '';
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 // Require login to book
 if (!$isLoggedIn) {
-    header('Location: login.php?redirect=booking.php' . (isset($_GET['car_id']) ? '&car_id=' . urlencode($_GET['car_id']) : ''));
+    header('Location: /auth?mode=login&redirect=booking.php' . (isset($_GET['car_id']) ? '&car_id=' . urlencode($_GET['car_id']) : ''));
     exit;
 }
 

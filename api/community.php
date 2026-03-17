@@ -24,37 +24,18 @@ if ($action === 'get-post-image') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT image_storage_path, image_data, image_mime FROM community_posts WHERE id = ?");
-        $stmt->execute([$postId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $row = $communityRepo->getPostImageInfo($postId);
 
-        if (!$row) {
+        if (!$row || empty($row['image_storage_path'])) {
             http_response_code(404);
             echo 'Image not found';
             exit;
         }
 
-        if (!empty($row['image_storage_path'])) {
-            $storage = new SupabaseStorage();
-            $publicUrl = $storage->getPublicUrl($row['image_storage_path']);
-            header('Location: ' . $publicUrl, true, 302);
-            header('Cache-Control: public, max-age=86400');
-        } elseif (!empty($row['image_data'])) {
-            // Legacy fallback: serve BYTEA data directly
-            $mime = $row['image_mime'] ?? 'image/jpeg';
-            header('Content-Type: ' . $mime);
-            header('Cache-Control: public, max-age=86400');
-            $data = $row['image_data'];
-            if (is_resource($data)) {
-                echo stream_get_contents($data);
-            } else {
-                echo $data;
-            }
-        } else {
-            http_response_code(404);
-            echo 'Image not found';
-            exit;
-        }
+        $storage = new SupabaseStorage();
+        $publicUrl = $storage->getPublicUrl($row['image_storage_path']);
+        header('Location: ' . $publicUrl, true, 302);
+        header('Cache-Control: public, max-age=86400');
     } catch (Exception $e) {
         http_response_code(500);
         echo 'Server error';
@@ -75,6 +56,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/supabase-storage.php';
+require_once __DIR__ . '/../lib/repositories/CommunityRepository.php';
+require_once __DIR__ . '/../lib/repositories/UserRepository.php';
+
+$communityRepo = new CommunityRepository($pdo);
+$userRepo = new UserRepository($pdo);
 
 // Run migration: add image_storage_path if not exist
 try {
@@ -87,7 +73,7 @@ try {
 
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $userId = $_SESSION['user_id'] ?? null;
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 // Determine action
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['image'])) {
@@ -112,29 +98,7 @@ if ($action === 'list-posts') {
     $category = $input['category'] ?? $_GET['category'] ?? '';
 
     try {
-        $sql = "
-            SELECT p.id, p.user_id, p.title, p.content, p.category, p.image_url,
-                   p.likes_count, p.comments_count, p.created_at,
-                   CASE WHEN p.image_storage_path IS NOT NULL THEN true
-                        WHEN p.image_data IS NOT NULL THEN true
-                        ELSE false END as has_image,
-                   p.image_storage_path,
-                   u.full_name as author_name, u.avatar_url, u.role as author_role
-            FROM community_posts p
-            JOIN users u ON p.user_id = u.id
-        ";
-        $params = [];
-
-        if (!empty($category) && $category !== 'all') {
-            $sql .= " WHERE p.category = :category";
-            $params[':category'] = $category;
-        }
-
-        $sql .= " ORDER BY p.created_at DESC";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $posts = $communityRepo->listPosts($category);
 
         // Check if current user liked each post
         $storage = new SupabaseStorage();
@@ -152,9 +116,7 @@ if ($action === 'list-posts') {
             $post['liked'] = false;
 
             if ($userId) {
-                $likeStmt = $pdo->prepare("SELECT id FROM community_likes WHERE post_id = ? AND user_id = ?");
-                $likeStmt->execute([$post['id'], $userId]);
-                $post['liked'] = $likeStmt->fetch() ? true : false;
+                $post['liked'] = $communityRepo->hasUserLikedPost($post['id'], $userId);
             }
         }
         unset($post);
@@ -221,21 +183,9 @@ if ($action === 'create-post') {
     }
 
     try {
-        $stmt = $pdo->prepare("
-            INSERT INTO community_posts (user_id, title, content, category, image_storage_path, image_mime)
-            VALUES (:uid, :title, :content, :category, :spath, :imgmime)
-            RETURNING id
-        ");
-        $stmt->bindParam(':uid', $userId);
-        $stmt->bindParam(':title', $title);
-        $stmt->bindParam(':content', $content);
-        $stmt->bindParam(':category', $category);
-        $stmt->bindParam(':spath', $storagePath);
-        $stmt->bindParam(':imgmime', $imageMime);
-        $stmt->execute();
-        $postId = $stmt->fetchColumn();
+        $post = $communityRepo->createPost($userId, $title, $content, $category, $storagePath, $imageMime);
 
-        echo json_encode(['success' => true, 'message' => 'Post published!', 'post_id' => $postId]);
+        echo json_encode(['success' => true, 'message' => 'Post published!', 'post_id' => $post['id']]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }
@@ -256,9 +206,7 @@ if ($action === 'delete-post') {
 
     try {
         // Check ownership or admin
-        $stmt = $pdo->prepare("SELECT user_id, image_storage_path FROM community_posts WHERE id = ?");
-        $stmt->execute([$postId]);
-        $post = $stmt->fetch(PDO::FETCH_ASSOC);
+        $post = $communityRepo->getPostById($postId);
 
         if (!$post) {
             echo json_encode(['success' => false, 'message' => 'Post not found.']);
@@ -277,8 +225,7 @@ if ($action === 'delete-post') {
         }
 
         // Cascade delete handles comments and likes
-        $stmt = $pdo->prepare("DELETE FROM community_posts WHERE id = ?");
-        $stmt->execute([$postId]);
+        $communityRepo->deletePost($postId);
 
         echo json_encode(['success' => true, 'message' => 'Post deleted.']);
     } catch (PDOException $e) {
@@ -300,29 +247,13 @@ if ($action === 'toggle-like') {
     }
 
     try {
-        // Check if already liked
-        $stmt = $pdo->prepare("SELECT id FROM community_likes WHERE post_id = ? AND user_id = ?");
-        $stmt->execute([$postId, $userId]);
-        $existing = $stmt->fetch();
+        $result = $communityRepo->toggleLike($postId, $userId);
 
-        if ($existing) {
-            // Unlike
-            $pdo->prepare("DELETE FROM community_likes WHERE post_id = ? AND user_id = ?")->execute([$postId, $userId]);
-            $pdo->prepare("UPDATE community_posts SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = ?")->execute([$postId]);
-            $liked = false;
-        } else {
-            // Like
-            $pdo->prepare("INSERT INTO community_likes (post_id, user_id) VALUES (?, ?)")->execute([$postId, $userId]);
-            $pdo->prepare("UPDATE community_posts SET likes_count = likes_count + 1 WHERE id = ?")->execute([$postId]);
-            $liked = true;
-        }
-
-        // Get updated count
-        $stmt = $pdo->prepare("SELECT likes_count FROM community_posts WHERE id = ?");
-        $stmt->execute([$postId]);
-        $count = $stmt->fetchColumn();
-
-        echo json_encode(['success' => true, 'liked' => $liked, 'likes_count' => (int)$count]);
+        echo json_encode([
+            'success' => true,
+            'liked' => $result['liked'],
+            'likes_count' => (int)$result['likes_count']
+        ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }
@@ -340,16 +271,7 @@ if ($action === 'list-comments') {
     }
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT c.id, c.content, c.created_at, c.user_id,
-                   u.full_name as author_name, u.avatar_url, u.role as author_role
-            FROM community_comments c
-            JOIN users u ON c.user_id = u.id
-            WHERE c.post_id = ?
-            ORDER BY c.created_at ASC
-        ");
-        $stmt->execute([$postId]);
-        $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $comments = $communityRepo->listComments($postId);
 
         foreach ($comments as &$comment) {
             $comment['is_own'] = ($userId && $comment['user_id'] === $userId);
@@ -378,28 +300,17 @@ if ($action === 'add-comment') {
     }
 
     try {
-        $stmt = $pdo->prepare("
-            INSERT INTO community_comments (post_id, user_id, content)
-            VALUES (?, ?, ?)
-            RETURNING id, created_at
-        ");
-        $stmt->execute([$postId, $userId, $content]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        // Update comments count
-        $pdo->prepare("UPDATE community_posts SET comments_count = comments_count + 1 WHERE id = ?")->execute([$postId]);
+        $comment = $communityRepo->addComment($postId, $userId, $content);
 
         // Get author info
-        $uStmt = $pdo->prepare("SELECT full_name, avatar_url, role FROM users WHERE id = ?");
-        $uStmt->execute([$userId]);
-        $user = $uStmt->fetch(PDO::FETCH_ASSOC);
+        $user = $userRepo->findById($userId);
 
         echo json_encode([
             'success' => true,
             'comment' => [
-                'id' => $row['id'],
+                'id' => $comment['id'],
                 'content' => $content,
-                'created_at' => $row['created_at'],
+                'created_at' => $comment['created_at'],
                 'user_id' => $userId,
                 'author_name' => $user['full_name'],
                 'avatar_url' => $user['avatar_url'],
@@ -426,9 +337,7 @@ if ($action === 'delete-comment') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT user_id, post_id FROM community_comments WHERE id = ?");
-        $stmt->execute([$commentId]);
-        $comment = $stmt->fetch(PDO::FETCH_ASSOC);
+        $comment = $communityRepo->getCommentById($commentId);
 
         if (!$comment) {
             echo json_encode(['success' => false, 'message' => 'Comment not found.']);
@@ -440,8 +349,7 @@ if ($action === 'delete-comment') {
             exit;
         }
 
-        $pdo->prepare("DELETE FROM community_comments WHERE id = ?")->execute([$commentId]);
-        $pdo->prepare("UPDATE community_posts SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = ?")->execute([$comment['post_id']]);
+        $communityRepo->deleteComment($commentId, $comment['post_id']);
 
         echo json_encode(['success' => true, 'message' => 'Comment deleted.']);
     } catch (PDOException $e) {
@@ -461,50 +369,17 @@ if ($action === 'get-user-public') {
     }
 
     try {
-        $stmt = $pdo->prepare("
-            SELECT id, full_name, avatar_url, role, bio, city, country, membership, created_at
-            FROM users WHERE id = ?
-        ");
-        $stmt->execute([$targetUserId]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = $userRepo->getUserPublicProfile($targetUserId);
 
         if (!$user) {
             echo json_encode(['success' => false, 'message' => 'User not found.']);
             exit;
         }
 
-        // Count posts
-        $pStmt = $pdo->prepare("SELECT COUNT(*) FROM community_posts WHERE user_id = ?");
-        $pStmt->execute([$targetUserId]);
-        $user['posts_count'] = (int)$pStmt->fetchColumn();
-
-        // Count comments
-        $cStmt = $pdo->prepare("SELECT COUNT(*) FROM community_comments WHERE user_id = ?");
-        $cStmt->execute([$targetUserId]);
-        $user['comments_count'] = (int)$cStmt->fetchColumn();
-
-        // Count total likes received
-        $lStmt = $pdo->prepare("
-            SELECT COALESCE(SUM(p.likes_count), 0) 
-            FROM community_posts p WHERE p.user_id = ?
-        ");
-        $lStmt->execute([$targetUserId]);
-        $user['total_likes_received'] = (int)$lStmt->fetchColumn();
-
         // Recent posts
-        $rpStmt = $pdo->prepare("
-            SELECT id, title, category, likes_count, comments_count, created_at,
-                   image_storage_path,
-                   CASE WHEN image_storage_path IS NOT NULL THEN true
-                        WHEN image_data IS NOT NULL THEN true
-                        ELSE false END as has_image
-            FROM community_posts WHERE user_id = ?
-            ORDER BY created_at DESC LIMIT 5
-        ");
-        $rpStmt->execute([$targetUserId]);
-        $user['recent_posts'] = $rpStmt->fetchAll(PDO::FETCH_ASSOC);
+        $recentPosts = $communityRepo->listPostsByUser($targetUserId, 5);
         $storage = new SupabaseStorage();
-        foreach ($user['recent_posts'] as &$rp) {
+        foreach ($recentPosts as &$rp) {
             $rp['has_image'] = ($rp['has_image'] === true || $rp['has_image'] === 't');
             if ($rp['has_image'] && !empty($rp['image_storage_path'])) {
                 $rp['image_src'] = $storage->getPublicUrl($rp['image_storage_path']);
@@ -516,6 +391,8 @@ if ($action === 'get-user-public') {
             unset($rp['image_storage_path']);
         }
         unset($rp);
+
+        $user['recent_posts'] = $recentPosts;
 
         echo json_encode(['success' => true, 'user' => $user]);
     } catch (PDOException $e) {

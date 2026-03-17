@@ -12,6 +12,7 @@ $action = $_GET['action'] ?? '';
 if ($action === 'hero-slide-image') {
     session_start();
     require_once __DIR__ . '/../Database/db.php';
+    require_once __DIR__ . '/../lib/repositories/HeroSlideRepository.php';
 
     $slideId = $_GET['id'] ?? '';
     if (empty($slideId)) {
@@ -21,17 +22,8 @@ if ($action === 'hero-slide-image') {
     }
 
     try {
-        // Check if storage_path column exists
-        $colCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'hero_slides' AND column_name = 'storage_path'");
-        $hasStoragePath = $colCheck->fetch() !== false;
-
-        if ($hasStoragePath) {
-            $stmt = $pdo->prepare("SELECT storage_path, mime_type, file_name, image_data FROM hero_slides WHERE id = ?");
-        } else {
-            $stmt = $pdo->prepare("SELECT NULL as storage_path, mime_type, file_name, image_data FROM hero_slides WHERE id = ?");
-        }
-        $stmt->execute([$slideId]);
-        $img = $stmt->fetch(PDO::FETCH_ASSOC);
+        $slideRepo = new HeroSlideRepository($pdo);
+        $img = $slideRepo->findImageRowById((string)$slideId);
 
         if (!$img) {
             http_response_code(404);
@@ -73,18 +65,11 @@ if ($action === 'hero-slides-public') {
     header('Content-Type: application/json');
     session_start();
     require_once __DIR__ . '/../Database/db.php';
+    require_once __DIR__ . '/../lib/repositories/HeroSlideRepository.php';
 
     try {
-        // Check if storage_path column exists
-        $colCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'hero_slides' AND column_name = 'storage_path'");
-        $hasStoragePath = $colCheck->fetch() !== false;
-
-        if ($hasStoragePath) {
-            $stmt = $pdo->query("SELECT id, title, subtitle, link_url, sort_order, storage_path FROM hero_slides WHERE is_active = TRUE ORDER BY sort_order ASC, created_at DESC");
-        } else {
-            $stmt = $pdo->query("SELECT id, title, subtitle, link_url, sort_order, NULL as storage_path FROM hero_slides WHERE is_active = TRUE ORDER BY sort_order ASC, created_at DESC");
-        }
-        $slides = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $slideRepo = new HeroSlideRepository($pdo);
+        $slides = $slideRepo->listActiveSlidesForPublic();
 
         $storage = null;
         foreach ($slides as &$s) {
@@ -121,10 +106,21 @@ session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/notification-helpers.php';
 require_once __DIR__ . '/supabase-storage.php';
+require_once __DIR__ . '/../lib/repositories/HeroSlideRepository.php';
+require_once __DIR__ . '/../lib/repositories/PromotionRepository.php';
+require_once __DIR__ . '/../lib/repositories/VehicleRepository.php';
+require_once __DIR__ . '/../lib/repositories/BookingRepository.php';
+require_once __DIR__ . '/../lib/repositories/UserRepository.php';
+
+$heroSlideRepo = new HeroSlideRepository($pdo);
+$promotionRepo = new PromotionRepository($pdo);
+$vehicleRepo = new VehicleRepository($pdo);
+$bookingRepo = new BookingRepository($pdo);
+$userRepo = new UserRepository($pdo);
 
 // Auto-migration: ensure storage_path column exists on hero_slides
 try {
-    $pdo->exec("ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS storage_path TEXT");
+    $heroSlideRepo->ensureStoragePathColumnExists();
 } catch (Exception $e) { /* column may already exist */ }
 
 $input = json_decode(file_get_contents('php://input'), true);
@@ -160,16 +156,7 @@ if ($action === 'hero-slides-list') {
     requireAdmin();
 
     try {
-        // Check if storage_path column exists
-        $colCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'hero_slides' AND column_name = 'storage_path'");
-        $hasStoragePath = $colCheck->fetch() !== false;
-
-        if ($hasStoragePath) {
-            $stmt = $pdo->query("SELECT id, file_name, mime_type, file_size, title, subtitle, link_url, sort_order, is_active, created_at, storage_path FROM hero_slides ORDER BY sort_order ASC, created_at DESC");
-        } else {
-            $stmt = $pdo->query("SELECT id, file_name, mime_type, file_size, title, subtitle, link_url, sort_order, is_active, created_at, NULL as storage_path FROM hero_slides ORDER BY sort_order ASC, created_at DESC");
-        }
-        $slides = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $slides = $heroSlideRepo->listAllSlides();
 
         $storage = null;
         foreach ($slides as &$s) {
@@ -241,30 +228,24 @@ if ($action === 'hero-slide-upload') {
             exit;
         }
 
-        $stmt = $pdo->prepare("
-            INSERT INTO hero_slides (storage_path, image_data, mime_type, file_name, file_size, title, subtitle, link_url, sort_order, is_active, created_by)
-            VALUES (:spath, :imgdata, :mime, :fname, :fsize, :title, :sub, :link, :sort, :active, :uid)
-            RETURNING id
-        ");
-        $stmt->bindParam(':spath', $storagePath);
-        $stmt->bindParam(':imgdata', $imageData, PDO::PARAM_LOB);
-        $stmt->bindParam(':mime', $file['type']);
-        $stmt->bindParam(':fname', $file['name']);
-        $stmt->bindParam(':fsize', $file['size'], PDO::PARAM_INT);
-        $stmt->bindParam(':title', $title);
-        $stmt->bindParam(':sub', $subtitle);
-        $stmt->bindParam(':link', $linkUrl);
-        $stmt->bindParam(':sort', $sortOrder, PDO::PARAM_INT);
-        $stmt->bindParam(':active', $isActive, PDO::PARAM_BOOL);
-        $stmt->bindParam(':uid', $adminId);
-        $stmt->execute();
-
-        $newId = $stmt->fetchColumn();
+        $slideId = $heroSlideRepo->addSlide([
+            'storage_path' => $storagePath,
+            'image_data' => $imageData,
+            'mime_type' => $file['type'],
+            'file_name' => $file['name'],
+            'file_size' => $file['size'],
+            'title' => $title,
+            'subtitle' => $subtitle,
+            'link_url' => $linkUrl,
+            'sort_order' => $sortOrder,
+            'is_active' => $isActive,
+            'created_by' => $adminId
+        ]);
 
         echo json_encode([
             'success' => true,
             'message' => 'Hero slide uploaded successfully.',
-            'slide_id' => $newId,
+            'slide_id' => $slideId,
             'image_url' => $uploadResult['public_url']
         ]);
     } catch (Exception $e) {
@@ -286,13 +267,12 @@ if ($action === 'hero-slide-update') {
     }
 
     $fields = [];
-    $params = [':id' => $slideId];
 
-    if (isset($input['title'])) { $fields[] = 'title = :title'; $params[':title'] = $input['title']; }
-    if (isset($input['subtitle'])) { $fields[] = 'subtitle = :sub'; $params[':sub'] = $input['subtitle']; }
-    if (isset($input['link_url'])) { $fields[] = 'link_url = :link'; $params[':link'] = $input['link_url']; }
-    if (isset($input['sort_order'])) { $fields[] = 'sort_order = :sort'; $params[':sort'] = intval($input['sort_order']); }
-    if (isset($input['is_active'])) { $fields[] = 'is_active = :active'; $params[':active'] = (bool)$input['is_active']; }
+    if (isset($input['title'])) { $fields['title'] = $input['title']; }
+    if (isset($input['subtitle'])) { $fields['subtitle'] = $input['subtitle']; }
+    if (isset($input['link_url'])) { $fields['link_url'] = $input['link_url']; }
+    if (isset($input['sort_order'])) { $fields['sort_order'] = intval($input['sort_order']); }
+    if (isset($input['is_active'])) { $fields['is_active'] = (bool)$input['is_active']; }
 
     if (empty($fields)) {
         echo json_encode(['success' => false, 'message' => 'No fields to update.']);
@@ -300,18 +280,11 @@ if ($action === 'hero-slide-update') {
     }
 
     try {
-        $sql = "UPDATE hero_slides SET " . implode(', ', $fields) . " WHERE id = :id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-
-        if ($stmt->rowCount() === 0) {
-            echo json_encode(['success' => false, 'message' => 'Slide not found.']);
-            exit;
-        }
+        $heroSlideRepo->updateSlide($slideId, $fields);
 
         echo json_encode(['success' => true, 'message' => 'Slide updated successfully.']);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -330,9 +303,7 @@ if ($action === 'hero-slide-delete') {
 
     try {
         // Get storage path before deleting
-        $pathStmt = $pdo->prepare("SELECT storage_path FROM hero_slides WHERE id = ?");
-        $pathStmt->execute([$slideId]);
-        $slide = $pathStmt->fetch(PDO::FETCH_ASSOC);
+        $slide = $heroSlideRepo->findSlideById($slideId);
 
         if (!$slide) {
             echo json_encode(['success' => false, 'message' => 'Slide not found.']);
@@ -346,8 +317,7 @@ if ($action === 'hero-slide-delete') {
         }
 
         // Delete DB record
-        $stmt = $pdo->prepare("DELETE FROM hero_slides WHERE id = ?");
-        $stmt->execute([$slideId]);
+        $heroSlideRepo->deleteSlide($slideId);
 
         echo json_encode(['success' => true, 'message' => 'Slide deleted successfully.']);
     } catch (Exception $e) {
@@ -363,11 +333,10 @@ if ($action === 'promotions-list') {
     requireAdmin();
 
     try {
-        $stmt = $pdo->query("SELECT * FROM promotions ORDER BY created_at DESC");
-        $promos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        echo json_encode(['success' => true, 'promotions' => $promos]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        $promotions = $promotionRepo->listAllPromotions();
+        echo json_encode(['success' => true, 'promotions' => $promotions]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -392,31 +361,29 @@ if ($action === 'promotion-add') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT id FROM promotions WHERE code = ? LIMIT 1");
-        $stmt->execute([$code]);
-        if ($stmt->fetch()) {
+        if ($promotionRepo->codeExists($code)) {
             echo json_encode(['success' => false, 'message' => 'Promotion code already exists.']);
             exit;
         }
 
-        $stmt = $pdo->prepare("
-            INSERT INTO promotions (code, title, description, discount_type, discount_value, starts_at, expires_at, max_uses)
-            VALUES (?, ?, ?, ?, ?, ?::TIMESTAMPTZ, ?::TIMESTAMPTZ, ?)
-            RETURNING *
-        ");
-        $stmt->execute([
-            strtoupper($code), strtoupper($code), $description, $discountType, $discountValue,
-            $startDate ?: null, $endDate ?: null, $usageLimit
+        $promoId = $promotionRepo->addPromotion([
+            'code' => strtoupper($code),
+            'title' => strtoupper($code),
+            'description' => $description,
+            'discount_type' => $discountType,
+            'discount_value' => $discountValue,
+            'starts_at' => $startDate ?: null,
+            'expires_at' => $endDate ?: null,
+            'max_uses' => $usageLimit
         ]);
-        $promo = $stmt->fetch(PDO::FETCH_ASSOC);
 
         // Broadcast notification to all users
         $discountText = $discountType === 'percentage' ? "{$discountValue}%" : "\${$discountValue}";
         createNotificationForAll($pdo, 'promo', '🎁 New Promotion: ' . strtoupper($code), "Use code {$code} to get {$discountText} off your next rental! {$description}");
 
-        echo json_encode(['success' => true, 'message' => 'Promotion created.', 'promotion' => $promo]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => true, 'message' => 'Promotion created.', 'promotion' => $promoId]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -434,16 +401,15 @@ if ($action === 'promotion-update') {
     }
 
     $fields = [];
-    $params = [':id' => $promoId];
 
-    if (isset($input['code'])) { $fields[] = 'code = :code'; $params[':code'] = strtoupper($input['code']); }
-    if (isset($input['description'])) { $fields[] = 'description = :desc'; $params[':desc'] = $input['description']; }
-    if (isset($input['discount_type'])) { $fields[] = "discount_type = :dtype"; $params[':dtype'] = $input['discount_type']; }
-    if (isset($input['discount_value'])) { $fields[] = 'discount_value = :dval'; $params[':dval'] = floatval($input['discount_value']); }
-    if (isset($input['start_date'])) { $fields[] = 'starts_at = :sd::TIMESTAMPTZ'; $params[':sd'] = $input['start_date']; }
-    if (isset($input['end_date'])) { $fields[] = 'expires_at = :ed::TIMESTAMPTZ'; $params[':ed'] = $input['end_date']; }
-    if (isset($input['usage_limit'])) { $fields[] = 'max_uses = :ul'; $params[':ul'] = intval($input['usage_limit']); }
-    if (isset($input['is_active'])) { $fields[] = 'is_active = :active'; $params[':active'] = (bool)$input['is_active']; }
+    if (isset($input['code'])) { $fields['code'] = strtoupper($input['code']); }
+    if (isset($input['description'])) { $fields['description'] = $input['description']; }
+    if (isset($input['discount_type'])) { $fields['discount_type'] = $input['discount_type']; }
+    if (isset($input['discount_value'])) { $fields['discount_value'] = floatval($input['discount_value']); }
+    if (isset($input['start_date'])) { $fields['starts_at'] = $input['start_date']; }
+    if (isset($input['end_date'])) { $fields['expires_at'] = $input['end_date']; }
+    if (isset($input['usage_limit'])) { $fields['max_uses'] = intval($input['usage_limit']); }
+    if (isset($input['is_active'])) { $fields['is_active'] = (bool)$input['is_active']; }
 
     if (empty($fields)) {
         echo json_encode(['success' => false, 'message' => 'No fields to update.']);
@@ -451,18 +417,11 @@ if ($action === 'promotion-update') {
     }
 
     try {
-        $sql = "UPDATE promotions SET " . implode(', ', $fields) . " WHERE id = :id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-
-        if ($stmt->rowCount() === 0) {
-            echo json_encode(['success' => false, 'message' => 'Promotion not found.']);
-            exit;
-        }
+        $promotionRepo->updatePromotion($promoId, $fields);
 
         echo json_encode(['success' => true, 'message' => 'Promotion updated.']);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -480,17 +439,11 @@ if ($action === 'promotion-delete') {
     }
 
     try {
-        $stmt = $pdo->prepare("DELETE FROM promotions WHERE id = ?");
-        $stmt->execute([$promoId]);
-
-        if ($stmt->rowCount() === 0) {
-            echo json_encode(['success' => false, 'message' => 'Promotion not found.']);
-            exit;
-        }
+        $promotionRepo->deletePromotion($promoId);
 
         echo json_encode(['success' => true, 'message' => 'Promotion deleted.']);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -509,29 +462,23 @@ if ($action === 'admin-delete-vehicle') {
 
     try {
         // Check for active bookings
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE vehicle_id = ? AND status IN ('pending', 'confirmed', 'in_progress')");
-        $stmt->execute([$vehicleId]);
-        $activeBookings = $stmt->fetchColumn();
-
+        $activeBookings = $vehicleRepo->countActiveBookings($vehicleId);
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete vehicle with active bookings (' . $activeBookings . ' active). Cancel them first.']);
             exit;
         }
 
         // Delete images from Supabase Storage first
-        $imgStmt = $pdo->prepare("SELECT storage_path FROM vehicle_images WHERE vehicle_id = ? AND storage_path IS NOT NULL");
-        $imgStmt->execute([$vehicleId]);
-        $storagePaths = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
+        $storagePaths = $vehicleRepo->getImageStoragePaths($vehicleId);
         if (!empty($storagePaths)) {
             $storage = new SupabaseStorage();
             $storage->deleteMultiple($storagePaths);
         }
 
-        // Admin can delete any vehicle (no owner_id check)
-        $stmt = $pdo->prepare("DELETE FROM vehicles WHERE id = ?");
-        $stmt->execute([$vehicleId]);
+        // Admin can delete any vehicle - use repo without owner check
+        $deleted = $vehicleRepo->deleteVehicleAdmin($vehicleId);
 
-        if ($stmt->rowCount() === 0) {
+        if (!$deleted) {
             echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
             exit;
         }
@@ -556,10 +503,9 @@ if ($action === 'admin-delete-booking') {
     }
 
     try {
-        $stmt = $pdo->prepare("DELETE FROM bookings WHERE id = ?");
-        $stmt->execute([$bookingId]);
+        $deleted = $bookingRepo->deleteBooking($bookingId);
 
-        if ($stmt->rowCount() === 0) {
+        if (!$deleted) {
             echo json_encode(['success' => false, 'message' => 'Booking not found.']);
             exit;
         }
@@ -578,24 +524,15 @@ if ($action === 'admin-list-vehicles') {
     requireAdmin();
 
     try {
-        $stmt = $pdo->query("
-            SELECT v.*, u.full_name AS owner_name, u.email AS owner_email,
-                   (SELECT COUNT(*) FROM bookings WHERE vehicle_id = v.id) AS total_bookings,
-                   (SELECT COUNT(*) FROM bookings WHERE vehicle_id = v.id AND status IN ('pending','confirmed','in_progress')) AS active_bookings
-            FROM vehicles v
-            LEFT JOIN users u ON v.owner_id = u.id
-            ORDER BY v.created_at DESC
-        ");
-        $vehicles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Get vehicles via repository
+        $vehicles = $vehicleRepo->listAllVehiclesForAdmin();
 
-        // Add image URLs
+        // Add image URLs (get first image as thumbnail)
         foreach ($vehicles as &$v) {
-            $imgStmt = $pdo->prepare("SELECT id FROM vehicle_images WHERE vehicle_id = ? ORDER BY is_thumbnail DESC, sort_order ASC LIMIT 1");
-            $imgStmt->execute([$v['id']]);
-            $imgId = $imgStmt->fetchColumn();
+            // Get thumbnail ID using repository helper
+            $imgId = $vehicleRepo->getThumbnailImageId($v['id']);
             $v['thumbnail'] = $imgId ? '/api/vehicles.php?action=get-image&id=' . $imgId : null;
         }
-
         echo json_encode(['success' => true, 'vehicles' => $vehicles]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
@@ -610,22 +547,8 @@ if ($action === 'admin-list-bookings') {
     requireAdmin();
 
     try {
-        $stmt = $pdo->query("
-            SELECT b.id, b.renter_id, b.vehicle_id, b.owner_id, b.booking_type,
-                   b.pickup_date, b.return_date, b.pickup_location, b.return_location,
-                   b.total_days, b.price_per_day, b.subtotal, b.discount_amount,
-                   b.total_amount, b.promo_code, b.status, b.special_requests,
-                   b.created_at,
-                   u.full_name AS renter_name, u.email AS renter_email,
-                   v.brand, v.model, v.year, v.license_plate,
-                   ow.full_name AS owner_name, ow.email AS owner_email
-            FROM bookings b
-            LEFT JOIN users u ON b.renter_id = u.id
-            LEFT JOIN vehicles v ON b.vehicle_id = v.id
-            LEFT JOIN users ow ON b.owner_id = ow.id
-            ORDER BY b.created_at DESC
-        ");
-        $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Get bookings via repository
+        $bookings = $bookingRepo->listAllBookingsForAdmin();
         echo json_encode(['success' => true, 'bookings' => $bookings]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
@@ -640,15 +563,8 @@ if ($action === 'admin-list-users') {
     requireAdmin();
 
     try {
-        $stmt = $pdo->query("
-            SELECT id, email, phone, auth_provider, role, full_name, date_of_birth,
-                   avatar_url, city, country, driving_license, membership,
-                   is_active, email_verified, phone_verified, faceid_enabled,
-                   profile_completed, created_at, last_login_at
-            FROM users
-            ORDER BY created_at DESC
-        ");
-        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Get users via repository
+        $users = $userRepo->listAllUsers();
 
         // Cast booleans for JS
         foreach ($users as &$u) {
@@ -684,16 +600,13 @@ if ($action === 'admin-update-user') {
     }
 
     $fields = [];
-    $params = [];
 
     if (isset($input['role']) && in_array($input['role'], ['renter', 'owner', 'admin'])) {
-        $fields[] = "role = ?::user_role";
-        $params[] = $input['role'];
+        $fields['role'] = $input['role'];
     }
 
     if (isset($input['is_active'])) {
-        $fields[] = "is_active = ?";
-        $params[] = $input['is_active'] ? 't' : 'f';
+        $fields['is_active'] = $input['is_active'] ? 't' : 'f';
     }
 
     if (empty($fields)) {
@@ -701,15 +614,11 @@ if ($action === 'admin-update-user') {
         exit;
     }
 
-    $fields[] = "updated_at = NOW()";
-    $params[] = $userId;
-
     try {
-        $sql = "UPDATE users SET " . implode(', ', $fields) . " WHERE id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
+        // Update user via repository
+        $updated = $userRepo->updateUserAdmin($userId, $fields);
 
-        if ($stmt->rowCount() === 0) {
+        if (!$updated) {
             echo json_encode(['success' => false, 'message' => 'User not found.']);
             exit;
         }
@@ -741,19 +650,17 @@ if ($action === 'admin-delete-user') {
 
     try {
         // Check for active bookings
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE (renter_id = ? OR owner_id = ?) AND status IN ('pending', 'confirmed', 'in_progress')");
-        $stmt->execute([$userId, $userId]);
-        $activeBookings = $stmt->fetchColumn();
+        $activeBookings = $userRepo->countActiveBookings($userId);
 
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete user with ' . $activeBookings . ' active booking(s). Cancel them first.']);
             exit;
         }
 
-        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
-        $stmt->execute([$userId]);
+        // Delete user via repository
+        $deleted = $userRepo->deleteUser($userId);
 
-        if ($stmt->rowCount() === 0) {
+        if (!$deleted) {
             echo json_encode(['success' => false, 'message' => 'User not found.']);
             exit;
         }

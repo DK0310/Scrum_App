@@ -45,25 +45,20 @@ if ($action === 'register') {
     }
 
     try {
-        // Kiểm tra username/email đã tồn tại
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
-        $stmt->execute([$username, $email]);
-        
-        if ($stmt->fetch()) {
+        // Check if username/email exists
+        if ($userRepo->usernameOrEmailExists($username, $email)) {
             echo json_encode(['success' => false, 'message' => 'Username hoặc email đã tồn tại']);
             exit;
         }
 
-        // Lưu user mới
+        // Save new user
         $faceDescriptorJson = json_encode($faceDescriptor);
-        
-        $stmt = $pdo->prepare("INSERT INTO users (username, email, face_descriptor) VALUES (?, ?, ?)");
-        $stmt->execute([$username, $email, $faceDescriptorJson]);
+        $userId = $userRepo->createWithFaceId($username, $email, $faceDescriptorJson);
 
         echo json_encode([
             'success' => true, 
             'message' => 'Đăng ký thành công!',
-            'userId' => $pdo->lastInsertId()
+            'userId' => $userId
         ]);
 
     } catch (PDOException $e) {
@@ -84,9 +79,8 @@ if ($action === 'login') {
     }
 
     try {
-        // Lấy tất cả users có face_descriptor
-        $stmt = $pdo->query("SELECT id, username, email, face_descriptor FROM users WHERE face_descriptor IS NOT NULL");
-        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Get all users with face descriptors
+        $users = $userRepo->getAllWithFaceDescriptors();
 
         if (empty($users)) {
             echo json_encode(['success' => false, 'message' => 'Chưa có người dùng nào đăng ký']);

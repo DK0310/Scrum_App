@@ -13,11 +13,11 @@ require_once '../api/n8n.php';
 
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? $_SESSION['username'] : null;
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 // Require login for GPS tracking
 if (!$isLoggedIn) {
-    header('Location: login.php?redirect=gps.php');
+    header('Location: /auth?mode=login&redirect=gps.php');
     exit;
 }
 

@@ -15,7 +15,7 @@ require_once '../api/n8n.php';
 // Check login status
 $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
 $currentUser = $isLoggedIn ? $_SESSION['username'] : null;
-$userRole = $_SESSION['role'] ?? 'renter';
+$userRole = $_SESSION['role'] ?? 'user';
 
 // Cars are loaded dynamically from database via vehicles API (JavaScript fetch)
 // No server-side car data needed — the template uses client-side API calls
