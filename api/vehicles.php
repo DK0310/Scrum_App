@@ -1,6 +1,6 @@
 <?php
 /**
- * Vehicles API - DriveNow
+ * Vehicles API - Private Hire
  * Handles vehicle CRUD operations with Supabase Storage for images
  * - Owners can add/edit/delete their vehicles
  * - Anyone can view/list vehicles
@@ -13,7 +13,7 @@ if ($action === 'get-image') {
     session_start();
     require_once __DIR__ . '/../Database/db.php';
     require_once __DIR__ . '/supabase-storage.php';
-    require_once __DIR__ . '/../lib/repositories/VehicleImageRepository.php';
+    require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 
     $imageId = $_GET['id'] ?? '';
     if (empty($imageId)) {
@@ -56,13 +56,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/supabase-storage.php';
-require_once __DIR__ . '/../lib/repositories/VehicleRepository.php';
-require_once __DIR__ . '/../lib/repositories/VehicleImageRepository.php';
+require_once __DIR__ . '/../sql/VehicleRepository.php';
+require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 
 $vehicleRepo = new VehicleRepository($pdo);
 $vehicleImageRepo = new VehicleImageRepository($pdo);
 
-// $input = json_decode(file_get_contents('php://input'), true);
+$input = json_decode(file_get_contents('php://input'), true);
+if (!is_array($input)) {
+    $input = $_POST;
+}
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
 if (empty($action)) {
@@ -81,9 +84,12 @@ function requireAuth() {
 // Helper: check if user is staff or admin (vehicle management)
 function requireStaffOrAdmin() {
     requireAuth();
-    $role = $_SESSION['role'] ?? '';
-    if ($role !== 'staff' && $role !== 'admin') {
-        echo json_encode(['success' => false, 'message' => 'Only staff and administrators can perform this action.']);
+    $role = strtolower(str_replace(['-', ' ', '_'], '', (string)($_SESSION['role'] ?? '')));
+    if ($role === 'staff') {
+        $role = 'controlstaff';
+    }
+    if (!in_array($role, ['controlstaff', 'admin'], true)) {
+        echo json_encode(['success' => false, 'message' => 'Only control staff or administrators can perform this action.']);
         exit;
     }
 }

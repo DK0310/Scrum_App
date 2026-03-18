@@ -12,8 +12,8 @@
                     Book minicabs or hire cars with professional drivers. Local journeys, airport transfers, hotel pickups — your ride starts here.
                 </p>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                    <a href="cars.php" class="btn btn-primary btn-lg">🔍 Browse Cars</a>
-                    <a href="booking.php?mode=minicab" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(4px);">🚕 Book a Minicab</a>
+                    <a href="/api/cars.php" class="btn btn-primary btn-lg">🔍 Browse Cars</a>
+                    <a href="/api/bookings.php?mode=minicab" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(4px);">🚕 Book a Minicab</a>
                     <a href="#how-it-works" class="btn btn-outline btn-lg" style="border-color:rgba(255,255,255,0.3);color:white;">Learn More →</a>
                 </div>
                 <div class="hero-stats">
@@ -53,6 +53,13 @@
                         <div class="hero-slide-title" id="heroCaptionTitle"></div>
                         <div class="hero-slide-subtitle" id="heroCaptionSub"></div>
                     </div>
+                    <!-- Navigation buttons -->
+                    <button class="hero-nav-btn hero-nav-prev" id="heroPrevBtn" onclick="heroSlideNav(-1)" aria-label="Previous slide">
+                        <span>❮</span>
+                    </button>
+                    <button class="hero-nav-btn hero-nav-next" id="heroNextBtn" onclick="heroSlideNav(1)" aria-label="Next slide">
+                        <span>❯</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -66,7 +73,7 @@
                     <h2 class="section-title">Browse by Category</h2>
                     <p class="section-subtitle">Choose from a wide range of vehicle categories</p>
                 </div>
-                <a href="cars.php" class="section-link">All Categories →</a>
+                <a href="/api/cars.php" class="section-link">All Categories →</a>
             </div>
             <div class="category-grid">
                 <div class="category-card" onclick="filterByCategory('sedan')">
@@ -205,7 +212,7 @@
                     <h2 class="section-title">🎉 Promotions & Deals</h2>
                     <p class="section-subtitle">Save big with our exclusive offers and promo codes</p>
                 </div>
-                <a href="promotions.php" class="section-link">All Promotions →</a>
+                <a href="/api/promotions.php" class="section-link">All Promotions →</a>
             </div>
             <div class="promo-grid">
                 <div class="promo-card" onclick="applyPromo('WEEKEND20')">
@@ -421,6 +428,23 @@
         }
         .hero-slide-title { font-size: 1.1rem; font-weight: 700; }
         .hero-slide-subtitle { font-size: 0.8rem; opacity: 0.85; margin-top: 2px; }
+        /* Navigation buttons */
+        .hero-nav-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            width: 44px; height: 44px; border-radius: 50%;
+            background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+            color: white; font-size: 1.2rem; cursor: pointer;
+            display: none; align-items: center; justify-content: center;
+            z-index: 4; transition: all 0.3s ease;
+            backdrop-filter: blur(4px);
+        }
+        .hero-nav-btn:hover {
+            background: rgba(255,255,255,0.35); transform: translateY(-50%) scale(1.1);
+        }
+        .hero-nav-btn span { display: flex; align-items: center; justify-content: center; }
+        .hero-nav-prev { left: 12px; }
+        .hero-nav-next { right: 12px; }
+        .hero-slideshow:hover .hero-nav-btn { display: flex; }
         .hero-slideshow::after {
             content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 50%;
             background: linear-gradient(transparent, rgba(0,0,0,0.4));
@@ -429,7 +453,7 @@
         }
     </style>
 
-    <script src="/public/js/home.js"></script>
+    <script src="/resources/js/home.js"></script>                                                                   
     <script>
         const isLoggedIn = <?= json_encode($isLoggedIn ?? false) ?>;
     </script>
@@ -438,4 +462,4 @@
     <?php include __DIR__ . '/login.html.php'; ?>
     <?php include __DIR__ . '/register.html.php'; ?>
 
-<?php include __DIR__ . '/layout/footer.html.php'; ?>
+<?php include __DIR__ . '/layout/footer.html.php'; ?>                                                            

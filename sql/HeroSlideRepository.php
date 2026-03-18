@@ -78,7 +78,9 @@ final class HeroSlideRepository
         string $createdBy
     ): string {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO hero_slides (storage_path, image_data, mime_type, file_name, file_size, title, subtitle, link_url, sort_order, is_active, created_by)\n             VALUES (:spath, :imgdata, :mime, :fname, :fsize, :title, :sub, :link, :sort, :active, :uid)\n             RETURNING id'
+            "INSERT INTO hero_slides (storage_path, image_data, mime_type, file_name, file_size, title, subtitle, link_url, sort_order, is_active, created_by)
+             VALUES (:spath, :imgdata, :mime, :fname, :fsize, :title, :sub, :link, :sort, :active, :uid)
+             RETURNING id"
         );
         $stmt->bindParam(':spath', $storagePath);
         $stmt->bindParam(':imgdata', $imageData, PDO::PARAM_LOB);

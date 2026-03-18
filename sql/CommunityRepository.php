@@ -82,14 +82,14 @@ final class CommunityRepository
         $stmt = $this->pdo->prepare("
             SELECT 
                 p.id, p.user_id, p.title, p.content, p.category,
-                p.image_storage_path, p.image_mime, p.status,
+                p.image_storage_path, p.image_mime,
                 p.created_at, p.updated_at,
                 u.full_name as author_name, u.avatar_url,
                 (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comment_count,
                 (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as like_count
             FROM community_posts p
             JOIN users u ON p.user_id = u.id
-            WHERE p.id = ? AND p.status = 'published'
+            WHERE p.id = ?
         ");
         $stmt->execute([$postId]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -110,7 +110,7 @@ final class CommunityRepository
                 (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as like_count
             FROM community_posts p
             JOIN users u ON p.user_id = u.id
-            WHERE p.category = ? AND p.status = 'published'
+            WHERE p.category = ?
             ORDER BY p.created_at DESC
             LIMIT ? OFFSET ?
         ");
@@ -133,7 +133,6 @@ final class CommunityRepository
                 (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as like_count
             FROM community_posts p
             JOIN users u ON p.user_id = u.id
-            WHERE p.status = 'published'
             ORDER BY p.created_at DESC
             LIMIT ? OFFSET ?
         ");
@@ -158,7 +157,6 @@ final class CommunityRepository
             FROM community_posts p
             JOIN users u ON p.user_id = u.id
             WHERE (LOWER(p.title) LIKE LOWER(?) OR LOWER(p.content) LIKE LOWER(?))
-              AND p.status = 'published'
             ORDER BY p.created_at DESC
             LIMIT ?
         ");
@@ -218,7 +216,6 @@ final class CommunityRepository
     {
         $stmt = $this->pdo->query("
             SELECT DISTINCT category FROM community_posts
-            WHERE status = 'published'
             ORDER BY category ASC
         ");
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -366,7 +363,7 @@ final class CommunityRepository
         $stmt = $this->pdo->prepare("
             SELECT 
                 id, full_name, avatar_url, bio,
-                (SELECT COUNT(*) FROM community_posts WHERE user_id = u.id AND status = 'published') as post_count,
+                (SELECT COUNT(*) FROM community_posts WHERE user_id = u.id) as post_count,
                 (SELECT COUNT(*) FROM community_likes WHERE user_id = u.id) as like_count
             FROM users u
             WHERE id = ?

@@ -1,9 +1,53 @@
 <?php
 /**
- * Bookings API - DriveNow
- * Handles booking creation, promo validation, user's saved promos
+ * Bookings Page & API - Private Hire
+ * Route controller for booking page view + API endpoints for booking actions
+ * If no action param → render booking page
+ * If action param → handle API request
  */
 
+session_start();
+require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../config/env.php';
+
+// Parse action first to determine if this is a page view or API request
+$input = json_decode(file_get_contents('php://input'), true);
+if (!is_array($input)) {
+    $input = $_POST;
+}
+$action = $input['action'] ?? $_GET['action'] ?? '';
+
+// ===== PAGE VIEW MODE (no action) =====
+if (empty($action)) {
+    // Render booking page (not API)
+    $title = 'Private Hire - Book Your Ride';
+    $currentPage = 'booking';
+
+    $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
+    $currentUser = $isLoggedIn ? ($_SESSION['full_name'] ?? $_SESSION['username'] ?? null) : null;
+    $currentEmail = $isLoggedIn ? ($_SESSION['email'] ?? '') : '';
+    $userRole = $_SESSION['role'] ?? 'user';
+
+    // Require login to book
+    if (!$isLoggedIn) {
+        $_SESSION['login_flash'] = [
+            'type' => 'error',
+            'message' => 'Please sign in to continue booking.'
+        ];
+        header('Location: /');
+        exit;
+    }
+
+    // Get query params for booking mode
+    $carId = $_GET['car_id'] ?? '';
+    $promoCode = $_GET['promo'] ?? '';
+    $bookingMode = $_GET['mode'] ?? '';
+
+    require __DIR__ . '/../templates/booking.html.php';
+    exit;
+}
+
+// ===== API MODE (action parameter exists) =====
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
@@ -13,15 +57,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-session_start();
-require_once __DIR__ . '/../Database/db.php';
-
 // Include repositories
-require_once __DIR__ . '/../lib/repositories/BookingRepository.php';
-require_once __DIR__ . '/../lib/repositories/PromotionRepository.php';
-require_once __DIR__ . '/../lib/repositories/VehicleRepository.php';
-require_once __DIR__ . '/../lib/repositories/VehicleImageRepository.php';
-require_once __DIR__ . '/../lib/repositories/UserRepository.php';
+require_once __DIR__ . '/../sql/BookingRepository.php';
+require_once __DIR__ . '/../sql/PromotionRepository.php';
+require_once __DIR__ . '/../sql/VehicleRepository.php';
+require_once __DIR__ . '/../sql/VehicleImageRepository.php';
+require_once __DIR__ . '/../sql/UserRepository.php';
 
 // Initialize repositories
 $bookingRepo = new BookingRepository($pdo);
@@ -32,14 +73,6 @@ $userRepo = new UserRepository($pdo);
 
 // Include notification helper functions
 require_once __DIR__ . '/notification-helpers.php';
-
-$input = json_decode(file_get_contents('php://input'), true);
-$action = $input['action'] ?? $_GET['action'] ?? '';
-
-if (empty($action)) {
-    echo json_encode(['success' => false, 'message' => 'Action is required.']);
-    exit;
-}
 
 // Helper: require login
 function requireAuth() {
@@ -143,32 +176,27 @@ if ($action === 'create') {
     $promoCode = $input['promo_code'] ?? '';
     $paymentMethod = $input['payment_method'] ?? 'cash';
     $distanceKm = isset($input['distance_km']) ? floatval($input['distance_km']) : null;
+    $pickupCoords = isset($input['pickup_coords']) && is_array($input['pickup_coords']) ? $input['pickup_coords'] : [];
+    $destinationCoords = isset($input['destination_coords']) && is_array($input['destination_coords']) ? $input['destination_coords'] : [];
     $rideTier = $input['ride_tier'] ?? null; // 'eco', 'standard', 'premium'
     $frontendRideFare = isset($input['ride_fare']) ? floatval($input['ride_fare']) : null;
     $serviceType = $input['service_type'] ?? 'local'; // 'local', 'long-distance', 'airport-transfer', 'hotel-transfer'
+    $rideTiming = strtolower(trim((string)($input['ride_timing'] ?? '')));
+
+    // Single workflow policy: minicab + schedule only
+    if ($bookingType !== 'minicab') {
+        echo json_encode(['success' => false, 'message' => 'Only scheduled minicab booking is supported.']);
+        exit;
+    }
+    if ($rideTiming !== 'schedule') {
+        echo json_encode(['success' => false, 'message' => 'Minicab bookings must be scheduled in advance.']);
+        exit;
+    }
 
     // Validate required fields
     if (empty($pickupDate) || empty($pickupLocation)) {
         echo json_encode(['success' => false, 'message' => 'Pickup date and pickup location are required.']);
         exit;
-    }
-
-    // Validate booking type
-    if (!in_array($bookingType, ['minicab', 'with-driver'])) {
-        echo json_encode(['success' => false, 'message' => 'Invalid booking type.']);
-        exit;
-    }
-
-    // For with-driver, vehicle_id and return_date are required
-    if ($bookingType === 'with-driver') {
-        if (empty($vehicleId)) {
-            echo json_encode(['success' => false, 'message' => 'Vehicle is required for with-driver booking.']);
-            exit;
-        }
-        if (empty($returnDate)) {
-            echo json_encode(['success' => false, 'message' => 'Return date is required for with-driver booking.']);
-            exit;
-        }
     }
 
     // For minicab, ride_tier is required
@@ -178,7 +206,19 @@ if ($action === 'create') {
             exit;
         }
         if (empty($returnLocation)) {
-            echo json_encode(['success' => false, 'message' => 'Destination location is required for with-driver booking.']);
+            echo json_encode(['success' => false, 'message' => 'Destination location is required for minicab booking.']);
+            exit;
+        }
+
+        try {
+            $pickupAt = new DateTime($pickupDate);
+            $now = new DateTime('now');
+            if ($pickupAt <= $now) {
+                echo json_encode(['success' => false, 'message' => 'Scheduled pickup time must be in the future.']);
+                exit;
+            }
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Invalid scheduled pickup date/time.']);
             exit;
         }
     }
@@ -223,44 +263,6 @@ if ($action === 'create') {
             $totalDays = 1; // single trip
             $returnDate = null;
 
-        } else {
-            // ==== WITH-DRIVER: Use pre-selected vehicle with assigned driver ====
-            $vehicle = $bookingRepo->getVehicleForBooking($vehicleId);
-
-            if (!$vehicle) {
-                echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
-                exit;
-            }
-
-            if ($vehicle['status'] !== 'available') {
-                echo json_encode(['success' => false, 'message' => 'This vehicle is not currently available.']);
-                exit;
-            }
-
-            if ($vehicle['owner_id'] === $renterId) {
-                echo json_encode(['success' => false, 'message' => 'You cannot book your own vehicle.']);
-                exit;
-            }
-
-            $pricePerDay = (float)$vehicle['price_per_day'];
-
-            $d1 = new DateTime($pickupDate);
-            $d2 = new DateTime($returnDate);
-            $diff = $d1->diff($d2);
-            $totalDays = max(1, $diff->days);
-
-            // Smart pricing: use weekly/monthly rate if applicable
-            if ($totalDays >= 30 && $vehicle['price_per_month']) {
-                $months = floor($totalDays / 30);
-                $remainingDays = $totalDays % 30;
-                $subtotal = ($months * (float)$vehicle['price_per_month']) + ($remainingDays * $pricePerDay);
-            } elseif ($totalDays >= 7 && $vehicle['price_per_week']) {
-                $weeks = floor($totalDays / 7);
-                $remainingDays = $totalDays % 7;
-                $subtotal = ($weeks * (float)$vehicle['price_per_week']) + ($remainingDays * $pricePerDay);
-            } else {
-                $subtotal = $totalDays * $pricePerDay;
-            }
         }
 
         // Apply promo code
@@ -323,10 +325,10 @@ if ($action === 'create') {
                 $booking['id'],
                 $renterId,
                 $vehicleId,
-                $pickup_coords['lat'] ?? null,
-                $pickup_coords['lng'] ?? null,
-                $destination_coords['lat'] ?? null,
-                $destination_coords['lng'] ?? null
+                isset($pickupCoords['lat']) ? (float)$pickupCoords['lat'] : null,
+                isset($pickupCoords['lng']) ? (float)$pickupCoords['lng'] : null,
+                isset($destinationCoords['lat']) ? (float)$destinationCoords['lat'] : null,
+                isset($destinationCoords['lng']) ? (float)$destinationCoords['lng'] : null
             );
         }
 
@@ -549,6 +551,28 @@ if ($action === 'update-status') {
         } elseif ($newStatus === 'completed' && $currentStatus === 'in_progress' && ($isOwner || $isAdmin)) {
             $allowed = true;
         } elseif ($newStatus === 'cancelled' && $currentStatus === 'pending' && ($isOwner || $isRenter || $isAdmin)) {
+            if ($isRenter && !$isAdmin) {
+                if (($booking['booking_type'] ?? '') === 'minicab') {
+                    try {
+                        $pickupAt = new DateTime((string)$booking['pickup_date']);
+                        $cutoff = new DateTime('now');
+                        $cutoff->add(new DateInterval('PT48H'));
+                        if ($pickupAt < $cutoff) {
+                            echo json_encode([
+                                'success' => false,
+                                'message' => 'Free cancellation is only available at least 48 hours before pickup time.'
+                            ]);
+                            exit;
+                        }
+                    } catch (Exception $e) {
+                        echo json_encode([
+                            'success' => false,
+                            'message' => 'Unable to verify pickup time for cancellation.'
+                        ]);
+                        exit;
+                    }
+                }
+            }
             $allowed = true;
         }
 
@@ -827,7 +851,7 @@ if ($action === 'confirm-payment') {
                 $html = "<p>Dear " . htmlspecialchars($customerName ?: 'Customer') . ",</p>" .
                         "<p>Thank you for your payment. Please find your invoice attached.</p>" .
                         "<p><strong>Booking ID:</strong> " . htmlspecialchars((string)$bookingId) . "</p>" .
-                        "<p>Regards,<br>DriveNow</p>";
+                        "<p>Regards,<br>Private Hire</p>";
 
                 privatehire_send_email($customerEmail, $subject, $html, [
                     'content' => $pdf,

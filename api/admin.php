@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin API - DriveNow
+ * Admin API - Private Hire
  * Admin-only operations:
  * - Hero slides CRUD (Supabase Storage)
  * - Promotions CRUD
@@ -10,9 +10,8 @@
 // Handle hero-slide-image serving — redirect to Supabase Storage or serve BYTEA fallback
 $action = $_GET['action'] ?? '';
 if ($action === 'hero-slide-image') {
-    session_start();
     require_once __DIR__ . '/../Database/db.php';
-    require_once __DIR__ . '/../lib/repositories/HeroSlideRepository.php';
+    require_once __DIR__ . '/../sql/HeroSlideRepository.php';
 
     $slideId = $_GET['id'] ?? '';
     if (empty($slideId)) {
@@ -63,9 +62,8 @@ if ($action === 'hero-slide-image') {
 // Also allow public hero-slides-public (for homepage slideshow — no auth needed)
 if ($action === 'hero-slides-public') {
     header('Content-Type: application/json');
-    session_start();
     require_once __DIR__ . '/../Database/db.php';
-    require_once __DIR__ . '/../lib/repositories/HeroSlideRepository.php';
+    require_once __DIR__ . '/../sql/HeroSlideRepository.php';
 
     try {
         $slideRepo = new HeroSlideRepository($pdo);
@@ -92,6 +90,40 @@ if ($action === 'hero-slides-public') {
     exit;
 }
 
+// ===== PARSE ACTION EARLY =====
+session_start();
+require_once __DIR__ . '/../Database/db.php';
+
+$input = json_decode(file_get_contents('php://input'), true);
+if (!is_array($input)) {
+    $input = $_POST;
+}
+$action = $input['action'] ?? $_GET['action'] ?? '';
+
+// ===== PAGE VIEW MODE (no action) =====
+if (empty($action)) {
+    // Render admin page (not API)
+    $title = 'Admin Dashboard - Private Hire';
+    $currentPage = 'admin';
+
+    $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
+    $userRole = $_SESSION['role'] ?? '';
+
+    // Require admin role
+    if (!$isLoggedIn || $userRole !== 'admin') {
+        http_response_code(403);
+        $_SESSION['login_flash'] = [
+            'type' => 'error',
+            'message' => 'Admin access required.'
+        ];
+        header('Location: /');
+        exit;
+    }
+
+    require __DIR__ . '/../templates/admin.html.php';
+    exit;
+}
+
 // ===== JSON API from here =====
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -102,15 +134,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-session_start();
-require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/notification-helpers.php';
 require_once __DIR__ . '/supabase-storage.php';
-require_once __DIR__ . '/../lib/repositories/HeroSlideRepository.php';
-require_once __DIR__ . '/../lib/repositories/PromotionRepository.php';
-require_once __DIR__ . '/../lib/repositories/VehicleRepository.php';
-require_once __DIR__ . '/../lib/repositories/BookingRepository.php';
-require_once __DIR__ . '/../lib/repositories/UserRepository.php';
+require_once __DIR__ . '/../sql/HeroSlideRepository.php';
+require_once __DIR__ . '/../sql/PromotionRepository.php';
+require_once __DIR__ . '/../sql/VehicleRepository.php';
+require_once __DIR__ . '/../sql/BookingRepository.php';
+require_once __DIR__ . '/../sql/UserRepository.php';
 
 $heroSlideRepo = new HeroSlideRepository($pdo);
 $promotionRepo = new PromotionRepository($pdo);
@@ -122,14 +152,6 @@ $userRepo = new UserRepository($pdo);
 try {
     $heroSlideRepo->ensureStoragePathColumnExists();
 } catch (Exception $e) { /* column may already exist */ }
-
-$input = json_decode(file_get_contents('php://input'), true);
-$action = $input['action'] ?? $_GET['action'] ?? '';
-
-if (empty($action)) {
-    echo json_encode(['success' => false, 'message' => 'Action is required.']);
-    exit;
-}
 
 // Helper: require login
 function requireAuth() {
@@ -156,7 +178,7 @@ if ($action === 'hero-slides-list') {
     requireAdmin();
 
     try {
-        $slides = $heroSlideRepo->listAllSlides();
+        $slides = $heroSlideRepo->listSlidesForAdmin();
 
         $storage = null;
         foreach ($slides as &$s) {
@@ -228,19 +250,19 @@ if ($action === 'hero-slide-upload') {
             exit;
         }
 
-        $slideId = $heroSlideRepo->addSlide([
-            'storage_path' => $storagePath,
-            'image_data' => $imageData,
-            'mime_type' => $file['type'],
-            'file_name' => $file['name'],
-            'file_size' => $file['size'],
-            'title' => $title,
-            'subtitle' => $subtitle,
-            'link_url' => $linkUrl,
-            'sort_order' => $sortOrder,
-            'is_active' => $isActive,
-            'created_by' => $adminId
-        ]);
+        $slideId = $heroSlideRepo->createSlide(
+            $storagePath,
+            $imageData,
+            $file['type'],
+            $file['name'],
+            $file['size'],
+            $title,
+            $subtitle,
+            $linkUrl,
+            $sortOrder,
+            $isActive,
+            $adminId
+        );
 
         echo json_encode([
             'success' => true,
@@ -280,7 +302,7 @@ if ($action === 'hero-slide-update') {
     }
 
     try {
-        $heroSlideRepo->updateSlide($slideId, $fields);
+        $heroSlideRepo->updateSlideFields($slideId, $fields);
 
         echo json_encode(['success' => true, 'message' => 'Slide updated successfully.']);
     } catch (Exception $e) {
@@ -303,21 +325,21 @@ if ($action === 'hero-slide-delete') {
 
     try {
         // Get storage path before deleting
-        $slide = $heroSlideRepo->findSlideById($slideId);
+        $storagePath = $heroSlideRepo->findStoragePathById($slideId);
 
-        if (!$slide) {
+        if (empty($storagePath)) {
             echo json_encode(['success' => false, 'message' => 'Slide not found.']);
             exit;
         }
 
         // Delete from Supabase Storage
-        if (!empty($slide['storage_path'])) {
+        if (!empty($storagePath)) {
             $storage = new SupabaseStorage();
-            $storage->delete($slide['storage_path']);
+            $storage->delete($storagePath);
         }
 
         // Delete DB record
-        $heroSlideRepo->deleteSlide($slideId);
+        $heroSlideRepo->deleteSlideById($slideId);
 
         echo json_encode(['success' => true, 'message' => 'Slide deleted successfully.']);
     } catch (Exception $e) {
@@ -333,7 +355,7 @@ if ($action === 'promotions-list') {
     requireAdmin();
 
     try {
-        $promotions = $promotionRepo->listAllPromotions();
+        $promotions = $promotionRepo->listAll();
         echo json_encode(['success' => true, 'promotions' => $promotions]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
@@ -366,16 +388,16 @@ if ($action === 'promotion-add') {
             exit;
         }
 
-        $promoId = $promotionRepo->addPromotion([
-            'code' => strtoupper($code),
-            'title' => strtoupper($code),
-            'description' => $description,
-            'discount_type' => $discountType,
-            'discount_value' => $discountValue,
-            'starts_at' => $startDate ?: null,
-            'expires_at' => $endDate ?: null,
-            'max_uses' => $usageLimit
-        ]);
+        $promo = $promotionRepo->create(
+            strtoupper($code),
+            $description,
+            $discountType,
+            $discountValue,
+            $startDate ?: null,
+            $endDate ?: null,
+            $usageLimit
+        );
+        $promoId = $promo['id'] ?? '';
 
         // Broadcast notification to all users
         $discountText = $discountType === 'percentage' ? "{$discountValue}%" : "\${$discountValue}";
@@ -417,7 +439,7 @@ if ($action === 'promotion-update') {
     }
 
     try {
-        $promotionRepo->updatePromotion($promoId, $fields);
+        $promotionRepo->update($promoId, $fields);
 
         echo json_encode(['success' => true, 'message' => 'Promotion updated.']);
     } catch (Exception $e) {
@@ -439,7 +461,7 @@ if ($action === 'promotion-delete') {
     }
 
     try {
-        $promotionRepo->deletePromotion($promoId);
+        $promotionRepo->delete($promoId);
 
         echo json_encode(['success' => true, 'message' => 'Promotion deleted.']);
     } catch (Exception $e) {
@@ -462,14 +484,18 @@ if ($action === 'admin-delete-vehicle') {
 
     try {
         // Check for active bookings
-        $activeBookings = $vehicleRepo->countActiveBookings($vehicleId);
+        $checkStmt = $pdo->prepare('SELECT COUNT(*) FROM bookings WHERE vehicle_id = ? AND status IN (?, ?)');
+        $checkStmt->execute([$vehicleId, 'pending', 'confirmed']);
+        $activeBookings = (int)$checkStmt->fetchColumn();
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete vehicle with active bookings (' . $activeBookings . ' active). Cancel them first.']);
             exit;
         }
 
         // Delete images from Supabase Storage first
-        $storagePaths = $vehicleRepo->getImageStoragePaths($vehicleId);
+        $imgStmt = $pdo->prepare('SELECT storage_path FROM vehicle_images WHERE vehicle_id = ? AND storage_path IS NOT NULL');
+        $imgStmt->execute([$vehicleId]);
+        $storagePaths = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
         if (!empty($storagePaths)) {
             $storage = new SupabaseStorage();
             $storage->deleteMultiple($storagePaths);
@@ -525,7 +551,7 @@ if ($action === 'admin-list-vehicles') {
 
     try {
         // Get vehicles via repository
-        $vehicles = $vehicleRepo->listAllVehiclesForAdmin();
+        $vehicles = $vehicleRepo->listAll();
 
         // Add image URLs (get first image as thumbnail)
         foreach ($vehicles as &$v) {
@@ -548,7 +574,7 @@ if ($action === 'admin-list-bookings') {
 
     try {
         // Get bookings via repository
-        $bookings = $bookingRepo->listAllBookingsForAdmin();
+        $bookings = $bookingRepo->listAll(999, 0);
         echo json_encode(['success' => true, 'bookings' => $bookings]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
@@ -601,7 +627,7 @@ if ($action === 'admin-update-user') {
 
     $fields = [];
 
-    if (isset($input['role']) && in_array($input['role'], ['renter', 'owner', 'admin'])) {
+    if (isset($input['role']) && in_array($input['role'], ['user', 'driver', 'callcenterstaff', 'controlstaff', 'admin'], true)) {
         $fields['role'] = $input['role'];
     }
 
@@ -650,7 +676,9 @@ if ($action === 'admin-delete-user') {
 
     try {
         // Check for active bookings
-        $activeBookings = $userRepo->countActiveBookings($userId);
+        $checkStmt = $pdo->prepare('SELECT COUNT(*) FROM bookings WHERE renter_id = ? AND status IN (?, ?)');
+        $checkStmt->execute([$userId, 'pending', 'confirmed']);
+        $activeBookings = (int)$checkStmt->fetchColumn();
 
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete user with ' . $activeBookings . ' active booking(s). Cancel them first.']);

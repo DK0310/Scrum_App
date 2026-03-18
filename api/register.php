@@ -24,13 +24,33 @@ try {
 
     if ($action === 'register') {
         $username = trim($_POST['username'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+        $email = strtolower(trim($_POST['email'] ?? ''));
         $phone = trim($_POST['phone'] ?? '');
         $password = $_POST['password'] ?? '';
         $full_name = trim($_POST['full_name'] ?? '');
+        $role = trim($_POST['role'] ?? 'user');
+        $dob = trim($_POST['dob'] ?? '');
+
+        $roleMap = [
+            'renter' => 'user',
+            'owner' => 'controlstaff',
+            'user' => 'user',
+            'driver' => 'driver',
+            'staff' => 'controlstaff',
+            'controlstaff' => 'controlstaff',
+            'control_staff' => 'controlstaff',
+            'callcenterstaff' => 'callcenterstaff',
+            'call_center_staff' => 'callcenterstaff',
+            'admin' => 'admin'
+        ];
+        $normalizedRole = $roleMap[strtolower($role)] ?? 'user';
+
+        if ($username === '') {
+            $username = strstr($email, '@', true) ?: $email;
+        }
 
         // Validation
-        if (empty($username) || empty($email) || empty($phone) || empty($password) || empty($full_name)) {
+        if (empty($email) || empty($phone) || empty($password) || empty($full_name)) {
             $response['message'] = 'All fields are required';
             echo json_encode($response);
             exit;
@@ -50,9 +70,27 @@ try {
             exit;
         }
 
+        if (empty($dob) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
+            $response['message'] = 'Date of birth is required';
+            echo json_encode($response);
+            exit;
+        }
+
+        if (!$authRepo->isAdult($dob)) {
+            $response['message'] = 'You must be at least 18 years old';
+            echo json_encode($response);
+            exit;
+        }
+
         // Check if email already exists
         if ($authRepo->emailExists($email)) {
             $response['message'] = 'Email already registered';
+            echo json_encode($response);
+            exit;
+        }
+
+        if ($authRepo->phoneExists($phone)) {
+            $response['message'] = 'Phone already registered';
             echo json_encode($response);
             exit;
         }
@@ -65,14 +103,14 @@ try {
         }
 
         // Create user
-        $userId = $authRepo->createUser($username, $email, $phone, $password, $full_name);
+        $userId = $authRepo->createUser($username, $email, $phone, $password, $full_name, $dob, $normalizedRole);
 
         // Set session
         $_SESSION['logged_in'] = true;
         $_SESSION['user_id'] = $userId;
         $_SESSION['username'] = $username;
         $_SESSION['email'] = $email;
-        $_SESSION['role'] = 'user';
+        $_SESSION['role'] = $normalizedRole;
         $_SESSION['full_name'] = $full_name;
 
         $response['success'] = true;
@@ -81,7 +119,9 @@ try {
             'id' => $userId,
             'username' => $username,
             'email' => $email,
-            'role' => 'user',
+            'role' => $normalizedRole,
+            'selected_role' => $role,
+            'date_of_birth' => $dob,
             'full_name' => $full_name
         ];
 
@@ -112,12 +152,14 @@ try {
             $mail->isSMTP();
             $mail->Host = \EnvLoader::get('SMTP_HOST', 'smtp.gmail.com');
             $mail->SMTPAuth = true;
-            $mail->Username = \EnvLoader::get('SMTP_USER');
-            $mail->Password = \EnvLoader::get('SMTP_PASS');
+            $mail->Username = \EnvLoader::get('SMTP_USERNAME');
+            $mail->Password = \EnvLoader::get('SMTP_PASSWORD');
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port = 587;
 
-            $mail->setFrom(\EnvLoader::get('SMTP_USER'), 'PrivateHire');
+            $fromEmail = \EnvLoader::get('SMTP_FROM_EMAIL');
+            $fromName = \EnvLoader::get('SMTP_FROM_NAME', 'PrivateHire');
+            $mail->setFrom($fromEmail, $fromName);
             $mail->addAddress($email);
             $mail->Subject = 'PrivateHire - Email Verification Code';
             

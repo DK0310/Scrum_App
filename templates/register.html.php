@@ -159,20 +159,20 @@
 
                 <!-- Role Cards -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
-                    <!-- Renter Card -->
-                    <div class="role-card" data-role="renter" onclick="selectRole('renter')" 
+                    <!-- User Card -->
+                    <div class="role-card" data-role="user" onclick="selectRole('user')" 
                          style="padding: 25px; border: 2px solid #ddd; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: white;">
                         <div style="font-size: 40px; margin-bottom: 10px;">👤</div>
-                        <div style="font-weight: 600; color: #333; font-size: 16px;">Renter</div>
-                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Looking to rent a car</div>
+                        <div style="font-weight: 600; color: #333; font-size: 16px;">User</div>
+                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Looking to book rides or rentals</div>
                     </div>
 
-                    <!-- Owner Card -->
-                    <div class="role-card" data-role="owner" onclick="selectRole('owner')" 
+                    <!-- Driver Card -->
+                    <div class="role-card" data-role="driver" onclick="selectRole('driver')" 
                          style="padding: 25px; border: 2px solid #ddd; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: white;">
                         <div style="font-size: 40px; margin-bottom: 10px;">🚗</div>
-                        <div style="font-weight: 600; color: #333; font-size: 16px;">Car Owner</div>
-                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Looking to rent out your car</div>
+                        <div style="font-weight: 600; color: #333; font-size: 16px;">Driver</div>
+                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Operate assigned trips and schedules</div>
                     </div>
                 </div>
 

@@ -130,6 +130,6 @@
         window.CURRENT_USER_ID = '<?= $userId ?? '' ?>';
         window.CURRENT_USER_ROLE = '<?= $userRole ?>';
     </script>
-    <script src="/public/js/community.js"></script>
+    <script src="/resources/js/community.js"></script>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>

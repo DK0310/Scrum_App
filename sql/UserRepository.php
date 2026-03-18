@@ -245,7 +245,7 @@ final class UserRepository
                 continue;
             }
 
-            if ($field === 'role' && !in_array($value, ['renter', 'owner'], true)) {
+            if ($field === 'role' && !in_array($value, ['user', 'driver', 'callcenterstaff', 'controlstaff'], true)) {
                 continue;
             }
 
@@ -304,7 +304,7 @@ final class UserRepository
                 continue;
             }
 
-            if ($field === 'role' && !in_array($value, ['renter', 'owner', 'admin'], true)) {
+            if ($field === 'role' && !in_array($value, ['user', 'driver', 'callcenterstaff', 'controlstaff', 'admin'], true)) {
                 continue;
             }
 
@@ -398,21 +398,22 @@ final class UserRepository
 
     /**
      * Check if username exists
+     * NOTE: No username column in schema; check email instead for compatibility
      */
     public function usernameExists(string $username): bool
     {
-        $stmt = $this->pdo->prepare("SELECT 1 FROM users WHERE username = ? LIMIT 1");
-        $stmt->execute([$username]);
-        return (bool)$stmt->fetch();
+        // Kept for API compatibility but always returns false (no username column)
+        return false;
     }
 
     /**
      * Check if username or email exists
+     * NOTE: Schema has no username; checking email/phone only
      */
     public function usernameOrEmailExists(string $username, string $email): bool
     {
-        $stmt = $this->pdo->prepare("SELECT 1 FROM users WHERE username = ? OR email = ? LIMIT 1");
-        $stmt->execute([$username, $email]);
+        $stmt = $this->pdo->prepare("SELECT 1 FROM users WHERE email = ? LIMIT 1");
+        $stmt->execute([$email]);
         return (bool)$stmt->fetch();
     }
 
@@ -421,8 +422,12 @@ final class UserRepository
      */
     public function createWithFaceId(string $username, string $email, string $faceDescriptorJson): ?string
     {
-        $stmt = $this->pdo->prepare("INSERT INTO users (username, email, face_descriptor) VALUES (?, ?, ?) RETURNING id");
-        $stmt->execute([$username, $email, $faceDescriptorJson]);
+        // Note: username parameter kept for backward compatibility but not used
+        // Face ID users created with email auth provider
+        $stmt = $this->pdo->prepare("INSERT INTO users (email, full_name, auth_provider, face_descriptor, faceid_enabled, profile_completed, created_at) 
+                                     VALUES (?, ?, 'faceid', ?, TRUE, FALSE, NOW()) 
+                                     RETURNING id");
+        $stmt->execute([$email, $username ?? $email, $faceDescriptorJson]);
         return $stmt->fetchColumn() ?: null;
     }
 
@@ -432,7 +437,7 @@ final class UserRepository
      */
     public function getAllWithFaceDescriptors(): array
     {
-        $stmt = $this->pdo->prepare("SELECT id, username, email, face_descriptor FROM users WHERE face_descriptor IS NOT NULL");
+        $stmt = $this->pdo->prepare("SELECT id, full_name, email, face_descriptor FROM users WHERE face_descriptor IS NOT NULL");
         $stmt->execute([]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

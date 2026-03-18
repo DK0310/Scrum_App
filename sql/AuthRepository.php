@@ -12,12 +12,21 @@ class AuthRepository {
     }
 
     /**
-     * Find user by email OR username
+     * Find user by email OR phone.
+     * Method name kept for compatibility with existing callers.
      */
     public function findUserByEmailOrUsername($identifier) {
-        $query = "SELECT id, username, email, password, full_name, phone, role, status, created_at, last_login 
-                  FROM users 
-                  WHERE email = :identifier OR username = :identifier 
+        $identifier = trim((string) $identifier);
+
+        $query = "SELECT id, email, phone, password_hash, full_name, role, is_active, created_at, last_login_at
+                  FROM users
+                        WHERE email = :identifier
+                            OR LOWER(email) = LOWER(:identifier)
+                     OR regexp_replace(COALESCE(phone, ''), '[^0-9+]', '', 'g') = regexp_replace(:identifier, '[^0-9+]', '', 'g')
+                        ORDER BY
+                             (email = :identifier) DESC,
+                             (regexp_replace(COALESCE(phone, ''), '[^0-9+]', '', 'g') = regexp_replace(:identifier, '[^0-9+]', '', 'g')) DESC,
+                             created_at DESC
                   LIMIT 1";
         
         $stmt = $this->pdo->prepare($query);
@@ -30,9 +39,9 @@ class AuthRepository {
      * Find user by ID
      */
     public function findUserById($userId) {
-        $query = "SELECT id, username, email, full_name, phone, role, status, created_at, last_login 
-                  FROM users 
-                  WHERE id = :id 
+        $query = "SELECT id, email, phone, full_name, role, is_active, created_at, last_login_at
+                  FROM users
+                  WHERE id = :id
                   LIMIT 1";
         
         $stmt = $this->pdo->prepare($query);
@@ -45,7 +54,8 @@ class AuthRepository {
      * Check if email already exists
      */
     public function emailExists($email) {
-        $query = "SELECT id FROM users WHERE email = :email LIMIT 1";
+        $email = trim((string) $email);
+        $query = "SELECT id FROM users WHERE LOWER(email) = LOWER(:email) LIMIT 1";
         $stmt = $this->pdo->prepare($query);
         $stmt->execute([':email' => $email]);
         
@@ -53,42 +63,63 @@ class AuthRepository {
     }
 
     /**
-     * Check if username already exists
+     * Check if phone already exists (normalized)
      */
-    public function usernameExists($username) {
-        $query = "SELECT id FROM users WHERE username = :username LIMIT 1";
+    public function phoneExists($phone) {
+        $phone = trim((string) $phone);
+        $query = "SELECT id
+                  FROM users
+                  WHERE regexp_replace(COALESCE(phone, ''), '[^0-9+]', '', 'g') = regexp_replace(:phone, '[^0-9+]', '', 'g')
+                  LIMIT 1";
+
         $stmt = $this->pdo->prepare($query);
-        $stmt->execute([':username' => $username]);
-        
+        $stmt->execute([':phone' => $phone]);
+
         return $stmt->rowCount() > 0;
     }
 
     /**
-     * Create new user account
+     * Legacy compatibility: schema has no username column.
+     * Keep method to avoid breaking existing register flow callers.
      */
-    public function createUser($username, $email, $phone, $password, $fullName) {
+    public function usernameExists($username) {
+        return false;
+    }
+
+    /**
+     * Create new user account
+     * Keeps legacy signature for compatibility.
+     */
+    public function createUser($username, $email, $phone, $password, $fullName, $dateOfBirth = null, $role = 'user') {
+        $email = strtolower(trim((string) $email));
+        $phone = trim((string) $phone);
+        $fullName = trim((string) $fullName);
+        $dateOfBirth = $dateOfBirth ? trim((string) $dateOfBirth) : null;
+        $role = trim((string) $role) ?: 'user';
         $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
-        
-        $query = "INSERT INTO users (username, email, phone, password, full_name, role, status, created_at) 
-                  VALUES (:username, :email, :phone, :password, :full_name, 'user', 'active', NOW())";
-        
+
+        $query = "INSERT INTO users (email, phone, password_hash, full_name, date_of_birth, auth_provider, role, is_active, created_at)
+                  VALUES (:email, :phone, :password_hash, :full_name, :date_of_birth, 'email', :role, TRUE, NOW())
+                  RETURNING id";
+
         $stmt = $this->pdo->prepare($query);
         $stmt->execute([
-            ':username' => $username,
             ':email' => $email,
             ':phone' => $phone,
-            ':password' => $hashedPassword,
-            ':full_name' => $fullName
+            ':password_hash' => $hashedPassword,
+            ':full_name' => $fullName,
+            ':date_of_birth' => $dateOfBirth,
+            ':role' => $role
         ]);
 
-        return $this->pdo->lastInsertId();
+        return $stmt->fetchColumn();
     }
 
     /**
      * Update last login timestamp
      */
     public function updateLastLogin($userId) {
-        $query = "UPDATE users SET last_login = NOW() WHERE id = :id";
+        $query = "UPDATE users SET last_login_at = NOW() WHERE id = :id";
         $stmt = $this->pdo->prepare($query);
         $stmt->execute([':id' => $userId]);
     }

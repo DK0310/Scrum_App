@@ -271,6 +271,6 @@
         window.isLoggedIn = <?= json_encode($isLoggedIn) ?>;
         window.USER_ROLE = <?= json_encode($userRole ?? 'user') ?>;
     </script>
-    <script src="/public/js/cars.js"></script>
+    <script src="/resources/js/cars.js"></script>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>

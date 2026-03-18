@@ -1,6 +1,6 @@
 <?php
 /**
- * Notifications API - DriveNow
+ * Notifications API - Private Hire
  * Handles real-time notification CRUD:
  *   - list: Get user's notifications (with pagination)
  *   - unread-count: Get unread count
@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/notification-helpers.php';
-require_once __DIR__ . '/../lib/repositories/NotificationRepository.php';
+require_once __DIR__ . '/../sql/NotificationRepository.php';
 
 $notificationRepo = new NotificationRepository($pdo);
 

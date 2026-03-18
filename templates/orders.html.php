@@ -31,7 +31,7 @@
                 <div style="font-size:3rem;margin-bottom:16px;">📭</div>
                 <h3 style="color:var(--gray-700);margin-bottom:8px;">No orders yet</h3>
                 <p style="color:var(--gray-500);margin-bottom:24px;">Start by browsing our car listings and make your first booking!</p>
-                <a href="cars.php" class="btn btn-primary" style="display:inline-block;width:auto;padding:12px 32px;">Browse Cars</a>
+                <a href="/api/cars.php" class="btn btn-primary" style="display:inline-block;width:auto;padding:12px 32px;">Browse Cars</a>
             </div>
 
             <!-- Orders List -->
@@ -117,7 +117,7 @@
         }
     </style>
 
-    <script src="/public/js/orders.js"></script>
+    <script src="/resources/js/orders.js"></script>
     
     <!-- Set USER_ROLE from PHP before orders.js initializes -->
     <script>

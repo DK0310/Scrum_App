@@ -1,6 +1,6 @@
 <?php
 /**
- * Auth API - DriveNow
+ * Auth API - Private Hire
  * Handles: Google OAuth, Email OTP, Phone OTP, Registration, Profile, Face ID (optional)
  * 
  * Endpoints (via action parameter):
@@ -438,7 +438,7 @@ if ($action === 'register') {
     $email     = trim($input['email'] ?? '');
     $phone     = trim($input['phone'] ?? '');
     $dob       = trim($input['date_of_birth'] ?? '');
-    $role      = trim($input['role'] ?? 'renter');
+    $role      = trim($input['role'] ?? 'user');
     $address   = trim($input['address'] ?? '');
     $password  = $input['password'] ?? '';
 
@@ -466,9 +466,9 @@ if ($action === 'register') {
         exit;
     }
 
-    // Only user, driver, staff can be selected during registration (admin only via database)
-    if (!in_array($role, ['user', 'driver', 'staff']) || $role === 'admin') {
-        echo json_encode(['success' => false, 'message' => 'Role must be "user", "driver", or "staff".']);
+    // Only non-admin roles are accepted in public auth flows.
+    if (!in_array($role, ['user', 'driver', 'callcenterstaff', 'controlstaff'], true) || $role === 'admin') {
+        echo json_encode(['success' => false, 'message' => 'Role must be "user", "driver", "callcenterstaff", or "controlstaff".']);
         exit;
     }
 
@@ -500,11 +500,11 @@ if ($action === 'register') {
         $_SESSION['profile_completed'] = true;
 
         // Welcome notification for new user
-        createNotification($pdo, $user['id'], 'system', '🎉 Welcome to DriveNow!', 'Your account has been created successfully. Start exploring vehicles to rent or list your own cars!');
+        createNotification($pdo, $user['id'], 'system', '🎉 Welcome to Private Hire!', 'Your account has been created successfully. Start exploring vehicles to rent or list your own cars!');
 
         echo json_encode([
             'success' => true,
-            'message' => 'Account created successfully! Welcome to DriveNow!',
+            'message' => 'Account created successfully! Welcome to Private Hire!',
             'user' => [
                 'id' => $user['id'],
                 'full_name' => $user['full_name'],
@@ -600,16 +600,16 @@ if ($action === 'complete-profile') {
     $dob      = trim($input['date_of_birth'] ?? '');
     $phone    = trim($input['phone'] ?? '');
     $email    = trim($input['email'] ?? '');
-    $role     = trim($input['role'] ?? 'renter'); // 'renter' or 'owner'
+    $role     = trim($input['role'] ?? 'user');
 
     if (empty($fullName) || empty($dob) || (empty($phone) && empty($email))) {
         echo json_encode(['success' => false, 'message' => 'Full name, date of birth, and phone or email are required.']);
         exit;
     }
 
-    // Only user, driver, staff can be selected during profile completion (admin only via database)
-    if (!in_array($role, ['user', 'driver', 'staff']) || $role === 'admin') {
-        echo json_encode(['success' => false, 'message' => 'Role must be "user", "driver", or "staff".']);
+    // Only non-admin roles are accepted in profile completion.
+    if (!in_array($role, ['user', 'driver', 'callcenterstaff', 'controlstaff'], true) || $role === 'admin') {
+        echo json_encode(['success' => false, 'message' => 'Role must be "user", "driver", "callcenterstaff", or "controlstaff".']);
         exit;
     }
 
@@ -1030,11 +1030,11 @@ if ($action === 'email-change-send-otp') {
             $mail->setFrom($fromEmail, $fromName);
             $mail->addAddress($toEmail);
             $mail->isHTML(true);
-            $mail->Subject = "DriveNow - Email Change Verification: $otp";
+            $mail->Subject = "Private Hire - Email Change Verification: $otp";
             $mail->Body = "
                 <div style='font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;'>
                     <div style='text-align:center;margin-bottom:24px;'>
-                        <h1 style='color:#2563eb;font-size:1.5rem;'>🚗 DriveNow</h1>
+                        <h1 style='color:#2563eb;font-size:1.5rem;'>🚗 Private Hire</h1>
                     </div>
                     <div style='background:#f8fafc;border-radius:16px;padding:32px;text-align:center;'>
                         <h2 style='color:#1e293b;margin-bottom:8px;'>$purpose</h2>
@@ -1046,7 +1046,7 @@ if ($action === 'email-change-send-otp') {
                     </div>
                 </div>
             ";
-            $mail->AltBody = "Your DriveNow email change verification code is: $otp (expires in 5 minutes)";
+            $mail->AltBody = "Your Private Hire email change verification code is: $otp (expires in 5 minutes)";
             $mail->send();
             return true;
         } catch (Exception $e) {
@@ -1160,7 +1160,7 @@ if ($action === 'update-profile') {
     }
 
     // Role change
-    if (isset($input['role']) && in_array($input['role'], ['renter', 'owner'])) {
+    if (isset($input['role']) && in_array($input['role'], ['user', 'driver', 'callcenterstaff', 'controlstaff'], true)) {
         $updates['role'] = $input['role'];
     }
 

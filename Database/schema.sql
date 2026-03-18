@@ -14,12 +14,13 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- OLD: User roles (deprecated - kept for migration reference)
 -- DO $$ BEGIN CREATE TYPE user_role AS ENUM ('renter', 'owner', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- NEW: User roles v2 - 4 role system
--- user:  Customer who books rides/cars (replaces 'renter')
--- driver: Driver who operates vehicles (NEW)
--- staff:  Staff who manage drivers/vehicles (replaces 'owner')
--- admin:  System administrator (unchanged)
-DO $$ BEGIN CREATE TYPE user_role_v2 AS ENUM ('user', 'driver', 'staff', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- NEW: User roles v3 - 5 role system
+-- user: Customer who books rides/cars
+-- driver: Driver who operates vehicles
+-- callcenterstaff: Staff creating booking requests for customers
+-- controlstaff: Staff approving requests and managing vehicles
+-- admin: System administrator
+DO $$ BEGIN CREATE TYPE user_role_v2 AS ENUM ('user', 'driver', 'callcenterstaff', 'controlstaff', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Auth providers
 DO $$ BEGIN CREATE TYPE auth_provider AS ENUM ('google', 'phone', 'faceid', 'email'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -130,6 +131,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     
     -- Details
     category        VARCHAR(50) NOT NULL,       -- sedan, suv, luxury, electric, van, sports
+    service_tier    VARCHAR(20) NOT NULL DEFAULT 'standard', -- eco, standard, luxury
     transmission    VARCHAR(20) NOT NULL DEFAULT 'automatic', -- automatic, manual
     fuel_type       VARCHAR(20) NOT NULL DEFAULT 'petrol',    -- petrol, diesel, electric, hybrid
     seats           INT NOT NULL DEFAULT 5,
@@ -170,6 +172,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
 
 CREATE INDEX IF NOT EXISTS idx_vehicles_owner ON vehicles(owner_id);
 CREATE INDEX IF NOT EXISTS idx_vehicles_category ON vehicles(category);
+CREATE INDEX IF NOT EXISTS idx_vehicles_service_tier ON vehicles(service_tier);
 CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
 CREATE INDEX IF NOT EXISTS idx_vehicles_price ON vehicles(price_per_day);
 CREATE INDEX IF NOT EXISTS idx_vehicles_location ON vehicles(location_city);
@@ -536,11 +539,13 @@ INSERT INTO promotions (code, title, description, discount_type, discount_value,
 -- =====================================================
 INSERT INTO users (email, full_name, auth_provider, role, profile_completed, email_verified, password_hash) VALUES
 ('admin1@drivenow.local', 'Administrator', 'email', 'admin'::user_role_v2, true, true, '$2y$10$hRY0TwzUrQK2d42oXUAE9Ob9DN2yhbB6LhKE8Hrx/fZ9S2a.CJyx6'),
-('staff1@drivenow.local', 'Staff Manager', 'email', 'staff'::user_role_v2, true, true, '$2y$10$5lVYyPIeTHWnQo0A4eW4QOrbfI4Zj5R7zbS6pvtuf.6jbmhaC.3hi');
+('controlstaff1@drivenow.local', 'Control Staff', 'email', 'controlstaff'::user_role_v2, true, true, '$2y$10$5lVYyPIeTHWnQo0A4eW4QOrbfI4Zj5R7zbS6pvtuf.6jbmhaC.3hi'),
+('callcenterstaff1@drivenow.local', 'Call Center Staff', 'email', 'callcenterstaff'::user_role_v2, true, true, '$2y$10$5lVYyPIeTHWnQo0A4eW4QOrbfI4Zj5R7zbS6pvtuf.6jbmhaC.3hi');
 
 -- Note: Password hashes above are bcrypt hashes for:
 -- admin1@drivenow.local: admin123
--- staff1@drivenow.local: staff123
+-- controlstaff1@drivenow.local: staff123
+-- callcenterstaff1@drivenow.local: staff123
 -- You can verify/recreate them using PHP: password_hash('admin123', PASSWORD_BCRYPT)
 
 -- =====================================================

@@ -63,8 +63,10 @@
                             <div class="form-group">
                                 <label class="form-label">Account Type</label>
                                 <select id="pRole" class="form-input">
-                                    <option value="renter">🚗 Renter — I want to rent cars</option>
-                                    <option value="owner">🏢 Owner — I want to list my cars</option>
+                                    <option value="user">👤 User — I want to book rides</option>
+                                    <option value="driver">🚗 Driver — I operate assigned trips</option>
+                                    <option value="callcenterstaff">📞 Call Center Staff — create requests for customers</option>
+                                    <option value="controlstaff">🧭 Control Staff — approve requests and manage vehicles</option>
                                 </select>
                             </div>
 
@@ -407,11 +409,14 @@
         }
     </style>
 
-    <script src="/public/js/profile.js"></script>
+    <script src="/resources/js/profile.js"></script>
 
     <!-- Window scope setup for global variables -->
     <script>
-        const AUTH_API = '/api/auth.php';
+        const SESSION_API = '/api/session.php';
+        const PROFILE_API = '/api/profile.php';
+        const FACEID_API = '/api/faceid.php';
+        const EMAIL_SECURITY_API = '/api/email-security.php';
         const FACE_API_CDN = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.min.js';
         const FACE_MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
     </script>

@@ -11,6 +11,15 @@ final class BookingRepository
         $this->pdo = $pdo;
     }
 
+    private function ensureVehicleServiceTierColumnExists(): void
+    {
+        try {
+            $this->pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS service_tier VARCHAR(20) DEFAULT 'standard'");
+        } catch (Throwable $e) {
+            // Ignore in environments without ALTER permissions.
+        }
+    }
+
     /**
      * Ensure schema columns exist for minicab bookings
      */
@@ -39,11 +48,13 @@ final class BookingRepository
      */
     public function findVehicleForTier(string $rideTier, string $excludeRenterId): ?array
     {
+        $this->ensureVehicleServiceTierColumnExists();
+
         $tierConditions = '';
         match ($rideTier) {
-            'eco' => $tierConditions = "v.price_per_day <= 40 AND v.seats = 5",
-            'standard' => $tierConditions = "v.price_per_day > 40 AND v.price_per_day <= 100",
-            'premium' => $tierConditions = "v.price_per_day > 100",
+            'eco' => $tierConditions = "(LOWER(COALESCE(v.service_tier, '')) = 'eco' OR (v.service_tier IS NULL AND v.price_per_day <= 40 AND v.seats = 5))",
+            'standard' => $tierConditions = "(LOWER(COALESCE(v.service_tier, '')) = 'standard' OR (v.service_tier IS NULL AND v.price_per_day > 40 AND v.price_per_day <= 100))",
+            'premium' => $tierConditions = "(LOWER(COALESCE(v.service_tier, '')) IN ('luxury', 'premium') OR (v.service_tier IS NULL AND v.price_per_day > 100))",
             default => throw new Exception('Invalid ride tier')
         };
 

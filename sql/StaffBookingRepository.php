@@ -52,6 +52,7 @@ final class StaffBookingRepository
             // Check for overlapping bookings
             $pickupDate = $data['pickup_date'] ?? null;
             $returnDate = $data['return_date'] ?? null;
+            $newEndDate = $returnDate ?: $pickupDate;
             
             $conflictStmt = $this->pdo->prepare("
                 SELECT COUNT(*)
@@ -61,7 +62,7 @@ final class StaffBookingRepository
                   AND pickup_date <= ?
                   AND (return_date IS NULL OR return_date >= ?)
             ");
-            $conflictStmt->execute([$vehicleId, $returnDate, $pickupDate]);
+            $conflictStmt->execute([$vehicleId, $newEndDate, $pickupDate]);
             $conflicts = (int)$conflictStmt->fetchColumn();
             if ($conflicts > 0) {
                 throw new PDOException('Vehicle already has an overlapping booking for selected dates');
@@ -87,11 +88,12 @@ final class StaffBookingRepository
             ");
 
             $initialStatus = $data['initial_status'] ?? 'pending';
+            $bookingType = (string)($data['booking_type'] ?? 'with-driver');
             $stmt->execute([
                 $renterId,
                 $vehicle['owner_id'],
                 $vehicleId,
-                'with-driver',
+                $bookingType,
                 $initialStatus,
                 $pickupDate,
                 $returnDate,
@@ -129,9 +131,8 @@ final class StaffBookingRepository
                 $paymentMethod
             ]);
 
-            // Mark vehicle as rented
-            $vehicleUpdateStmt = $this->pdo->prepare("UPDATE vehicles SET status = 'rented', updated_at = NOW() WHERE id = ?");
-            $vehicleUpdateStmt->execute([$vehicleId]);
+            // Keep vehicle state unchanged while request is pending.
+            // Control Staff will mark it rented when moving booking to in_progress.
 
             $this->pdo->commit();
 

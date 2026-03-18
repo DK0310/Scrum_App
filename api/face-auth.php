@@ -127,7 +127,7 @@ if ($action === 'login') {
             $_SESSION['username'] = $bestMatch['username'] ?? $bestMatch['email'];
             $_SESSION['full_name'] = $bestMatch['full_name'] ?? $bestMatch['username'] ?? $bestMatch['email'];
             $_SESSION['email'] = $bestMatch['email'];
-            $_SESSION['role'] = $bestMatch['role'] ?? 'renter';
+            $_SESSION['role'] = $bestMatch['role'] ?? 'user';
             $_SESSION['logged_in'] = true;
 
             echo json_encode([

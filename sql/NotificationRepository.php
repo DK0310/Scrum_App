@@ -91,15 +91,13 @@ final class NotificationRepository
      */
     public function markAsRead(string $notificationId, ?string $driverId = null): bool
     {
-        $sql = "UPDATE notifications SET read_at = NOW() WHERE id = ? AND read_at IS NULL";
+        $sql = "UPDATE notifications SET is_read = true WHERE id = ? AND is_read = false";
         $params = [$notificationId];
         
         if ($driverId) {
             // If driver specified, verify ownership
-            $sql = "UPDATE notifications SET read_at = NOW() WHERE id = ? AND read_at IS NULL AND (
-                SELECT driver_id FROM driver_notifications WHERE id = ?
-            ) = ?";
-            $params = [$notificationId, $notificationId, $driverId];
+            $sql = "UPDATE notifications SET is_read = true WHERE id = ? AND is_read = false AND user_id = ?";
+            $params = [$notificationId, $driverId];
         }
 
         $stmt = $this->pdo->prepare($sql);
@@ -171,7 +169,7 @@ final class NotificationRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM notifications
-            WHERE user_id = ? AND read_at IS NULL
+            WHERE user_id = ? AND is_read = false
         ");
         $stmt->execute([$userId]);
         return (int) $stmt->fetchColumn();

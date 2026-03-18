@@ -1,0 +1,1285 @@
+/**
+ * Booking Module
+ * Handles minicab booking flow (schedule only)
+ * Features: step navigation, date pickers, location selection with maps, payment processing, promo codes
+ */
+
+(function initBookingModule() {
+  // ===== CONFIGURATION =====
+  const VEHICLES_API = '/api/vehicles.php';
+  const BOOKINGS_API = '/api/bookings.php';
+  const CAR_ID = window.CAR_ID || '';
+  const INITIAL_PROMO = window.INITIAL_PROMO || '';
+  const BOOKING_MODE = window.BOOKING_MODE || '';
+  const isLoggedIn = window.isLoggedIn || false;
+
+  // ===== STATE =====
+  let carData = null;
+  let selectedBookingType = 'minicab';
+  let selectedPaymentMethod = 'cash';
+  let appliedPromo = null;
+  let pickupMapObj = null, returnMapObj = null;
+  let pickupMarker = null, returnMarker = null;
+  let selectedRideTier = null; // 'eco', 'standard', 'premium'
+  let rideFare = null;
+  let selectedRideTiming = 'schedule'; // schedule only
+  let lockedBookingType = null;
+
+  // Location tracking
+  let autocompleteTimers = {};
+  let selectedAddresses = { pickup: null, return: null };
+  let calculatedDistance = null;
+  let transferCost = null;
+
+  // ===== INITIALIZATION =====
+  document.addEventListener('DOMContentLoaded', async function() {
+    const today = new Date().toISOString().split('T')[0];
+    const pickupDateEl = document.getElementById('pickupDate');
+    const returnDateEl = document.getElementById('returnDate');
+    
+    if (pickupDateEl) {
+      pickupDateEl.min = today;
+      pickupDateEl.addEventListener('change', function() {
+        const pickup = this.value;
+        if (pickup && returnDateEl) {
+          returnDateEl.min = pickup;
+          if (returnDateEl.value && returnDateEl.value < pickup) {
+            returnDateEl.value = '';
+          }
+        }
+        updateTripSummary();
+      });
+    }
+    
+    if (returnDateEl) {
+      returnDateEl.min = today;
+      returnDateEl.addEventListener('change', updateTripSummary);
+    }
+
+    const scheduledDTEl = document.getElementById('scheduledDateTime');
+    if (scheduledDTEl) {
+      scheduledDTEl.addEventListener('change', updateTripSummary);
+    }
+
+    // Single workflow: minicab + schedule only
+    lockedBookingType = 'minicab';
+    const typeGroup = document.getElementById('bookingTypeGroup');
+    if (typeGroup) typeGroup.style.display = 'none';
+    const loadingEl = document.getElementById('bookingLoading');
+    if (loadingEl) loadingEl.style.display = 'none';
+    const step1El = document.getElementById('step1Content');
+    if (step1El) step1El.style.display = 'block';
+    selectBookingType('minicab');
+
+    loadSavedPromos();
+    if (INITIAL_PROMO) {
+      const promoInput = document.getElementById('promoCodeInput');
+      if (promoInput) promoInput.value = INITIAL_PROMO;
+    }
+    initLeafletAutocomplete();
+  });
+
+  // ===== RENDER CAR INFO =====
+  function renderCarInfo() {
+    if (!carData) return;
+    const c = carData;
+    
+    const titleEl = document.getElementById('bookingCarTitle');
+    if (titleEl) titleEl.textContent = c.brand + ' ' + c.model;
+    
+    const subEl = document.getElementById('bookingCarSub');
+    if (subEl) subEl.textContent = c.year + ' · ' + ucfirst(c.category) + ' · ' + ucfirst(c.transmission);
+
+    const imgContainer = document.getElementById('bookingCarImage');
+    if (imgContainer) {
+      if (c.images && c.images.length > 0) {
+        const imgUrl = c.images[0];
+        if (imgUrl && (imgUrl.startsWith('http') || imgUrl.startsWith('/api/'))) {
+          imgContainer.innerHTML = '<img src="' + imgUrl + '" alt="' + escapeHtml(c.brand + ' ' + c.model) + '" onerror="this.parentElement.innerHTML=\'<div class=no-image-placeholder style=height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400)>No Photo</div>\'">';
+        } else {
+          imgContainer.innerHTML = '<div class="no-image-placeholder" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);">No Photo</div>';
+        }
+      } else {
+        imgContainer.innerHTML = '<div class="no-image-placeholder" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);">No Photo</div>';
+      }
+    }
+
+    const specs = [c.seats + ' Seats', ucfirst(c.fuel_type), c.engine_size || '', c.consumption || '', ucfirst(c.color || ''), c.location_city || ''].filter(s => s);
+    const specsEl = document.getElementById('bookingCarSpecs');
+    if (specsEl) {
+      specsEl.innerHTML = specs.slice(0, 6).map(s => '<div class="spec-chip">' + escapeHtml(s) + '</div>').join('');
+    }
+    
+    const priceEl = document.getElementById('bookingCarPrice');
+    if (priceEl) priceEl.textContent = '$' + Number(c.price_per_day).toFixed(2);
+  }
+
+  function ucfirst(str) {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+  }
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
+
+  // ===== BOOKING TYPE =====
+  function selectBookingType(type) {
+    selectedBookingType = type;
+    selectedRideTier = null;
+    rideFare = null;
+    
+    document.querySelectorAll('.booking-type-option[data-type]').forEach(el => {
+      el.classList.toggle('active', el.dataset.type === type);
+    });
+
+    const isMinicab = type === 'minicab';
+    const isWithDriver = type === 'with-driver';
+
+    // Date fields
+    const returnDateGroup = document.getElementById('returnDateGroup');
+    const pickupDateGroup = document.getElementById('pickupDateGroup');
+    if (returnDateGroup) returnDateGroup.style.display = isMinicab ? 'none' : '';
+    if (pickupDateGroup) pickupDateGroup.style.display = isMinicab ? 'none' : '';
+    
+    const scheduledDTGroup = document.getElementById('scheduledDateTimeGroup');
+    if (scheduledDTGroup) scheduledDTGroup.style.display = 'none';
+    
+    if (isMinicab) {
+      selectRideTiming('schedule');
+    }
+
+    // Pickup label
+    const pickupLocationLabel = document.getElementById('pickupLocationLabel');
+    const pickupLocation = document.getElementById('pickupLocation');
+    if (pickupLocationLabel) {
+      pickupLocationLabel.textContent = isMinicab ? 'Pick-up Location' : 'Vehicle Pick-up Location';
+    }
+    if (pickupLocation) {
+      pickupLocation.placeholder = isMinicab ? 'Where should we pick you up?' : 'Where do you want to pick up the car?';
+    }
+
+    // Destination location
+    const returnLocationGroup = document.getElementById('returnLocationGroup');
+    if (returnLocationGroup) returnLocationGroup.style.display = isMinicab ? 'block' : 'none';
+    
+    if (isMinicab) {
+      const returnLocationLabel = document.getElementById('returnLocationLabel');
+      const returnLocation = document.getElementById('returnLocation');
+      if (returnLocationLabel) returnLocationLabel.textContent = 'Destination';
+      if (returnLocation) returnLocation.placeholder = 'Where do you want to go?';
+    }
+
+    // Service type — only for minicab
+    const serviceTypeGroup = document.getElementById('serviceTypeGroup');
+    if (serviceTypeGroup) serviceTypeGroup.style.display = isMinicab ? 'block' : 'none';
+
+    // Ride timing — only for minicab
+    const rideTimingGroup = document.getElementById('rideTimingGroup');
+    if (rideTimingGroup) rideTimingGroup.style.display = isMinicab ? 'block' : 'none';
+
+    // Reset airport selector state
+    if (isMinicab) {
+      onServiceTypeChange();
+    } else {
+      const returnLocationInputWrapper = document.getElementById('returnLocationInputWrapper');
+      const airportSelectWrapper = document.getElementById('airportSelectWrapper');
+      if (returnLocationInputWrapper) returnLocationInputWrapper.style.display = 'flex';
+      if (airportSelectWrapper) airportSelectWrapper.style.display = 'none';
+    }
+
+    // Ride tier selection — only for minicab
+    const rideTierGroup = document.getElementById('rideTierGroup');
+    if (rideTierGroup) rideTierGroup.style.display = isMinicab ? 'block' : 'none';
+
+    // Passenger count — only for minicab
+    const passengerCountGroup = document.getElementById('passengerCountGroup');
+    if (passengerCountGroup) passengerCountGroup.style.display = isMinicab ? 'block' : 'none';
+    
+    if (isMinicab) {
+      updateTierRecommendation();
+    }
+
+    // Car card visibility
+    const carCard = document.querySelector('.booking-car-card');
+    const bookingGrid = document.querySelector('.booking-grid');
+    if (isMinicab) {
+      if (carCard) carCard.style.display = 'none';
+      if (bookingGrid) bookingGrid.style.gridTemplateColumns = '1fr';
+    } else {
+      if (carCard && carData) carCard.style.display = '';
+      if (bookingGrid && carData) bookingGrid.style.gridTemplateColumns = '380px 1fr';
+    }
+
+    // Clear return location when switching to with-driver
+    if (isWithDriver) {
+      const returnLocation = document.getElementById('returnLocation');
+      if (returnLocation) returnLocation.value = '';
+    }
+
+    calculateRouteDistance();
+    updateTripSummary();
+  }
+
+  // ===== RIDE TIMING (minicab only) =====
+  function selectRideTiming(timing) {
+    if (timing !== 'schedule') {
+      timing = 'schedule';
+    }
+    selectedRideTiming = timing;
+    document.querySelectorAll('[data-timing]').forEach(el => {
+      el.classList.toggle('active', el.dataset.timing === timing);
+    });
+
+    const pickupDateGroup = document.getElementById('pickupDateGroup');
+    const returnDateGroup = document.getElementById('returnDateGroup');
+    const scheduledDateTimeGroup = document.getElementById('scheduledDateTimeGroup');
+
+    if (pickupDateGroup) pickupDateGroup.style.display = 'none';
+    if (returnDateGroup) returnDateGroup.style.display = 'none';
+    if (scheduledDateTimeGroup) scheduledDateTimeGroup.style.display = 'block';
+
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 30);
+    const minDT = now.toISOString().slice(0, 16);
+    const scheduledDateTime = document.getElementById('scheduledDateTime');
+    if (scheduledDateTime) scheduledDateTime.min = minDT;
+    updateTripSummary();
+  }
+
+  // ===== SERVICE TYPE CHANGE =====
+  function onServiceTypeChange() {
+    const serviceType = document.getElementById('serviceType');
+    if (!serviceType) return;
+    
+    const isAirport = serviceType.value === 'airport-transfer';
+    const returnInputWrapper = document.getElementById('returnLocationInputWrapper');
+    const airportSelect = document.getElementById('airportSelectWrapper');
+
+    if (isAirport) {
+      if (returnInputWrapper) returnInputWrapper.style.display = 'none';
+      if (airportSelect) airportSelect.style.display = 'block';
+      const returnLocationLabel = document.getElementById('returnLocationLabel');
+      if (returnLocationLabel) returnLocationLabel.textContent = '✈️ Select Airport';
+      const returnLocation = document.getElementById('returnLocation');
+      if (returnLocation) returnLocation.value = '';
+      selectedAddresses['return'] = null;
+    } else {
+      if (returnInputWrapper) returnInputWrapper.style.display = 'flex';
+      if (airportSelect) airportSelect.style.display = 'none';
+      const returnLocationLabel = document.getElementById('returnLocationLabel');
+      if (returnLocationLabel) returnLocationLabel.textContent = 'Destination';
+      const returnLocation = document.getElementById('returnLocation');
+      if (returnLocation) returnLocation.placeholder = 'Where do you want to go?';
+    }
+
+    calculateRouteDistance();
+    updateTripSummary();
+  }
+
+  // ===== AIRPORT SELECT =====
+  function onAirportSelect() {
+    const airportSelect = document.getElementById('airportSelect');
+    if (!airportSelect) return;
+    
+    const selected = airportSelect.value;
+    const returnLocation = document.getElementById('returnLocation');
+    
+    if (!selected) {
+      if (returnLocation) returnLocation.value = '';
+      selectedAddresses['return'] = null;
+      calculateRouteDistance();
+      return;
+    }
+    
+    if (returnLocation) returnLocation.value = selected;
+    searchAirportLocation(selected);
+  }
+
+  async function searchAirportLocation(airportName) {
+    try {
+      const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(airportName) + '&limit=1', {
+        headers: { 'Accept-Language': 'en' }
+      });
+      const results = await res.json();
+      if (results.length > 0) {
+        const r = results[0];
+        selectedAddresses['return'] = { lat: parseFloat(r.lat), lon: parseFloat(r.lon), name: airportName };
+        calculateRouteDistance();
+        updateTripSummary();
+      }
+    } catch (err) {
+      console.error('Airport geocode error:', err);
+    }
+  }
+
+  // ===== TIER RECOMMENDATION =====
+  function updateTierRecommendation() {
+    const passengerCount = parseInt(document.getElementById('passengerCount').value) || 1;
+    const recommendationEl = document.getElementById('tierRecommendationText');
+    if (!recommendationEl) return;
+    
+    let recommendation = '';
+    if (passengerCount < 5) {
+      recommendation = '👤 ' + passengerCount + ' passenger' + (passengerCount > 1 ? 's' : '') + ' — Recommended: Eco or Standard';
+    } else if (passengerCount >= 5 && passengerCount <= 7) {
+      recommendation = '👥 ' + passengerCount + ' passengers — Recommended: Standard (' + (passengerCount <= 5 ? 5 : 6) + ' seats)';
+    } else {
+      recommendation = '⚠️ ' + passengerCount + ' passengers — Sorry, no vehicles available for more than 7 passengers';
+    }
+    recommendationEl.textContent = recommendation;
+  }
+
+  // ===== TRIP SUMMARY =====
+  function updateTripSummary() {
+    const summaryDiv = document.getElementById('tripSummary');
+    if (!summaryDiv) return;
+    
+    const pickup = document.getElementById('pickupDate');
+    const ret = document.getElementById('returnDate');
+    const pickupVal = pickup ? pickup.value : '';
+    const retVal = ret ? ret.value : '';
+
+    const summaryTierRow = document.getElementById('summaryTierRow');
+    const summaryFareRow = document.getElementById('summaryFareRow');
+    if (summaryTierRow) summaryTierRow.style.display = 'none';
+    if (summaryFareRow) summaryFareRow.style.display = 'none';
+
+    if (selectedBookingType === 'minicab') {
+      const hasPickupTime = !!document.getElementById('scheduledDateTime').value;
+      if (hasPickupTime) {
+        summaryDiv.style.display = 'block';
+        const summaryDurationRow = document.getElementById('summaryDurationRow');
+        const summaryRateRow = document.getElementById('summaryRateRow');
+        if (summaryDurationRow) summaryDurationRow.style.display = 'none';
+        if (summaryRateRow) summaryRateRow.style.display = 'none';
+
+        if (selectedRideTier && calculatedDistance !== null) {
+          const tierLabels = { eco: '🌿 Eco', standard: '⭐ Standard', premium: '👑 Premium' };
+          const tierRates = { eco: 1, standard: 2, premium: 5 };
+          const rate = tierRates[selectedRideTier] || 1;
+          rideFare = Math.round(calculatedDistance * rate * 100) / 100;
+
+          const summaryTier = document.getElementById('summaryTier');
+          if (summaryTierRow) summaryTierRow.style.display = '';
+          if (summaryTier) summaryTier.textContent = (tierLabels[selectedRideTier] || '') + ' ($' + rate + '/km)';
+          
+          if (summaryFareRow) summaryFareRow.style.display = '';
+          const summaryFare = document.getElementById('summaryFare');
+          if (summaryFare) summaryFare.textContent = '$' + rideFare.toFixed(2);
+          
+          const summaryTotal = document.getElementById('summaryTotal');
+          if (summaryTotal) summaryTotal.textContent = '$' + rideFare.toFixed(2);
+        } else {
+          rideFare = null;
+          const summaryTotal = document.getElementById('summaryTotal');
+          if (summaryTotal) {
+            summaryTotal.textContent = calculatedDistance !== null ? 'Select a ride tier' : 'Set locations first';
+          }
+        }
+      } else {
+        summaryDiv.style.display = 'none';
+      }
+      return;
+    }
+
+    // With-driver mode
+    if (!carData) return;
+    const ppd = Number(carData.price_per_day);
+
+    const summaryDistanceRow = document.getElementById('summaryDistanceRow');
+    if (summaryDistanceRow) summaryDistanceRow.style.display = 'none';
+    
+    const summaryDurationRow = document.getElementById('summaryDurationRow');
+    const summaryRateRow = document.getElementById('summaryRateRow');
+    if (summaryDurationRow) summaryDurationRow.style.display = '';
+    if (summaryRateRow) summaryRateRow.style.display = '';
+
+    if (pickupVal && retVal) {
+      const diff = Math.max(1, Math.ceil((new Date(retVal) - new Date(pickupVal)) / 86400000));
+      summaryDiv.style.display = 'block';
+      const summaryDays = document.getElementById('summaryDays');
+      const summaryRate = document.getElementById('summaryRate');
+      const summaryTotal = document.getElementById('summaryTotal');
+      if (summaryDays) summaryDays.textContent = diff + ' day' + (diff > 1 ? 's' : '');
+      if (summaryRate) summaryRate.textContent = '$' + ppd.toFixed(2) + '/day';
+      if (summaryTotal) summaryTotal.textContent = '$' + (diff * ppd).toFixed(2);
+    } else {
+      summaryDiv.style.display = 'none';
+    }
+  }
+
+  // ===== STEP NAVIGATION =====
+  async function goToStep2() {
+    if (!isLoggedIn) {
+      if (typeof showToast === 'function') showToast('Please log in to continue booking.', 'warning');
+      return;
+    }
+    
+    const pickupLocation = document.getElementById('pickupLocation');
+    const pickupLoc = pickupLocation ? pickupLocation.value.trim() : '';
+    if (!pickupLoc) {
+      if (typeof showToast === 'function') showToast('Please enter a pick-up location.', 'warning');
+      return;
+    }
+
+    if (selectedBookingType === 'with-driver') {
+      const pickup = document.getElementById('pickupDate');
+      const ret = document.getElementById('returnDate');
+      const pickupVal = pickup ? pickup.value : '';
+      const retVal = ret ? ret.value : '';
+      
+      if (!pickupVal) {
+        if (typeof showToast === 'function') showToast('Please select a pick-up date.', 'warning');
+        return;
+      }
+      if (!retVal) {
+        if (typeof showToast === 'function') showToast('Please select a return date.', 'warning');
+        return;
+      }
+      if (retVal < pickupVal) {
+        if (typeof showToast === 'function') showToast('Return date must be after pick-up date.', 'warning');
+        return;
+      }
+      if (!carData) {
+        if (typeof showToast === 'function') showToast('Please select a vehicle first.', 'warning');
+        return;
+      }
+    } else if (selectedBookingType === 'minicab') {
+      if (selectedRideTiming === 'schedule') {
+        const scheduledDT = document.getElementById('scheduledDateTime');
+        const scheduledVal = scheduledDT ? scheduledDT.value : '';
+        if (!scheduledVal) {
+          if (typeof showToast === 'function') showToast('Please select a scheduled pick-up date and time.', 'warning');
+          return;
+        }
+        const pickupDate = document.getElementById('pickupDate');
+        if (pickupDate) pickupDate.value = scheduledVal.split('T')[0];
+      }
+
+      const returnLocation = document.getElementById('returnLocation');
+      const destLoc = returnLocation ? returnLocation.value.trim() : '';
+      if (!destLoc) {
+        if (typeof showToast === 'function') showToast('Please enter a destination.', 'warning');
+        return;
+      }
+      if (!selectedRideTier) {
+        if (typeof showToast === 'function') showToast('Please select a ride tier (Eco, Standard, or Premium).', 'warning');
+        return;
+      }
+      if (rideFare === null || rideFare <= 0) {
+        if (typeof showToast === 'function') showToast('Unable to calculate fare. Please set both locations.', 'warning');
+        return;
+      }
+
+      const serviceType = document.getElementById('serviceType');
+      const serviceTypeVal = serviceType ? serviceType.value : '';
+      if (serviceTypeVal === 'local' && calculatedDistance > 30) {
+        if (typeof showToast === 'function') showToast('⚠️ Local Journey must be under 30km. Your distance is ' + calculatedDistance.toFixed(1) + 'km. Please switch to Long Distance Journey.', 'warning');
+        return;
+      }
+      if (serviceTypeVal === 'long-distance' && calculatedDistance <= 30) {
+        if (typeof showToast === 'function') showToast('⚠️ Long Distance Journey must be over 30km. Your distance is ' + calculatedDistance.toFixed(1) + 'km. Please switch to Local Journey.', 'warning');
+        return;
+      }
+    }
+
+    populatePaymentSummary();
+    const step1Content = document.getElementById('step1Content');
+    const step2Content = document.getElementById('step2Content');
+    const step1Indicator = document.getElementById('step1Indicator');
+    const step2Indicator = document.getElementById('step2Indicator');
+    const stepLine = document.getElementById('stepLine');
+    
+    if (step1Content) step1Content.style.display = 'none';
+    if (step2Content) step2Content.style.display = 'block';
+    if (step1Indicator) {
+      step1Indicator.classList.remove('active');
+      step1Indicator.classList.add('completed');
+    }
+    if (step2Indicator) step2Indicator.classList.add('active');
+    if (stepLine) stepLine.classList.add('active');
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function goToStep1() {
+    const step2Content = document.getElementById('step2Content');
+    const step1Content = document.getElementById('step1Content');
+    const step2Indicator = document.getElementById('step2Indicator');
+    const step1Indicator = document.getElementById('step1Indicator');
+    const stepLine = document.getElementById('stepLine');
+    
+    if (step2Content) step2Content.style.display = 'none';
+    if (step1Content) step1Content.style.display = 'block';
+    if (step2Indicator) step2Indicator.classList.remove('active');
+    if (step1Indicator) {
+      step1Indicator.classList.remove('completed');
+      step1Indicator.classList.add('active');
+    }
+    if (stepLine) stepLine.classList.remove('active');
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ===== POPULATE PAYMENT SUMMARY =====
+  function populatePaymentSummary() {
+    const pickup = document.getElementById('pickupDate');
+    const ret = document.getElementById('returnDate');
+    const pickupLocation = document.getElementById('pickupLocation');
+    const returnLocation = document.getElementById('returnLocation');
+    
+    const pickupVal = pickup ? pickup.value : '';
+    const retVal = ret ? ret.value : '';
+    const pickupLoc = pickupLocation ? pickupLocation.value.trim() : '';
+    const returnLoc = returnLocation ? returnLocation.value.trim() : '';
+
+    if (selectedBookingType === 'minicab') {
+      const tierLabels = { eco: '🌿 Eco', standard: '⭐ Standard', premium: '👑 Premium' };
+      const tierRates = { eco: 1, standard: 2, premium: 5 };
+      const serviceLabels = { 'local': 'Local Journey', 'long-distance': 'Long Distance', 'airport-transfer': 'Airport Transfer', 'hotel-transfer': 'Hotel Transfer' };
+      const serviceType = document.getElementById('serviceType');
+      const serviceTypeVal = serviceType ? serviceType.value : '';
+
+      const paymentCarTitle = document.getElementById('paymentCarTitle');
+      if (paymentCarTitle) paymentCarTitle.textContent = tierLabels[selectedRideTier] || 'Minicab';
+      
+      const paymentCarSub = document.getElementById('paymentCarSub');
+      if (paymentCarSub) paymentCarSub.textContent = serviceLabels[serviceTypeVal] || 'Auto-assigned vehicle';
+      
+      const paymentBookingType = document.getElementById('paymentBookingType');
+      if (paymentBookingType) paymentBookingType.textContent = 'Minicab – ' + (tierLabels[selectedRideTier] || '');
+
+      const thumb = document.getElementById('paymentCarThumb');
+      const tierIcons = { eco: '🌿', standard: '⭐', premium: '👑' };
+      if (thumb) {
+        thumb.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;background:var(--primary-50);">' + (tierIcons[selectedRideTier] || '🚕') + '</div>';
+      }
+
+      const paymentPickupDate = document.getElementById('paymentPickupDate');
+      if (paymentPickupDate) {
+        const scheduled = document.getElementById('scheduledDateTime');
+        const scheduledVal = scheduled ? scheduled.value : '';
+        paymentPickupDate.textContent = scheduledVal
+          ? new Date(scheduledVal).toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : formatDate(pickupVal);
+      }
+
+      const paymentReturnRow = document.getElementById('paymentReturnRow');
+      if (paymentReturnRow) paymentReturnRow.style.display = 'none';
+      
+      const paymentReturnLocRow = document.getElementById('paymentReturnLocRow');
+      if (paymentReturnLocRow) paymentReturnLocRow.style.display = '';
+      
+      const paymentReturnLocLabel = document.getElementById('paymentReturnLocLabel');
+      if (paymentReturnLocLabel) paymentReturnLocLabel.textContent = 'Destination';
+      
+      const paymentReturnLoc = document.getElementById('paymentReturnLoc');
+      if (paymentReturnLoc) paymentReturnLoc.textContent = returnLoc;
+      
+      const paymentPickupLoc = document.getElementById('paymentPickupLoc');
+      if (paymentPickupLoc) paymentPickupLoc.textContent = pickupLoc;
+
+      const rate = tierRates[selectedRideTier] || 1;
+      const paymentDailyRate = document.getElementById('paymentDailyRate');
+      if (paymentDailyRate) paymentDailyRate.textContent = '$' + rate + '/km';
+      
+      const paymentDaysRow = document.getElementById('paymentDaysRow');
+      if (paymentDaysRow) paymentDaysRow.style.display = '';
+      
+      const paymentDaysLabel = document.getElementById('paymentDaysLabel');
+      if (paymentDaysLabel) paymentDaysLabel.textContent = calculatedDistance ? calculatedDistance.toFixed(1) + ' km' : '-';
+      
+      const paymentSubtotal = document.getElementById('paymentSubtotal');
+      if (paymentSubtotal) paymentSubtotal.textContent = '$' + (rideFare || 0).toFixed(2);
+
+      const paymentDistanceRow = document.getElementById('paymentDistanceRow');
+      if (paymentDistanceRow) paymentDistanceRow.style.display = '';
+      
+      const paymentDistance = document.getElementById('paymentDistance');
+      if (paymentDistance) paymentDistance.textContent = calculatedDistance ? calculatedDistance.toFixed(1) + ' km' : '-';
+      
+      const paymentTransferRow = document.getElementById('paymentTransferRow');
+      if (paymentTransferRow) paymentTransferRow.style.display = 'none';
+
+      updatePaymentTotal();
+      return;
+    }
+
+    // With-driver mode
+    if (!carData) return;
+    const c = carData;
+    const ppd = Number(c.price_per_day);
+
+    const paymentCarTitle = document.getElementById('paymentCarTitle');
+    if (paymentCarTitle) paymentCarTitle.textContent = c.brand + ' ' + c.model;
+    
+    const paymentCarSub = document.getElementById('paymentCarSub');
+    if (paymentCarSub) paymentCarSub.textContent = c.year + ' · ' + ucfirst(c.category);
+    
+    const paymentBookingType = document.getElementById('paymentBookingType');
+    if (paymentBookingType) paymentBookingType.textContent = 'With Driver';
+
+    const thumb = document.getElementById('paymentCarThumb');
+    if (thumb) {
+      if (c.images && c.images.length > 0 && c.images[0] && (c.images[0].startsWith('http') || c.images[0].startsWith('/api/'))) {
+        thumb.innerHTML = '<img src="' + c.images[0] + '" alt="' + escapeHtml(c.brand) + '" onerror="this.parentElement.innerHTML=\'<div style=width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:0.8rem>No Photo</div>\'">';
+      } else {
+        thumb.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:0.8rem;">No Photo</div>';
+      }
+    }
+
+    const paymentPickupDate = document.getElementById('paymentPickupDate');
+    if (paymentPickupDate) paymentPickupDate.textContent = formatDate(pickupVal);
+    
+    const paymentReturnRow = document.getElementById('paymentReturnRow');
+    if (paymentReturnRow) paymentReturnRow.style.display = '';
+    
+    const paymentReturnDate = document.getElementById('paymentReturnDate');
+    if (paymentReturnDate) paymentReturnDate.textContent = formatDate(retVal);
+    
+    const paymentReturnLocRow = document.getElementById('paymentReturnLocRow');
+    if (paymentReturnLocRow) paymentReturnLocRow.style.display = 'none';
+    
+    const paymentPickupLoc = document.getElementById('paymentPickupLoc');
+    if (paymentPickupLoc) paymentPickupLoc.textContent = pickupLoc;
+
+    let totalDays = 1;
+    if (pickupVal && retVal) {
+      totalDays = Math.max(1, Math.ceil((new Date(retVal) - new Date(pickupVal)) / 86400000));
+    }
+    const subtotal = totalDays * ppd;
+    
+    const paymentDailyRate = document.getElementById('paymentDailyRate');
+    if (paymentDailyRate) paymentDailyRate.textContent = '$' + ppd.toFixed(2) + '/day';
+    
+    const paymentDaysLabel = document.getElementById('paymentDaysLabel');
+    if (paymentDaysLabel) paymentDaysLabel.textContent = totalDays + ' day' + (totalDays > 1 ? 's' : '');
+    
+    const paymentSubtotal = document.getElementById('paymentSubtotal');
+    if (paymentSubtotal) paymentSubtotal.textContent = '$' + subtotal.toFixed(2);
+
+    const paymentDistanceRow = document.getElementById('paymentDistanceRow');
+    if (paymentDistanceRow) paymentDistanceRow.style.display = 'none';
+    
+    const paymentTransferRow = document.getElementById('paymentTransferRow');
+    if (paymentTransferRow) paymentTransferRow.style.display = 'none';
+    
+    const paymentDaysRow = document.getElementById('paymentDaysRow');
+    if (paymentDaysRow) paymentDaysRow.style.display = '';
+
+    updatePaymentTotal();
+  }
+
+  function updatePaymentTotal() {
+    let subtotal;
+
+    if (selectedBookingType === 'minicab') {
+      subtotal = rideFare || 0;
+    } else {
+      if (!carData) return;
+      const ppd = Number(carData.price_per_day);
+      const pickup = document.getElementById('pickupDate');
+      const ret = document.getElementById('returnDate');
+      const pickupVal = pickup ? pickup.value : '';
+      const retVal = ret ? ret.value : '';
+      let totalDays = 1;
+      if (pickupVal && retVal) {
+        totalDays = Math.max(1, Math.ceil((new Date(retVal) - new Date(pickupVal)) / 86400000));
+      }
+      subtotal = totalDays * ppd;
+    }
+
+    let discount = 0;
+    if (appliedPromo) {
+      discount = appliedPromo.discount_type === 'percentage'
+        ? Math.round(subtotal * appliedPromo.discount_value / 100 * 100) / 100
+        : Math.min(appliedPromo.discount_value, subtotal);
+      const paymentPromoRow = document.getElementById('paymentPromoRow');
+      if (paymentPromoRow) paymentPromoRow.style.display = '';
+      const paymentDiscount = document.getElementById('paymentDiscount');
+      if (paymentDiscount) paymentDiscount.textContent = '-$' + discount.toFixed(2);
+    } else {
+      const paymentPromoRow = document.getElementById('paymentPromoRow');
+      if (paymentPromoRow) paymentPromoRow.style.display = 'none';
+    }
+    const paymentTotal = document.getElementById('paymentTotal');
+    if (paymentTotal) paymentTotal.textContent = '$' + Math.max(0, subtotal - discount).toFixed(2);
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // ===== PAYMENT METHOD =====
+  function selectPaymentMethod(method) {
+    selectedPaymentMethod = method;
+    document.querySelectorAll('.payment-method-card').forEach(el => {
+      el.classList.toggle('active', el.dataset.method === method);
+    });
+  }
+
+  // ===== PROMO CODE =====
+  async function applyPromoCode() {
+    const promoCodeInput = document.getElementById('promoCodeInput');
+    const code = promoCodeInput ? promoCodeInput.value.trim() : '';
+    if (!code) {
+      if (typeof showToast === 'function') showToast('Please enter a promo code.', 'warning');
+      return;
+    }
+
+    const btn = document.getElementById('promoApplyBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '...';
+    }
+
+    try {
+      const res = await fetch(BOOKINGS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'validate-promo', code })
+      });
+      const data = await res.json();
+      if (data.success) {
+        appliedPromo = data.promo;
+        showPromoApplied();
+        updatePaymentTotal();
+        if (typeof showToast === 'function') showToast('✅ Promo applied: ' + data.promo.title, 'success');
+        savePromoToWallet(data.promo.code);
+      } else {
+        if (typeof showToast === 'function') showToast('❌ ' + data.message, 'error');
+      }
+    } catch (err) {
+      if (typeof showToast === 'function') showToast('Failed to validate promo code.', 'error');
+    }
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Apply';
+    }
+  }
+
+  function showPromoApplied() {
+    const promoInputRow = document.getElementById('promoInputRow');
+    const promoApplied = document.getElementById('promoApplied');
+    const promoAppliedCode = document.getElementById('promoAppliedCode');
+    const promoAppliedDesc = document.getElementById('promoAppliedDesc');
+    
+    if (promoInputRow) promoInputRow.style.display = 'none';
+    if (promoApplied) promoApplied.style.display = 'block';
+    if (promoAppliedCode) promoAppliedCode.textContent = appliedPromo.code;
+    if (promoAppliedDesc) {
+      promoAppliedDesc.textContent = appliedPromo.discount_type === 'percentage'
+        ? appliedPromo.discount_value + '% discount applied'
+        : '$' + Number(appliedPromo.discount_value).toFixed(2) + ' discount applied';
+    }
+  }
+
+  function removePromo() {
+    appliedPromo = null;
+    const promoApplied = document.getElementById('promoApplied');
+    const promoInputRow = document.getElementById('promoInputRow');
+    const promoCodeInput = document.getElementById('promoCodeInput');
+    
+    if (promoApplied) promoApplied.style.display = 'none';
+    if (promoInputRow) promoInputRow.style.display = 'flex';
+    if (promoCodeInput) promoCodeInput.value = '';
+    
+    updatePaymentTotal();
+    if (typeof showToast === 'function') showToast('Promo code removed.', 'info');
+  }
+
+  // ===== SAVED PROMOS WALLET =====
+  function savePromoToWallet(code) {
+    let saved = JSON.parse(localStorage.getItem('drivenow_saved_promos') || '[]');
+    if (!saved.includes(code.toUpperCase())) {
+      saved.push(code.toUpperCase());
+      localStorage.setItem('drivenow_saved_promos', JSON.stringify(saved));
+    }
+  }
+
+  async function loadSavedPromos() {
+    const saved = JSON.parse(localStorage.getItem('drivenow_saved_promos') || '[]');
+    if (saved.length === 0) return;
+
+    try {
+      const res = await fetch(BOOKINGS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'active-promos' })
+      });
+      const data = await res.json();
+      if (!data.success || !data.promos) return;
+
+      const available = data.promos.filter(p => saved.includes(p.code.toUpperCase()));
+      if (available.length === 0) return;
+
+      const savedPromosList = document.getElementById('savedPromosList');
+      if (savedPromosList) {
+        savedPromosList.innerHTML = available.map(p => {
+          const dt = p.discount_type === 'percentage' ? p.discount_value + '% OFF' : '$' + p.discount_value + ' OFF';
+          return '<div class="saved-promo-item" onclick="useSavedPromo(\'' + escapeHtml(p.code) + '\')">' +
+            '<div><div class="saved-promo-code">' + escapeHtml(p.code) + '</div>' +
+            '<div class="saved-promo-desc">' + (p.title || '') + '</div></div>' +
+            '<span class="saved-promo-badge">' + dt + '</span></div>';
+        }).join('');
+      }
+      
+      const savedPromosSection = document.getElementById('savedPromosSection');
+      if (savedPromosSection) savedPromosSection.style.display = 'block';
+    } catch (err) {
+      console.error('Failed to load promos:', err);
+    }
+  }
+
+  function useSavedPromo(code) {
+    const promoCodeInput = document.getElementById('promoCodeInput');
+    if (promoCodeInput) promoCodeInput.value = code;
+    applyPromoCode();
+  }
+
+  // ===== CONFIRM BOOKING =====
+  async function confirmBooking() {
+    const btn = document.getElementById('confirmBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+    }
+
+    const pickupLocation = document.getElementById('pickupLocation');
+    const pickupLoc = pickupLocation ? pickupLocation.value.trim() : '';
+
+    const payload = {
+      action: 'create',
+      booking_type: selectedBookingType,
+      pickup_date: document.getElementById('pickupDate').value || '',
+      pickup_location: pickupLoc,
+      special_requests: document.getElementById('specialRequests').value.trim(),
+      promo_code: appliedPromo ? appliedPromo.code : '',
+      payment_method: selectedPaymentMethod,
+      distance_km: calculatedDistance
+    };
+
+    if (selectedBookingType === 'minicab') {
+      const returnLocation = document.getElementById('returnLocation');
+      payload.ride_tier = selectedRideTier;
+      payload.return_location = returnLocation ? returnLocation.value.trim() : '';
+      payload.return_date = null;
+      payload.ride_fare = rideFare;
+      const serviceType = document.getElementById('serviceType');
+      payload.service_type = serviceType ? serviceType.value : '';
+      payload.ride_timing = 'schedule';
+      const scheduledDateTime = document.getElementById('scheduledDateTime');
+      payload.pickup_date = scheduledDateTime ? scheduledDateTime.value : '';
+    } else {
+      payload.vehicle_id = CAR_ID;
+      const returnDate = document.getElementById('returnDate');
+      payload.return_date = returnDate ? returnDate.value : '';
+      payload.return_location = pickupLoc;
+    }
+
+    try {
+      const res = await fetch(BOOKINGS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showBookingSuccess(data.booking);
+        const vehicleName = selectedBookingType === 'minicab' 
+          ? (data.booking.vehicle_name || 'minicab') 
+          : (carData ? carData.brand + ' ' + carData.model : 'vehicle');
+        if (typeof addNotification === 'function') {
+          addNotification('Booking Confirmed', 'Your ' + vehicleName + ' booking has been submitted!', 'booking');
+        }
+      } else {
+        if (typeof showToast === 'function') showToast('❌ ' + data.message, 'error');
+      }
+    } catch (err) {
+      if (typeof showToast === 'function') showToast('Failed to create booking. Please try again.', 'error');
+    }
+    
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Confirm & Book';
+    }
+  }
+
+  function showBookingSuccess(booking) {
+    const step2Content = document.getElementById('step2Content');
+    const bookingSteps = document.getElementById('bookingSteps');
+    const bookingSuccess = document.getElementById('bookingSuccess');
+    
+    if (step2Content) step2Content.style.display = 'none';
+    if (bookingSteps) bookingSteps.style.display = 'none';
+    if (bookingSuccess) bookingSuccess.style.display = 'block';
+
+    const tl = { 'minicab': 'Minicab', 'with-driver': 'With Driver' };
+    let vehicleName = '';
+    if (selectedBookingType === 'minicab') {
+      const tierLabels = { eco: '🌿 Eco', standard: '⭐ Standard', premium: '👑 Premium' };
+      vehicleName = (booking.vehicle_name || 'Auto-assigned') + ' (' + (tierLabels[selectedRideTier] || '') + ')';
+    } else {
+      vehicleName = carData ? carData.brand + ' ' + carData.model : 'Vehicle';
+    }
+
+    let html = '<div class="sb-row"><span>Vehicle</span><span>' + escapeHtml(vehicleName) + '</span></div>';
+    html += '<div class="sb-row"><span>Type</span><span>' + (tl[selectedBookingType] || selectedBookingType) + '</span></div>';
+    if (selectedBookingType === 'minicab') {
+      html += '<div class="sb-row"><span>Distance</span><span>' + (calculatedDistance ? calculatedDistance.toFixed(1) + ' km' : '-') + '</span></div>';
+    } else {
+      html += '<div class="sb-row"><span>Duration</span><span>' + booking.total_days + ' day' + (booking.total_days > 1 ? 's' : '') + '</span></div>';
+    }
+    html += '<div class="sb-row"><span>Subtotal</span><span>$' + parseFloat(booking.subtotal).toFixed(2) + '</span></div>';
+    if (booking.discount > 0) {
+      html += '<div class="sb-row" style="color:var(--success);"><span>Discount (' + booking.promo_applied + ')</span><span>-$' + parseFloat(booking.discount).toFixed(2) + '</span></div>';
+    }
+    html += '<div class="sb-row total"><span>Total</span><span>$' + parseFloat(booking.total).toFixed(2) + '</span></div>';
+    html += '<div class="sb-row"><span>Payment</span><span>' + formatPaymentMethod(booking.payment_method) + '</span></div>';
+    html += '<div class="sb-row"><span>Status</span><span style="color:var(--warning);font-weight:600;">⏳ Pending</span></div>';
+    
+    const successSummary = document.getElementById('successSummary');
+    if (successSummary) successSummary.innerHTML = html;
+  }
+
+  function formatPaymentMethod(m) {
+    return { cash: '💵 Cash', bank_transfer: '🏦 Banking', paypal: '🅿️ PayPal', credit_card: '💳 Card' }[m] || m;
+  }
+
+  // ===== LEAFLET AUTOCOMPLETE =====
+  function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function selectRideTier(tier) {
+    selectedRideTier = tier;
+    document.querySelectorAll('.ride-tier-card').forEach(el => {
+      el.classList.toggle('active', el.dataset.tier === tier);
+    });
+    updateTripSummary();
+  }
+
+  function renderRideTierOptions() {
+    const grid = document.getElementById('rideTierGrid');
+    if (!grid) return;
+    
+    if (calculatedDistance === null) {
+      grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray-400);font-size:0.85rem;grid-column:1/-1;">Select pickup & destination to see ride options</div>';
+      return;
+    }
+
+    const tiers = [
+      { key: 'eco', icon: '🌿', name: 'Eco', seats: '5-seat cars', rate: 1, badge: 'Best Value' },
+      { key: 'standard', icon: '⭐', name: 'Standard', seats: 'Comfort cars', rate: 2, badge: '' },
+      { key: 'premium', icon: '👑', name: 'Premium', seats: 'Luxury cars', rate: 5, badge: 'Premium' }
+    ];
+
+    grid.innerHTML = tiers.map(t => {
+      const fare = Math.round(calculatedDistance * t.rate * 100) / 100;
+      const isActive = selectedRideTier === t.key ? ' active' : '';
+      const badge = t.badge ? '<span class="ride-tier-badge">' + t.badge + '</span>' : '';
+      return '<div class="ride-tier-card ' + t.key + isActive + '" data-tier="' + t.key + '" onclick="selectRideTier(\'' + t.key + '\')">' +
+        badge +
+        '<span class="ride-tier-icon">' + t.icon + '</span>' +
+        '<span class="ride-tier-name">' + t.name + '</span>' +
+        '<span class="ride-tier-seats">' + t.seats + '</span>' +
+        '<span class="ride-tier-rate">$' + t.rate + '/km</span>' +
+        '<span class="ride-tier-price">$' + fare.toFixed(2) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function calculateRouteDistance() {
+    const pickupAddr = selectedAddresses.pickup;
+    const returnAddr = selectedAddresses['return'];
+    calculatedDistance = null;
+    transferCost = null;
+
+    const summaryDistanceRow = document.getElementById('summaryDistanceRow');
+    if (summaryDistanceRow) summaryDistanceRow.style.display = 'none';
+
+    if (!pickupAddr || !returnAddr) {
+      if (selectedBookingType === 'minicab') renderRideTierOptions();
+      updateTripSummary();
+      return;
+    }
+    if (selectedBookingType === 'with-driver') {
+      updateTripSummary();
+      return;
+    }
+
+    const dist = haversineDistance(pickupAddr.lat, pickupAddr.lon, returnAddr.lat, returnAddr.lon);
+    calculatedDistance = Math.round(dist * 1.3 * 10) / 10;
+
+    if (summaryDistanceRow) summaryDistanceRow.style.display = '';
+    const summaryDistance = document.getElementById('summaryDistance');
+    if (summaryDistance) summaryDistance.textContent = calculatedDistance.toFixed(1) + ' km (est.)';
+
+    if (selectedBookingType === 'minicab') {
+      renderRideTierOptions();
+    }
+
+    updateTripSummary();
+  }
+
+  function initLeafletAutocomplete() {
+    ['pickupLocation', 'returnLocation'].forEach(id => {
+      const input = document.getElementById(id);
+      if (!input) return;
+
+      const type = id === 'pickupLocation' ? 'pickup' : 'return';
+
+      let dropdown = input.parentElement.querySelector('.leaflet-autocomplete-list');
+      if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'leaflet-autocomplete-list';
+        dropdown.style.display = 'none';
+        input.parentElement.appendChild(dropdown);
+      }
+
+      input.addEventListener('input', function() {
+        selectedAddresses[type] = null;
+        const query = this.value.trim();
+        if (query.length < 3) {
+          dropdown.style.display = 'none';
+          return;
+        }
+        clearTimeout(autocompleteTimers[id]);
+        autocompleteTimers[id] = setTimeout(() => searchNominatim(query, dropdown, input, type, false), 350);
+      });
+
+      input.addEventListener('blur', () => setTimeout(() => {
+        dropdown.style.display = 'none';
+      }, 200));
+
+      input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 3 && dropdown.innerHTML) dropdown.style.display = 'block';
+      });
+    });
+  }
+
+  async function searchNominatim(query, dropdown, input, type, isMapSearch) {
+    try {
+      const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&addressdetails=1&countrycodes=vn', {
+        headers: { 'Accept-Language': 'en' }
+      });
+      const results = await res.json();
+      if (results.length === 0) {
+        dropdown.style.display = 'none';
+        return;
+      }
+
+      dropdown.innerHTML = results.map(r => {
+        const parts = r.display_name.split(',');
+        const main = parts.slice(0, 2).join(',').trim();
+        const sub = parts.slice(2).join(',').trim();
+        return '<div class="autocomplete-item" data-lat="' + r.lat + '" data-lon="' + r.lon + '" data-name="' + r.display_name.replace(/"/g, '&quot;') + '">' +
+          '<div class="ac-main">' + escapeHtml(main) + '</div>' +
+          (sub ? '<div class="ac-sub">' + escapeHtml(sub) + '</div>' : '') +
+        '</div>';
+      }).join('');
+      dropdown.style.display = 'block';
+
+      dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
+        item.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          const lat = parseFloat(this.dataset.lat);
+          const lon = parseFloat(this.dataset.lon);
+          const name = this.dataset.name;
+          
+          input.value = name;
+          dropdown.style.display = 'none';
+
+          selectedAddresses[type] = { lat, lon, name };
+
+          moveMapToLocation(type, lat, lon);
+          updateMapCoords(type, lat, lon, name);
+
+          calculateRouteDistance();
+          updateTripSummary();
+        });
+      });
+    } catch (err) {
+      console.error('Nominatim search error:', err);
+    }
+  }
+
+  function updateMapCoords(type, lat, lon, name) {
+    const coordsEl = document.getElementById(type + 'MapCoords');
+    if (coordsEl) {
+      const short = name ? (name.length > 60 ? name.substring(0, 60) + '...' : name) : (lat.toFixed(5) + ', ' + lon.toFixed(5));
+      coordsEl.textContent = '📍 ' + short;
+    }
+  }
+
+  function moveMapToLocation(type, lat, lon) {
+    const map = type === 'pickup' ? pickupMapObj : returnMapObj;
+    const marker = type === 'pickup' ? pickupMarker : returnMarker;
+    
+    if (map && marker) {
+      const latlng = L.latLng(lat, lon);
+      marker.setLatLng(latlng);
+      map.setView(latlng, 16, { animate: true });
+    }
+  }
+
+  function openMapPicker(type) {
+    const container = document.getElementById(type + 'MapContainer');
+    if (!container) return;
+    
+    if (container.style.display === 'none') {
+      container.style.display = 'block';
+      const mapDiv = document.getElementById(type + 'Map');
+
+      if (type === 'pickup' && pickupMapObj) {
+        pickupMapObj.remove();
+        pickupMapObj = null;
+      }
+      if (type === 'return' && returnMapObj) {
+        returnMapObj.remove();
+        returnMapObj = null;
+      }
+
+      const saved = selectedAddresses[type];
+      const center = saved ? [saved.lat, saved.lon] : [10.8231, 106.6297];
+      const zoom = saved ? 16 : 13;
+
+      const map = L.map(mapDiv).setView(center, zoom);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+      }).addTo(map);
+
+      const marker = L.marker(center, { draggable: true }).addTo(map);
+      
+      map.on('click', e => {
+        marker.setLatLng(e.latlng);
+        selectedAddresses[type] = null;
+        updateMapCoords(type, e.latlng.lat, e.latlng.lng, null);
+      });
+      
+      marker.on('dragend', () => {
+        const pos = marker.getLatLng();
+        selectedAddresses[type] = null;
+        updateMapCoords(type, pos.lat, pos.lng, null);
+      });
+
+      if (type === 'pickup') {
+        pickupMapObj = map;
+        pickupMarker = marker;
+      } else {
+        returnMapObj = map;
+        returnMarker = marker;
+      }
+
+      if (saved) updateMapCoords(type, saved.lat, saved.lon, saved.name);
+
+      setTimeout(() => map.invalidateSize(), 200);
+    } else {
+      container.style.display = 'none';
+      container.classList.remove('expanded');
+    }
+  }
+
+  function closeMapPicker(type) {
+    const container = document.getElementById(type + 'MapContainer');
+    if (container) {
+      container.style.display = 'none';
+      container.classList.remove('expanded');
+    }
+  }
+
+  function toggleMapExpand(type) {
+    const container = document.getElementById(type + 'MapContainer');
+    if (container) {
+      container.classList.toggle('expanded');
+      const map = type === 'pickup' ? pickupMapObj : returnMapObj;
+      if (map) setTimeout(() => map.invalidateSize(), 300);
+    }
+  }
+
+  async function confirmMapLocation(type) {
+    const marker = type === 'pickup' ? pickupMarker : returnMarker;
+    const saved = selectedAddresses[type];
+    
+    if (saved && saved.name) {
+      const location = document.getElementById(type + 'Location');
+      if (location) location.value = saved.name;
+      closeMapPicker(type);
+      if (typeof showToast === 'function') showToast('📍 Location confirmed!', 'success');
+      calculateRouteDistance();
+      return;
+    }
+
+    if (!marker) {
+      closeMapPicker(type);
+      return;
+    }
+    
+    const pos = marker.getLatLng();
+    const container = document.getElementById(type + 'MapContainer');
+    const btn = container ? container.querySelector('.map-picker-footer .btn') : null;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Loading...';
+    }
+
+    try {
+      const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + pos.lat + '&lon=' + pos.lng + '&zoom=18&addressdetails=1', {
+        headers: { 'Accept-Language': 'en' }
+      });
+      const data = await res.json();
+      const address = data.display_name || (pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6));
+      const location = document.getElementById(type + 'Location');
+      if (location) location.value = address;
+      selectedAddresses[type] = { lat: pos.lat, lon: pos.lng, name: address };
+      updateMapCoords(type, pos.lat, pos.lng, address);
+    } catch (err) {
+      const location = document.getElementById(type + 'Location');
+      if (location) location.value = pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6);
+      selectedAddresses[type] = { lat: pos.lat, lon: pos.lng, name: null };
+    }
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✓ Confirm Location';
+    }
+    closeMapPicker(type);
+    if (typeof showToast === 'function') showToast('📍 Location confirmed!', 'success');
+    calculateRouteDistance();
+  }
+
+  // ===== EXPORT FUNCTIONS =====
+  window.selectBookingType = selectBookingType;
+  window.selectRideTiming = selectRideTiming;
+  window.onServiceTypeChange = onServiceTypeChange;
+  window.onAirportSelect = onAirportSelect;
+  window.updateTierRecommendation = updateTierRecommendation;
+  window.goToStep2 = goToStep2;
+  window.goToStep1 = goToStep1;
+  window.selectPaymentMethod = selectPaymentMethod;
+  window.applyPromoCode = applyPromoCode;
+  window.removePromo = removePromo;
+  window.useSavedPromo = useSavedPromo;
+  window.confirmBooking = confirmBooking;
+  window.selectRideTier = selectRideTier;
+  window.openMapPicker = openMapPicker;
+  window.closeMapPicker = closeMapPicker;
+  window.toggleMapExpand = toggleMapExpand;
+  window.confirmMapLocation = confirmMapLocation;
+  window.calculateRouteDistance = calculateRouteDistance;
+})();

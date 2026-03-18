@@ -29,10 +29,10 @@
                 <div>
                     <h4 class="footer-title">Services</h4>
                     <ul class="footer-links">
-                        <li><a href="cars.php">Hire With Driver</a></li>
-                        <li><a href="booking.php?mode=minicab">Book a Minicab</a></li>
+                        <li><a href="/api/cars.php">Hire With Driver</a></li>
+                        <li><a href="/api/bookings.php?mode=minicab">Book a Minicab</a></li>
                         <li><a href="membership.php">Corporate Fleet</a></li>
-                        <li><a href="booking.php">Long-term Rental</a></li>
+                        <li><a href="/api/bookings.php">Long-term Rental</a></li>
                     </ul>
                 </div>
                 <div>
@@ -107,12 +107,13 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- ===== EXTERNAL JAVASCRIPT MODULES ===== -->
-    <script src="/public/js/utils.js"></script>
-    <script src="/public/js/navbar.js"></script>
-    <script src="/public/js/notifications.js"></script>
-    <script src="/public/js/chatbot.js"></script>
-    <script src="/public/js/auth.js"></script>
-    <script src="/public/js/app-init.js"></script>
+    <script src="/resources/js/utils.js"></script>
+    <script src="/resources/js/navbar.js"></script>
+    <script src="/resources/js/notifications.js"></script>
+    <script src="/resources/js/auth-state.js"></script>
+    <script src="/resources/js/chatbot.js"></script>
+    <script src="/resources/js/auth.js"></script>
+    <script src="/resources/js/app-init.js"></script>
 
     <!-- ===== INITIALIZE MODULES ===== -->
     <script>
@@ -121,10 +122,14 @@
             const webhookUrl = '<?= \EnvLoader::get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/83eb33b2-fde3-4aa6-aa37-c3da8c1ca60f") ?>';
             initChatbot(webhookUrl);
 
-            // Initialize notifications if logged in
-            const isLoggedIn = <?= isset($isLoggedIn) && $isLoggedIn ? 'true' : 'false' ?>;
-            if (isLoggedIn) {
-                initNotifications(true);
+            // Sync auth UI from real session state.
+            if (typeof initAuthStateSync === 'function') {
+                initAuthStateSync(<?= isset($isLoggedIn) && $isLoggedIn ? 'true' : 'false' ?>, '<?= htmlspecialchars($currentPage ?? '', ENT_QUOTES, 'UTF-8') ?>');
+            }
+
+            // Initialize notifications
+            if (typeof initNotifications === 'function') {
+                initNotifications(<?= isset($isLoggedIn) && $isLoggedIn ? 'true' : 'false' ?>);
             }
         });
     </script>

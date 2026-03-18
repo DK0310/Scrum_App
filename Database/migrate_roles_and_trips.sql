@@ -1,15 +1,15 @@
 -- =====================================================
--- Migration: Update Roles to 4-Role System + Add Trip Features
+-- Migration: Update Roles to 5-Role System + Add Trip Features
 -- Date: March 14, 2026
--- Purpose: Convert from 3-role (renter/owner/admin) to 4-role (user/driver/staff/admin) system
+-- Purpose: Convert from 3-role (renter/owner/admin) to 5-role (user/driver/callcenterstaff/controlstaff/admin) system
 --          and add ride-hailing features (active trips, passenger count, etc.)
 -- =====================================================
 
 -- =====================================================
--- Step 1: Create NEW enum type for 4 roles
+-- Step 1: Create NEW enum type for 5 roles
 -- =====================================================
 DO $$ BEGIN
-    CREATE TYPE user_role_v2 AS ENUM ('user', 'driver', 'staff', 'admin');
+    CREATE TYPE user_role_v2 AS ENUM ('user', 'driver', 'callcenterstaff', 'controlstaff', 'admin');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -131,12 +131,13 @@ CREATE TRIGGER trg_active_trips_updated_at
 -- =====================================================
 -- NOTE: This is a placeholder. You should manually review and update these mappings:
 -- - Current 'renter' users → 'user'
--- - Current 'owner' users → 'driver' (or create new driver accounts)
+-- - Current 'owner' users → 'controlstaff' (or split manually to callcenterstaff/controlstaff)
 -- - Current 'admin' users → keep as 'admin'
 --
 -- DO THIS MANUALLY via SQL UPDATE after reviewing user roles!
 -- Example (DO NOT RUN AUTOMATICALLY):
 -- UPDATE users SET role = 'user'::user_role_v2 WHERE role = 'renter'::user_role;
+-- UPDATE users SET role = 'controlstaff'::user_role_v2 WHERE role = 'owner'::user_role;
 -- UPDATE users SET role = 'admin'::user_role_v2 WHERE role = 'admin'::user_role;
 
 -- =====================================================

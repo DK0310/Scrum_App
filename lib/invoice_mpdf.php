@@ -46,6 +46,16 @@ function privatehire_build_invoice_replacements(array $booking): array {
         return ($currency === 'USD' ? '$' : '') . number_format($val, 2);
     };
 
+    $fmtPickupTime = function ($dateStr) use ($tz): string {
+        if (!$dateStr || $dateStr === '') return '';
+        try {
+            $dt = new DateTime($dateStr, new DateTimeZone($tz));
+            return $dt->format('M d, Y \a\t h:i A');
+        } catch (Exception $e) {
+            return (string)$dateStr;
+        }
+    };
+
     $discountRaw = $booking['discount_amount'] ?? $booking['discount'] ?? $booking['discount_value'] ?? 0;
 
     return [
@@ -70,6 +80,7 @@ function privatehire_build_invoice_replacements(array $booking): array {
         'license_plate' => (string)($booking['license_plate'] ?? ''),
         'pickup_location' => (string)($booking['pickup_location'] ?? ''),
         'destination' => (string)($booking['return_location'] ?? $booking['destination'] ?? ''),
+        'pickup_time' => $fmtPickupTime((string)($booking['pickup_date'] ?? '')),
 
         'company_name' => (string)\EnvLoader::get('INVOICE_COMPANY_NAME', 'PrivateHire'),
         'support_email' => (string)\EnvLoader::get('INVOICE_SUPPORT_EMAIL', ''),
@@ -126,6 +137,7 @@ function privatehire_render_invoice_html(array $r): string {
     $plate = $e((string)($r['license_plate'] ?? ''));
     $pickup = $e((string)($r['pickup_location'] ?? ''));
     $dest = $e((string)($r['destination'] ?? ''));
+    $timepickup = $e((string)($r['pickup_time'] ?? ''));
 
     $subtotal = $e((string)($r['subtotal'] ?? ''));
     $discount = $e((string)($r['discount'] ?? ''));
@@ -169,7 +181,7 @@ function privatehire_render_invoice_html(array $r): string {
   </div>
 
   <div class="card">
-    <h2>Bill To</h2>
+    <h2>Invoice To</h2>
     <div><strong>{$custName}</strong></div>
     <div class="muted">{$custEmail}</div>
     <div class="muted">{$custPhone}</div>
@@ -182,6 +194,7 @@ function privatehire_render_invoice_html(array $r): string {
       <tr><th style="width: 30%">Vehicle</th><td>{$vehicleName} {$plate}</td></tr>
       <tr><th>Pickup</th><td>{$pickup}</td></tr>
       <tr><th>Destination</th><td>{$dest}</td></tr>
+      <tr><th>Time</th><td>{$timepickup}</td></tr>
       <tr><th>Payment</th><td>{$payMethod} ({$payStatus})</td></tr>
     </table>
   </div>

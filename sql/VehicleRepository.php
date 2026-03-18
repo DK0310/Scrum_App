@@ -11,6 +11,20 @@ final class VehicleRepository
         $this->pdo = $pdo;
     }
 
+    private function generateUuidV4(): string
+    {
+        if (class_exists('\\Ramsey\\Uuid\\Uuid')) {
+            /** @var class-string $uuidClass */
+            $uuidClass = '\\Ramsey\\Uuid\\Uuid';
+            return $uuidClass::uuid4()->toString();
+        }
+
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
     /**
      * @return array<int,string>
      */
@@ -240,8 +254,8 @@ final class VehicleRepository
         $admin = $stmt->fetch(PDO::FETCH_ASSOC);
         $ownerId = $admin['id'] ?? null;
 
-        if (!$ownerId) {
-            $ownerId = \Ramsey\Uuid\Uuid::uuid4()->toString();
+            if (!$ownerId) {
+                $ownerId = $this->generateUuidV4();
             $stmt = $this->pdo->prepare("
                 INSERT INTO users (id, full_name, email, role, auth_provider, is_active, created_at, updated_at)
                 VALUES (?, 'System Fleet Owner', 'fleet@drivenow.local', 'admin', 'email', true, NOW(), NOW())
@@ -249,19 +263,19 @@ final class VehicleRepository
             $stmt->execute([$ownerId]);
         }
 
-        $vehicleId = $data['id'] ?? \Ramsey\Uuid\Uuid::uuid4()->toString();
+            $vehicleId = $data['id'] ?? $this->generateUuidV4();
         
         $stmt = $this->pdo->prepare("
             INSERT INTO vehicles
             (id, owner_id, brand, model, year, license_plate,
-             category, transmission, fuel_type, seats, color,
+                         category, service_tier, transmission, fuel_type, seats, color,
              engine_size, consumption, features,
              price_per_day, price_per_week, price_per_month,
              location_city, location_address,
              status, created_at, updated_at)
             VALUES
             (?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?,
+                         ?, ?, ?, ?, ?, ?,
              ?, ?, ?,
              ?, ?, ?,
              ?, ?,
@@ -276,6 +290,7 @@ final class VehicleRepository
             (int)$data['year'],
             $data['license_plate'],
             $data['category'] ?? 'sedan',
+            $data['service_tier'] ?? 'standard',
             $data['transmission'] ?? 'automatic',
             $data['fuel_type'] ?? 'petrol',
             (int)($data['seats'] ?? 5),
@@ -288,7 +303,7 @@ final class VehicleRepository
             isset($data['price_per_month']) ? (float)$data['price_per_month'] : null,
             $data['location_city'] ?? null,
             $data['location_address'] ?? null,
-        );
+        ]);
 
         return $vehicleId;
     }
@@ -319,6 +334,7 @@ final class VehicleRepository
         // Allowed fields for update
         $allowedFields = [
             'brand', 'model', 'year', 'license_plate', 'category', 'transmission', 'fuel_type',
+                'service_tier',
             'seats', 'color', 'engine_size', 'consumption',
             'price_per_day', 'price_per_week', 'price_per_month',
             'location_city', 'location_address', 'status', 'gps_enabled', 'thumbnail_id'

@@ -120,8 +120,10 @@
                         <input type="text" id="userSearchInput" placeholder="Search name, email..." oninput="filterUsers()" style="padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;width:220px;">
                         <select id="userRoleFilter" onchange="filterUsers()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
                             <option value="">All Roles</option>
-                            <option value="renter">Renter</option>
-                            <option value="owner">Owner</option>
+                            <option value="user">User</option>
+                            <option value="driver">Driver</option>
+                            <option value="callcenterstaff">Call Center Staff</option>
+                            <option value="controlstaff">Control Staff</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
@@ -252,7 +254,7 @@
     <!-- Admin alert container (always visible, inside admin page) -->
     <div id="adminAlertContainer" style="position:fixed;top:80px;right:24px;z-index:10002;display:flex;flex-direction:column;gap:10px;max-width:420px;"></div>
 
-    <script src="/public/js/admin.js"></script>
+    <script src="/resources/js/admin.js"></script>
     <script>
         // Admin module initialized above
         document.addEventListener('DOMContentLoaded', () => loadHeroSlides());

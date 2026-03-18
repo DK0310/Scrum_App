@@ -1,5 +1,21 @@
+<?php
+$loginFlash = $_SESSION['login_flash'] ?? null;
+if (isset($_SESSION['login_flash'])) {
+    unset($_SESSION['login_flash']);
+}
+
+$loginOldIdentifier = $_SESSION['login_old_identifier'] ?? '';
+if (isset($_SESSION['login_old_identifier'])) {
+    unset($_SESSION['login_old_identifier']);
+}
+
+$showLoginModalOnLoad = $loginFlash && (($loginFlash['type'] ?? '') !== 'success');
+
+$loginReturnTo = $_SERVER['REQUEST_URI'] ?? '/';
+?>
+
 <!-- LOGIN MODAL OVERLAY -->
-<div id="loginModalOverlay" class="modal-overlay" style="display: none;">
+<div id="loginModalOverlay" class="modal-overlay" style="display: <?= $showLoginModalOnLoad ? 'flex' : 'none' ?>;">
     <div class="modal" style="max-width: 500px;">
         <!-- Close Button -->
         <button onclick="closeLoginModal()" class="modal-close" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">✕</button>
@@ -12,13 +28,17 @@
             </div>
 
             <!-- Login Form -->
-            <form id="loginForm" style="margin-bottom: 25px;">
-                <!-- Email/Username Input -->
+            <form id="loginForm" method="POST" action="/api/login.php" style="margin-bottom: 25px;">
+                <input type="hidden" name="action" value="login">
+                <input type="hidden" name="mode" value="browser">
+                <input type="hidden" name="return_to" value="<?= htmlspecialchars($loginReturnTo, ENT_QUOTES, 'UTF-8') ?>">
+                <!-- Email/Phone Input -->
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Email or Username</label>
+                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Email or Phone</label>
                     <input type="text" id="loginIdentifier" name="identifier" 
                            style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: all 0.3s ease;"
-                           placeholder="Enter your email or username"
+                           placeholder="Enter your email or phone"
+                              value="<?= htmlspecialchars($loginOldIdentifier, ENT_QUOTES, 'UTF-8') ?>"
                            onblur="this.style.borderColor = '#ddd'"
                            onfocus="this.style.borderColor = '#0f766e'">
                 </div>
@@ -46,10 +66,10 @@
                 </div>
 
                 <!-- Status Message -->
-                <div id="loginStatus" style="display: none; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center;"></div>
+                <div id="loginStatus" style="display: <?= $loginFlash ? 'block' : 'none' ?>; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center; <?= $loginFlash ? (($loginFlash['type'] ?? '') === 'success' ? 'background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0;' : 'background:#fee2e2;color:#dc2626;border:1px solid #fecaca;') : '' ?>"><?= htmlspecialchars($loginFlash['message'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
 
                 <!-- Sign In Button -->
-                <button type="button" onclick="doLogin()" 
+                <button type="submit" 
                         style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;"
                         onmouseover="this.style.filter = 'brightness(1.1)'"
                         onmouseout="this.style.filter = 'brightness(1)'">
@@ -137,3 +157,14 @@
         }
     }
 </style>
+
+<?php if ($showLoginModalOnLoad): ?>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const overlay = document.getElementById('loginModalOverlay');
+        if (overlay) overlay.style.display = 'flex';
+        const identifierInput = document.getElementById('loginIdentifier');
+        if (identifierInput) identifierInput.focus();
+    });
+</script>
+<?php endif; ?>

@@ -1,43 +1,62 @@
 <?php
 /**
- * Driver API Endpoints
- * For drivers to view available trips, accept rides, track locations, etc.
+ * Driver Dashboard & API - Private Hire
+ * - Page view: /api/driver.php (renders template)
+ * - API: /api/driver.php?action=xxx (returns JSON)
  */
 
-header('Content-Type: application/json');
+session_start();
 require_once __DIR__ . '/../config/env.php';
 require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../sql/UserRepository.php';
 
-// Repository includes
-require_once __DIR__ . '/../lib/repositories/UserRepository.php';
-require_once __DIR__ . '/../lib/repositories/TripRepository.php';
-require_once __DIR__ . '/../lib/repositories/VehicleRepository.php';
-require_once __DIR__ . '/../lib/repositories/NotificationRepository.php';
-
-session_start();
-
-// Initialize repositories
-$userRepo = new UserRepository($pdo);
-$tripRepo = new TripRepository($pdo);
-$vehicleRepo = new VehicleRepository($pdo);
-$notificationRepo = new NotificationRepository($pdo);
-
-// Check if logged in and is driver
+// Check if logged in
 if (!isset($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Not logged in']);
+    header('Location: /index.php');
     exit;
 }
 
 $userId = $_SESSION['user_id'];
-$action = $_GET['action'] ?? $_POST['action'] ?? null;
+$title = "Driver Dashboard - Private Hire";
+$currentPage = 'driver';
+
+// Get user
+$userRepo = new UserRepository($pdo);
+$user = $userRepo->findById($userId);
 
 // Verify user is a driver
-$user = $userRepo->findById($userId);
 if (!$user || $user['role'] !== 'driver') {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Not a driver account']);
+    header('Location: /index.php');
     exit;
+}
+
+$isLoggedIn = true;
+$userRole = 'driver';
+$currentUser = $user['full_name'] ?? $user['username'] ?? 'Driver';
+
+// Determine action
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
+
+// ===== JSON API =====
+if (!empty($action)) {
+    header('Content-Type: application/json');
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type');
+
+    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+        exit(0);
+    }
+
+    // TODO: Add driver API actions here
+
+    echo json_encode(['success' => false, 'message' => 'Unknown action: ' . $action]);
+    exit;
+}
+
+// ===== PAGE VIEW =====
+include __DIR__ . '/../templates/driver.html.php';
+?>
 }
 
 // ===== GET AVAILABLE TRIPS (nearby drivers can accept) =====
