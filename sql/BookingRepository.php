@@ -264,6 +264,19 @@ final class BookingRepository
     }
 
     /**
+     * Assign vehicle and owner for a booking.
+     */
+    public function assignVehicleToBooking(string $bookingId, string $vehicleId, string $ownerId, float $pricePerDay): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE bookings
+            SET vehicle_id = ?, owner_id = ?, price_per_day = ?
+            WHERE id = ?
+        ");
+        return $stmt->execute([$vehicleId, $ownerId, $pricePerDay, $bookingId]) && $stmt->rowCount() > 0;
+    }
+
+    /**
      * Get bookings by status
      * @return array<int,array<string,mixed>>
      */
@@ -390,16 +403,18 @@ final class BookingRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT 
-                b.id, b.renter_id, b.driver_id, b.status, b.booking_type,
+                b.id, b.renter_id, b.owner_id, b.driver_id, b.vehicle_id, b.status, b.booking_type,
                 b.pickup_location, b.return_location, b.pickup_date, b.return_date,
                 b.service_type, b.total_amount, b.number_of_passengers,
                 b.ride_tier, b.special_requests,
                 b.created_at, b.accepted_by_driver_at, b.ride_completed_at,
                 u.full_name as user_name, u.phone as user_phone, u.email,
-                d.full_name as driver_name, d.phone as driver_phone
+                d.full_name as driver_name, d.phone as driver_phone,
+                v.brand, v.model, v.license_plate, v.year
             FROM bookings b
             JOIN users u ON b.renter_id = u.id
             LEFT JOIN users d ON b.driver_id = d.id
+            LEFT JOIN vehicles v ON b.vehicle_id = v.id
             WHERE b.id = ?
         ");
         $stmt->execute([$bookingId]);
@@ -685,5 +700,71 @@ final class BookingRepository
             VALUES (?, ?, ?, ?, ?, false, NOW())
         ");
         return $stmt->execute([$driverId, $bookingId, $title, $message, $notificationType]);
+    }
+
+    /**
+     * Check how many active bookings exist for a vehicle
+     */
+    public function countActiveBookingsByVehicleId(string $vehicleId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM bookings WHERE vehicle_id = ? AND status IN ('pending', 'confirmed', 'in_progress')");
+        $stmt->execute([$vehicleId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Check how many active bookings exist for a renter
+     */
+    public function countActiveBookingsByRenterId(string $renterId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM bookings WHERE renter_id = ? AND status IN ('pending', 'confirmed', 'in_progress')");
+        $stmt->execute([$renterId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Get reviews for a vehicle with user details and stats
+     * @return array<int,array<string,mixed>>
+     */
+    public function getReviewsWithDetailsAndStats(string $vehicleId, int $limit = 50): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT 
+                r.id, r.rating, r.content, r.created_at,
+                u.full_name, u.avatar_url,
+                v.brand, v.model, v.year,
+                b.pickup_location, b.return_location, b.booking_type
+            FROM reviews r
+            JOIN users u ON r.user_id = u.id
+            JOIN vehicles v ON r.vehicle_id = v.id
+            LEFT JOIN bookings b ON r.booking_id = b.id
+            WHERE r.vehicle_id = ?
+            ORDER BY r.created_at DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$vehicleId, $limit]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Get complete review statistics for a vehicle
+     * @return array<string,mixed>
+     */
+    public function getReviewStatsComplete(string $vehicleId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT 
+                COUNT(*) as total,
+                ROUND(AVG(rating)::numeric, 1) as avg_rating,
+                COUNT(*) FILTER (WHERE rating = 5) as stars_5,
+                COUNT(*) FILTER (WHERE rating = 4) as stars_4,
+                COUNT(*) FILTER (WHERE rating = 3) as stars_3,
+                COUNT(*) FILTER (WHERE rating = 2) as stars_2,
+                COUNT(*) FILTER (WHERE rating = 1) as stars_1
+            FROM reviews
+            WHERE vehicle_id = ?
+        ");
+        $stmt->execute([$vehicleId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     }
 }

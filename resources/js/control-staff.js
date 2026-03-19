@@ -63,6 +63,9 @@
         const qs = new URLSearchParams(params);
         const res = await fetch(API + '?' + qs.toString());
         const raw = await res.text();
+        if (!res.ok) {
+            throw new Error('HTTP ' + res.status + ': ' + raw.substring(0, 200));
+        }
         try {
             return JSON.parse(raw);
         } catch (err) {
@@ -71,12 +74,18 @@
     }
 
     async function apiPost(body) {
-        const res = await fetch(API, {
+        const url = API;
+        console.log('POST to:', url, 'body:', body);
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
         const raw = await res.text();
+        console.log('Response status:', res.status, 'body:', raw.substring(0, 500));
+        if (!res.ok) {
+            throw new Error('HTTP ' + res.status + ': ' + raw.substring(0, 200));
+        }
         try {
             return JSON.parse(raw);
         } catch (err) {
@@ -97,19 +106,34 @@
         return status || 'pending';
     }
 
+    function getNextStatusAction(status) {
+        if (status === 'pending') {
+            return { nextStatus: 'in_progress', label: 'Start Trip' };
+        }
+        if (status === 'in_progress') {
+            return { nextStatus: 'completed', label: 'Mark Completed' };
+        }
+        return null;
+    }
+
     async function loadOrders() {
         const status = el.orderFilter.value || 'all';
         setOrderMsg('Loading orders...');
 
-        const data = await apiGet({ action: 'get_orders', status, limit: 200 });
-        if (!data.success) {
-            setOrderMsg(data.message || 'Cannot load orders', true);
-            return;
-        }
+        try {
+            const data = await apiGet({ action: 'get_orders', status, limit: 200 });
+            if (!data.success) {
+                setOrderMsg(data.message || 'Cannot load orders', true);
+                return;
+            }
 
-        ordersCache = data.orders || [];
-        renderOrdersTable();
-        setOrderMsg('Loaded ' + ordersCache.length + ' order(s).');
+            ordersCache = data.orders || [];
+            renderOrdersTable();
+            setOrderMsg('Loaded ' + ordersCache.length + ' order(s).');
+        } catch (err) {
+            setOrderMsg('Error loading orders: ' + (err?.message || 'Unknown error'), true);
+            console.error('Load orders error:', err);
+        }
     }
 
     function renderOrdersTable() {
@@ -124,6 +148,10 @@
             const pickupDate = escapeHtml(o.pickup_date || '-');
             const total = Number(o.total_amount || 0).toFixed(2);
             const status = normalizeDisplayStatus(o.status);
+            const nextAction = getNextStatusAction(status);
+            const nextActionHtml = nextAction
+                ? '<button class="ctrl-btn ctrl-btn-primary" data-role="advance-order" data-id="' + id + '" data-next-status="' + nextAction.nextStatus + '">' + escapeHtml(nextAction.label) + '</button>'
+                : '<button class="ctrl-btn ctrl-btn-muted" disabled>No further action</button>';
 
             return '<tr>' +
                 '<td>' + id + '</td>' +
@@ -133,11 +161,7 @@
                 '<td class="ctrl-order-status-cell">' +
                     '<div class="ctrl-order-status-wrap">' +
                         '<span class="' + statusBadgeClass(status) + '">' + escapeHtml(status) + '</span>' +
-                        '<select class="ctrl-select" data-role="order-status" data-id="' + id + '">' +
-                            '<option value="pending"' + (status === 'pending' ? ' selected' : '') + '>pending</option>' +
-                            '<option value="in_progress"' + (status === 'in_progress' ? ' selected' : '') + '>in_progress</option>' +
-                            '<option value="completed"' + (status === 'completed' ? ' selected' : '') + '>completed</option>' +
-                        '</select>' +
+                        nextActionHtml +
                         '<div class="ctrl-order-actions">' +
                             '<button class="ctrl-btn ctrl-btn-muted" data-role="detail-order" data-id="' + id + '">View</button>' +
                             '<button class="ctrl-btn ctrl-btn-danger" data-role="delete-order" data-id="' + id + '">Delete</button>' +
@@ -151,21 +175,37 @@
     }
 
     function bindOrderRowActions() {
-        Array.from(el.ordersTable.querySelectorAll('select[data-role="order-status"]')).forEach((select) => {
-            select.addEventListener('change', async () => {
-                const id = select.getAttribute('data-id');
-                if (!id) return;
-
-                const status = select.value;
-                const data = await apiPost({ action: 'update_order_status', booking_id: id, status: status });
-                if (!data.success) {
-                    setOrderMsg(data.message || 'Failed to update order', true);
-                    await loadOrders();
+        const buttons = el.ordersTable.querySelectorAll('button[data-role="advance-order"]');
+        console.log('Found ' + buttons.length + ' advance-order buttons');
+        
+        Array.from(buttons).forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const id = btn.getAttribute('data-id');
+                const status = btn.getAttribute('data-next-status');
+                console.log('Advance order clicked - id:', id, 'next status:', status);
+                if (!id || !status) {
+                    console.log('Missing id or status');
                     return;
                 }
-                setOrderMsg('Order status updated.');
-                await loadOrders();
-                await loadVehicles();
+
+                btn.disabled = true;
+                try {
+                    console.log('Posting update_order_status:', { booking_id: id, status: status });
+                    const data = await apiPost({ action: 'update_order_status', booking_id: id, status: status });
+                    console.log('API response:', data);
+                    if (!data.success) {
+                        setOrderMsg(data.message || 'Failed to update order', true);
+                        await loadOrders();
+                        return;
+                    }
+                    setOrderMsg('Order status updated.');
+                    await loadOrders();
+                    await loadVehicles();
+                } catch (err) {
+                    setOrderMsg('Error: ' + (err?.message || 'Unknown error'), true);
+                    console.error('Advance order error:', err);
+                    btn.disabled = false;
+                }
             });
         });
 
@@ -208,8 +248,12 @@
         if (!el.orderModal || !el.orderModalBody) return;
 
         const customerName = escapeHtml(order.customer_name || order.user_name || order.renter_name || 'Customer');
-        const status = escapeHtml(normalizeDisplayStatus(order.status || 'pending'));
-        const vehicleText = escapeHtml([order.brand, order.model, order.license_plate].filter(Boolean).join(' ') || '-');
+        const normalizedStatus = normalizeDisplayStatus(order.status || 'pending');
+        const status = escapeHtml(normalizedStatus);
+        const canShowVehicle = (normalizedStatus === 'in_progress' || normalizedStatus === 'completed');
+        const vehicleText = canShowVehicle
+            ? escapeHtml([order.brand, order.model, order.license_plate].filter(Boolean).join(' ') || '-')
+            : 'Pending assignment';
         const pickupText = escapeHtml((order.pickup_location || '-') + ' @ ' + (order.pickup_date || '-'));
         const destinationText = escapeHtml(order.return_location || '-');
         const amountText = '$' + Number(order.total_amount || 0).toFixed(2);

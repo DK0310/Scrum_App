@@ -503,4 +503,32 @@ final class VehicleRepository
         $stmt->execute([$vehicleId]);
         return $stmt->fetchColumn() ?: null;
     }
+
+    /**
+     * Get available vehicle brands matching search query for suggestions
+     * @return array<int,string>
+     */
+    public function getAvailableBrandsSuggestions(string $searchQuery, int $limit = 8): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT DISTINCT brand 
+            FROM vehicles
+            WHERE status = 'available' AND brand IS NOT NULL AND brand != '' AND LOWER(brand) ILIKE ?
+            ORDER BY brand
+            LIMIT ?
+        ");
+        $stmt->execute(['%' . $searchQuery . '%', $limit]);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /**
+     * Get image storage paths for a vehicle (for deletion)
+     * @return array<int,string>
+     */
+    public function getVehicleImageStoragePaths(string $vehicleId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT storage_path FROM vehicle_images WHERE vehicle_id = ? AND storage_path IS NOT NULL");
+        $stmt->execute([$vehicleId]);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
 }

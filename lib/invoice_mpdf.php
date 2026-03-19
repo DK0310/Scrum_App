@@ -195,7 +195,7 @@ function privatehire_render_invoice_html(array $r): string {
       <tr><th>Pickup</th><td>{$pickup}</td></tr>
       <tr><th>Destination</th><td>{$dest}</td></tr>
       <tr><th>Time</th><td>{$timepickup}</td></tr>
-      <tr><th>Payment</th><td>{$payMethod} ({$payStatus})</td></tr>
+      <tr><th>Payment</th><td>{$payMethod} {$payStatus}</td></tr>
     </table>
   </div>
 

@@ -141,16 +141,8 @@ if ($action === 'search-suggestions') {
     }
 
     try {
-        $q = '%' . strtolower($query) . '%';
-
-        // Brand-only suggestions from available vehicles
-        $stmt = $pdo->prepare("
-            SELECT DISTINCT brand FROM vehicles
-            WHERE status = 'available' AND brand IS NOT NULL AND brand != '' AND LOWER(brand) ILIKE ?
-            ORDER BY brand LIMIT 8
-        ");
-        $stmt->execute([$q]);
-        $brands = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        // Get brand suggestions using repository
+        $brands = $vehicleRepo->getAvailableBrandsSuggestions($query, 8);
 
         $suggestions = [];
         foreach ($brands as $b) {

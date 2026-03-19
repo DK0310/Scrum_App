@@ -343,7 +343,7 @@ if ($action === 'create') {
         $serviceLabel = ($bookingType === 'minicab' && $serviceType) ? ' — ' . str_replace('-', ' ', ucfirst($serviceType)) : '';
         createNotification($pdo, $renterId, 'booking',
             '📋 Booking Created',
-            "Your {$bookingType} booking for {$vehicleName}{$tierLabel}{$serviceLabel} has been submitted. Pickup: {$pickupDate}. Total: \${$totalAmount}. Waiting for driver confirmation."
+            "Your {$bookingType}{$tierLabel}{$serviceLabel} booking has been submitted. Pickup: {$pickupDate}. Total: \${$totalAmount}. Waiting for driver confirmation."
         );
 
         // For minicab, notify all available drivers
@@ -372,71 +372,6 @@ if ($action === 'create') {
             $bookingRepo->markVehicleRented($vehicleId);
         }
 
-        // === Send invoice email immediately after customer books (best-effort; do not break booking flow) ===
-        // NOTE: Payment row may still be 'pending' at this time.
-        try {
-            require_once __DIR__ . '/../lib/invoice_mpdf.php';
-            require_once __DIR__ . '/../lib/mailer.php';
-
-            $customerEmail = '';
-            $customerName = '';
-            $customerPhone = '';
-            $customerAddress = '';
-            try {
-                $uRow = $bookingRepo->getUserInfo($renterId);
-                if ($uRow) {
-                    $customerEmail = (string)($uRow['email'] ?? '');
-                    $customerName = (string)($uRow['full_name'] ?? '');
-                    $customerPhone = (string)($uRow['phone'] ?? '');
-                    $customerAddress = (string)($uRow['address'] ?? '');
-                }
-            } catch (Exception $ignore) {
-                $customerEmail = '';
-            }
-
-            if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-                $invoiceBooking = [
-                    'id' => $booking['id'],
-                    'subtotal' => $subtotal,
-                    'discount_amount' => $discountAmount,
-                    'total_amount' => $totalAmount,
-                    'payment_method' => $paymentMethod,
-                    'payment_status' => 'pending',
-                    'vehicle_name' => $vehicleName,
-                    'license_plate' => $vehicle['license_plate'] ?? '',
-                    'pickup_date' => $pickupDate,
-                    'return_date' => $returnDate,
-                    'pickup_location' => $pickupLocation,
-                    'return_location' => $returnLocation,
-                    'customer_name' => $customerName,
-                    'customer_email' => $customerEmail,
-                    'customer_phone' => $customerPhone,
-                    'customer_address' => $customerAddress,
-                ];
-
-                $pdf = privatehire_generate_invoice_pdf_local($invoiceBooking);
-
-                $subject = 'PrivateHire - Invoice for booking #' . $booking['id'];
-                $html = "<p>Dear " . htmlspecialchars($customerName ?: 'Customer') . ",</p>" .
-                        "<p>Thank you for your booking. Please find your invoice attached.</p>" .
-                        "<p><strong>Vehicle:</strong> " . htmlspecialchars($vehicleName) . "</p>" .
-                        "<p><strong>License plate:</strong> " . htmlspecialchars((string)($vehicle['license_plate'] ?? '')) . "</p>" .
-                        "<p><strong>Pickup date:</strong> " . htmlspecialchars((string)$pickupDate) . "</p>" .
-                        "<p><strong>Return date:</strong> " . htmlspecialchars((string)($returnDate ?? '')) . "</p>" .
-                        "<p><strong>Booking ID:</strong> " . htmlspecialchars((string)$booking['id']) . "</p>" .
-                        "<p>Payment status: <strong>Pending</strong></p>" .
-                        "<p>Regards,<br>PrivateHire</p>";
-
-                privatehire_send_email($customerEmail, $subject, $html, [
-                    'content' => $pdf,
-                    'filename' => 'invoice_' . $booking['id'] . '.pdf',
-                    'mime' => 'application/pdf'
-                ]);
-            }
-        } catch (Exception $e) {
-            error_log('Invoice email failed (create): ' . $e->getMessage());
-        }
-
         echo json_encode([
             'success' => true,
             'message' => 'Booking created successfully!',
@@ -449,7 +384,7 @@ if ($action === 'create') {
                 'promo_applied' => $appliedPromo,
                 'payment_method' => $paymentMethod,
                 'status' => 'pending',
-                'vehicle_name' => $vehicleName,
+                'vehicle_name' => ($bookingType === 'minicab') ? null : $vehicleName,
                 'ride_tier' => $rideTier,
                 'service_type' => ($bookingType === 'minicab') ? $serviceType : null
             ]
@@ -477,26 +412,42 @@ if ($action === 'my-orders') {
             $order['is_renter'] = ($order['renter_id'] === $userId);
             $order['is_owner'] = ($order['owner_id'] === $userId);
 
+            $hideVehicleForRenter = (
+                $order['is_renter']
+                && (($order['booking_type'] ?? '') === 'minicab')
+                && in_array((string)($order['status'] ?? ''), ['pending', 'confirmed'], true)
+            );
+
+            if ($hideVehicleForRenter) {
+                $order['brand'] = null;
+                $order['model'] = null;
+                $order['year'] = null;
+                $order['category'] = null;
+                $order['thumbnail_url'] = '';
+            }
+
             // Get vehicle thumbnail via VehicleImageRepository (refactored)
-            try {
-                $imgs = $vehicleImageRepo->listByVehicleId($order['vehicle_id']);
-                if ($imgs) {
-                    $img = $imgs[0]; // Get first image
-                    if (!empty($img['storage_path'])) {
-                        require_once __DIR__ . '/supabase-storage.php';
-                        $storageHelper = new SupabaseStorage();
-                        $order['thumbnail_url'] = $storageHelper->getPublicUrl($img['storage_path']);
-                    } elseif ($img['image_data']) {
-                        $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
-                        $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
+            if (!$hideVehicleForRenter) {
+                try {
+                    $imgs = $vehicleImageRepo->listByVehicleId($order['vehicle_id']);
+                    if ($imgs) {
+                        $img = $imgs[0]; // Get first image
+                        if (!empty($img['storage_path'])) {
+                            require_once __DIR__ . '/supabase-storage.php';
+                            $storageHelper = new SupabaseStorage();
+                            $order['thumbnail_url'] = $storageHelper->getPublicUrl($img['storage_path']);
+                        } elseif ($img['image_data']) {
+                            $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
+                            $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
+                        } else {
+                            $order['thumbnail_url'] = '';
+                        }
                     } else {
                         $order['thumbnail_url'] = '';
                     }
-                } else {
+                } catch (Exception $e) {
                     $order['thumbnail_url'] = '';
                 }
-            } catch (Exception $e) {
-                $order['thumbnail_url'] = '';
             }
         }
 
@@ -631,6 +582,73 @@ if ($action === 'update-status') {
                 '🚗 Vehicle Delivered',
                 "Your vehicle has been delivered to the renter."
             );
+
+            // === Send invoice email when trip starts (status = in_progress) ===
+            try {
+                require_once __DIR__ . '/../lib/invoice_mpdf.php';
+                require_once __DIR__ . '/../lib/mailer.php';
+
+                // Get booking full info for invoice
+                $bookingFullInfo = $bookingRepo->getBookingFullInfo($bookingId) ?: [];
+                $vehicleInfo = $bookingRepo->getVehicleInfo($booking['vehicle_id']) ?: [];
+                $paymentMethod = (string)($bookingRepo->getPaymentMethod($bookingId) ?? '');
+                
+                $customerEmail = $booking['email'] ?? '';
+                $customerName = $booking['user_name'] ?? '';
+                $customerPhone = $booking['user_phone'] ?? '';
+                $customerAddress = '';
+                
+                try {
+                    $userAddress = $bookingRepo->getUserAddress($renterId);
+                    if ($userAddress) {
+                        $customerAddress = (string)$userAddress;
+                    }
+                } catch (Exception $ignore) {
+                    $customerAddress = '';
+                }
+
+                if (!empty($customerEmail) && filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+                    $vehicleName = trim(((string)($vehicleInfo['brand'] ?? '')) . ' ' . ((string)($vehicleInfo['model'] ?? '')) . (empty($vehicleInfo['year']) ? '' : (' ' . $vehicleInfo['year'])));
+
+                    $invoiceBooking = [
+                        'id' => $bookingId,
+                        'subtotal' => $bookingFullInfo['subtotal'] ?? '',
+                        'discount_amount' => $bookingFullInfo['discount_amount'] ?? '',
+                        'total_amount' => $bookingFullInfo['total_amount'] ?? '',
+                        'payment_method' => $paymentMethod,
+                        'payment_status' => 'pending',
+                        'vehicle_name' => $vehicleName,
+                        'license_plate' => $vehicleInfo['license_plate'] ?? '',
+                        'pickup_location' => $bookingFullInfo['pickup_location'] ?? '',
+                        'return_location' => $bookingFullInfo['return_location'] ?? '',
+                        'customer_name' => $customerName,
+                        'customer_email' => $customerEmail,
+                        'customer_phone' => $customerPhone,
+                        'customer_address' => $customerAddress,
+                    ];
+
+                    $pdf = privatehire_generate_invoice_pdf_local($invoiceBooking);
+
+                    $subject = 'Invoice for booking #' . $bookingId . ' - PrivateHire';
+                    $html = "<p>Dear " . htmlspecialchars($customerName ?: 'Customer') . ",</p>" .
+                            "<p>Your trip has started. Please find your invoice attached.</p>" .
+                            "<p><strong>Booking ID:</strong> " . htmlspecialchars((string)$bookingId) . "</p>" .
+                            "<p><strong>Vehicle:</strong> " . htmlspecialchars($vehicleName) . "</p>" .
+                            "<p><strong>License plate:</strong> " . htmlspecialchars((string)($vehicleInfo['license_plate'] ?? '')) . "</p>" .
+                            "<p><strong>Pick-up location:</strong> " . htmlspecialchars((string)($bookingFullInfo['pickup_location'] ?? '')) . "</p>" .
+                            "<p><strong>Total amount:</strong> \$" . htmlspecialchars((string)($bookingFullInfo['total_amount'] ?? '0.00')) . "</p>" .
+                            "<p>Regards,<br>PrivateHire</p>";
+
+                    privatehire_send_email($customerEmail, $subject, $html, [
+                        'content' => $pdf,
+                        'filename' => 'invoice_' . $bookingId . '.pdf',
+                        'mime' => 'application/pdf'
+                    ]);
+                }
+            } catch (Exception $e) {
+                error_log('Invoice email failed (update-status in_progress): ' . $e->getMessage());
+                // Don't break booking flow if email fails
+            }
         } elseif ($newStatus === 'completed') {
             createNotification($pdo, $renterId, 'payment',
                 '🎉 Trip Completed',
@@ -723,42 +741,15 @@ if ($action === 'get-reviews') {
     $vehicleId = $_GET['vehicle_id'] ?? $input['vehicle_id'] ?? '';
 
     try {
-        $sql = "
-            SELECT r.id, r.rating, r.content, r.created_at,
-                   u.full_name, u.avatar_url,
-                   v.brand, v.model, v.year,
-                   b.pickup_location, b.return_location, b.booking_type
-            FROM reviews r
-            JOIN users u ON r.user_id = u.id
-            JOIN vehicles v ON r.vehicle_id = v.id
-            LEFT JOIN bookings b ON r.booking_id = b.id
-        ";
-        $params = [];
+        $reviews = [];
+        $stats = [];
 
+        // Get reviews with details using repository
         if (!empty($vehicleId)) {
-            $sql .= " WHERE r.vehicle_id = ?";
-            $params[] = $vehicleId;
+            $limit = max(1, min($limit, 100));
+            $reviews = $bookingRepo->getReviewsWithDetailsAndStats($vehicleId, $limit);
+            $stats = $bookingRepo->getReviewStatsComplete($vehicleId);
         }
-
-        $sql .= " ORDER BY r.created_at DESC LIMIT " . max(1, min($limit, 100));
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Compute stats
-        $statsStmt = $pdo->prepare("
-            SELECT COUNT(*) as total, 
-                   ROUND(AVG(rating)::numeric, 1) as avg_rating,
-                   COUNT(*) FILTER (WHERE rating = 5) as stars_5,
-                   COUNT(*) FILTER (WHERE rating = 4) as stars_4,
-                   COUNT(*) FILTER (WHERE rating = 3) as stars_3,
-                   COUNT(*) FILTER (WHERE rating = 2) as stars_2,
-                   COUNT(*) FILTER (WHERE rating = 1) as stars_1
-            FROM reviews" . (!empty($vehicleId) ? " WHERE vehicle_id = ?" : "")
-        );
-        $statsStmt->execute(!empty($vehicleId) ? [$vehicleId] : []);
-        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
 
         echo json_encode(['success' => true, 'reviews' => $reviews, 'stats' => $stats]);
     } catch (PDOException $e) {

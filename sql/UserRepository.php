@@ -532,4 +532,13 @@ final class UserRepository
         $stmt->execute([$userId]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
+
+    /**
+     * Update only avatar URL (fallback when avatar_storage_path column doesn't exist)
+     */
+    public function updateAvatarUrlOnly(string $userId, string $avatarUrl): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE users SET avatar_url = ?, updated_at = NOW() WHERE id = ?");
+        return $stmt->execute([$avatarUrl, $userId]);
+    }
 }

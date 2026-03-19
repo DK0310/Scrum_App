@@ -483,19 +483,15 @@ if ($action === 'admin-delete-vehicle') {
     }
 
     try {
-        // Check for active bookings
-        $checkStmt = $pdo->prepare('SELECT COUNT(*) FROM bookings WHERE vehicle_id = ? AND status IN (?, ?)');
-        $checkStmt->execute([$vehicleId, 'pending', 'confirmed']);
-        $activeBookings = (int)$checkStmt->fetchColumn();
+        // Check for active bookings using repository
+        $activeBookings = $bookingRepo->countActiveBookingsByVehicleId($vehicleId);
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete vehicle with active bookings (' . $activeBookings . ' active). Cancel them first.']);
             exit;
         }
 
         // Delete images from Supabase Storage first
-        $imgStmt = $pdo->prepare('SELECT storage_path FROM vehicle_images WHERE vehicle_id = ? AND storage_path IS NOT NULL');
-        $imgStmt->execute([$vehicleId]);
-        $storagePaths = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
+        $storagePaths = $vehicleRepo->getVehicleImageStoragePaths($vehicleId);
         if (!empty($storagePaths)) {
             $storage = new SupabaseStorage();
             $storage->deleteMultiple($storagePaths);
@@ -675,10 +671,8 @@ if ($action === 'admin-delete-user') {
     }
 
     try {
-        // Check for active bookings
-        $checkStmt = $pdo->prepare('SELECT COUNT(*) FROM bookings WHERE renter_id = ? AND status IN (?, ?)');
-        $checkStmt->execute([$userId, 'pending', 'confirmed']);
-        $activeBookings = (int)$checkStmt->fetchColumn();
+        // Check for active bookings using repository
+        $activeBookings = $bookingRepo->countActiveBookingsByRenterId($userId);
 
         if ($activeBookings > 0) {
             echo json_encode(['success' => false, 'message' => 'Cannot delete user with ' . $activeBookings . ' active booking(s). Cancel them first.']);

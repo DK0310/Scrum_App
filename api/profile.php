@@ -58,17 +58,44 @@ if ($preAction === 'get-avatar') {
 
     try {
         $row = $userRepo->getAvatarInfo($targetUserId);
-        if (!$row || empty($row['avatar_storage_path'])) {
+        if (!$row) {
             http_response_code(404);
             echo 'Avatar not found';
             exit;
         }
 
-        $storage = new SupabaseStorage();
-        $publicUrl = $storage->getPublicUrl($row['avatar_storage_path']);
-        header('Location: ' . $publicUrl, true, 302);
-        header('Cache-Control: public, max-age=3600');
+        // Determine which URL to use for redirect
+        $redirectUrl = null;
+        
+        // 1. Try avatar_storage_path first (Supabase Storage)
+        if (!empty($row['avatar_storage_path'])) {
+            try {
+                $storage = new SupabaseStorage();
+                $redirectUrl = $storage->getPublicUrl($row['avatar_storage_path']);
+            } catch (Exception $e) {
+                error_log("Supabase error: " . $e->getMessage());
+                $redirectUrl = null;
+            }
+        }
+        
+        // 2. Fallback to avatar_url if storage path fails or doesn't exist
+        if (empty($redirectUrl) && !empty($row['avatar_url'])) {
+            $redirectUrl = $row['avatar_url'];
+        }
+        
+        if (empty($redirectUrl)) {
+            http_response_code(404);
+            echo 'Avatar not found';
+            exit;
+        }
+
+        // Redirect with cache busting
+        header('Location: ' . $redirectUrl, true, 302);
+        header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
     } catch (Exception $e) {
+        error_log("Get-avatar error: " . $e->getMessage());
         http_response_code(500);
         echo 'Server error';
     }
@@ -237,7 +264,20 @@ if ($action === 'upload-avatar') {
 
         $publicUrl = $uploadResult['public_url'] . '?t=' . time();
         $avatarUrl = '/api/profile.php?action=get-avatar&id=' . $userId . '&t=' . time();
-        $userRepo->updateAvatar($userId, $storagePath, $avatarUrl);
+        
+        // Update database with new avatar paths
+        try {
+            $userRepo->updateAvatar($userId, $storagePath, $avatarUrl);
+        } catch (PDOException $dbError) {
+            // Check if avatar_storage_path column exists (migration check)
+            if (strpos($dbError->getMessage(), 'avatar_storage_path') !== false) {
+                // Migration not run yet - just update avatar_url as fallback
+                error_log("⚠️ avatar_storage_path column not found. Running migration: ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_storage_path TEXT;");
+                $userRepo->updateAvatarUrlOnly($userId, $avatarUrl);
+            } else {
+                throw $dbError;
+            }
+        }
 
         createNotification($pdo, $userId, 'system', '📷 Avatar Updated', 'Your profile picture has been updated successfully.');
 
@@ -248,6 +288,7 @@ if ($action === 'upload-avatar') {
             'public_url' => $publicUrl
         ]);
     } catch (Exception $e) {
+        error_log("Avatar upload error: " . $e->getMessage());
         echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;

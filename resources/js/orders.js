@@ -88,10 +88,19 @@ function renderOrders(orders) {
             credit_card: '💳 Card'
         };
 
-        const carName = (order.brand || '') + ' ' + (order.model || '');
-        const thumbUrl = order.thumbnail_url || '';
+        const shouldHideVehicle = (
+            !!order.is_renter
+            && order.booking_type === 'minicab'
+            && (order.status === 'pending' || order.status === 'confirmed')
+        );
+
+        const displayVehicleName = shouldHideVehicle
+            ? 'Vehicle will be assigned'
+            : (((order.brand || '') + ' ' + (order.model || '')).trim() || 'Vehicle');
+
+        const thumbUrl = shouldHideVehicle ? '' : (order.thumbnail_url || '');
         const thumbHtml = thumbUrl
-            ? '<img src="' + thumbUrl + '" alt="' + carName + '">'
+            ? '<img src="' + thumbUrl + '" alt="' + displayVehicleName + '">'
             : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:0.7rem;">No Photo</div>';
 
         let actionsHtml = '';
@@ -139,7 +148,7 @@ function renderOrders(orders) {
                 '<div class="order-card-left">' +
                     '<div class="order-car-thumb">' + thumbHtml + '</div>' +
                     '<div class="order-car-info">' +
-                        '<h4>' + carName + '</h4>' +
+                        '<h4>' + displayVehicleName + '</h4>' +
                         '<p>' + (typeLabels[order.booking_type] || order.booking_type) + (order.service_type ? ' · ' + order.service_type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '') + ' · Order #' + order.id.substring(0, 8) + '</p>' +
                     '</div>' +
                 '</div>' +

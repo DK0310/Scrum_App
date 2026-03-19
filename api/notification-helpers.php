@@ -8,7 +8,7 @@
 if (!function_exists('createNotification')) {
     /**
      * Create a notification for a specific user
-     * @param PDO $pdo Database connection
+     * @param PDO $pdo Database connection (or NotificationRepository)
      * @param string $userId UUID of target user
      * @param string $type One of: booking, payment, promo, system, alert
      * @param string $title Notification title
@@ -17,19 +17,30 @@ if (!function_exists('createNotification')) {
      */
     function createNotification($pdo, $userId, $type, $title, $message) {
         try {
-            $validTypes = ['booking', 'payment', 'promo', 'system', 'alert'];
-            if (!in_array($type, $validTypes)) {
-                $type = 'system';
-            }
+            // Support both legacy PDO and new NotificationRepository
+            if ($pdo instanceof NotificationRepository) {
+                // Use repository method
+                $result = $pdo->createSimple($userId, $type, $title, $message);
+                return $result ? ['user_id' => $userId, 'type' => $type, 'title' => $title, 'message' => $message] : false;
+            } else {
+                // Legacy: use PDO directly for backward compatibility
+                $validTypes = ['booking', 'payment', 'promo', 'system', 'alert'];
+                if (!in_array($type, $validTypes)) {
+                    $type = 'system';
+                }
 
-            $stmt = $pdo->prepare("
-                INSERT INTO notifications (user_id, type, title, message)
-                VALUES (?, ?::notification_type, ?, ?)
-                RETURNING id, created_at
-            ");
-            $stmt->execute([$userId, $type, $title, $message]);
-            return $stmt->fetch(PDO::FETCH_ASSOC);
+                $stmt = $pdo->prepare("
+                    INSERT INTO notifications (user_id, type, title, message)
+                    VALUES (?, ?::notification_type, ?, ?)
+                    RETURNING id, created_at
+                ");
+                $stmt->execute([$userId, $type, $title, $message]);
+                return $stmt->fetch(PDO::FETCH_ASSOC);
+            }
         } catch (PDOException $e) {
+            error_log("Notification create error: " . $e->getMessage());
+            return false;
+        } catch (Exception $e) {
             error_log("Notification create error: " . $e->getMessage());
             return false;
         }

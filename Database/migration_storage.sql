@@ -32,3 +32,6 @@ ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS image_storage_path TEXT;
 --    ALTER TABLE community_posts DROP COLUMN IF EXISTS image_data;
 --    ALTER TABLE community_posts DROP COLUMN IF EXISTS image_mime;
 -- ================================================================
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_storage_path TEXT;
+UPDATE users SET updated_at = NOW();

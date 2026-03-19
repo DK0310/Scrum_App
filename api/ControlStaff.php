@@ -60,6 +60,36 @@ function control_normalize_booking_status(string $status): string
     return $s;
 }
 
+function control_status_rank(string $status): int
+{
+    $normalized = control_normalize_booking_status($status);
+    return match ($normalized) {
+        'pending' => 1,
+        'confirmed' => 2, // included for reference but Control Staff workflow uses only 1,3,4
+        'in_progress' => 3,
+        'completed' => 4,
+        default => 0,
+    };
+}
+
+/**
+ * Check if a status transition is valid for Control Staff workflow
+ * Control Staff only uses: pending -> in_progress -> completed (1 -> 3 -> 4)
+ * Does NOT go through confirmed (rank 2)
+ */
+function control_is_valid_status_transition(int $fromRank, int $toRank): bool
+{
+    // Control Staff workflow: 1 (pending) -> 3 (in_progress) -> 4 (completed)
+    if ($fromRank === 1 && $toRank === 3) return true;  // pending -> in_progress
+    if ($fromRank === 3 && $toRank === 4) return true;  // in_progress -> completed
+    
+    // For future: if confirmed status is used in other workflows, it could be:
+    // pending (1) -> confirmed (2) -> in_progress (3) -> completed (4)
+    // But for now, Control Staff skips confirmed
+    
+    return false;
+}
+
 /**
  * Resolve canonical status to actual enum label in DB.
  * Supports older DBs that may still use "in-progress".
@@ -202,14 +232,59 @@ try {
             exit;
         }
 
+        $currentRank = control_status_rank($currentStatus);
+        $requestedRank = control_status_rank($requestedStatus);
+        
+        if ($currentRank > 0 && $requestedRank > 0 && !control_is_valid_status_transition($currentRank, $requestedRank)) {
+            throw new Exception('Invalid transition from ' . $currentStatus . ' to ' . $requestedStatus . '. Control Staff workflow: pending → in_progress → completed.');
+        }
+
         $dbStatus = control_resolve_db_booking_status($pdo, $requestedStatus);
+
+        // Assign a random vehicle by tier only when order starts (in_progress)
+        $effectiveVehicleId = (string)($booking['vehicle_id'] ?? '');
+
+        if ($requestedStatus === 'in_progress') {
+            $rideTier = strtolower(trim((string)($booking['ride_tier'] ?? 'standard')));
+            if (!in_array($rideTier, ['eco', 'standard', 'premium'], true)) {
+                $rideTier = 'standard';
+            }
+
+            $renterId = (string)($booking['renter_id'] ?? '');
+            if ($renterId === '') {
+                throw new Exception('Booking is missing renter information');
+            }
+
+            $assignedVehicle = $bookingRepo->findVehicleForTier($rideTier, $renterId);
+            if (!$assignedVehicle) {
+                throw new Exception('No available vehicle found for the selected ride tier');
+            }
+
+            $assignedVehicleId = (string)($assignedVehicle['id'] ?? '');
+            $assignedOwnerId = (string)($assignedVehicle['owner_id'] ?? '');
+            if ($assignedVehicleId === '' || $assignedOwnerId === '') {
+                throw new Exception('Unable to assign vehicle for this order');
+            }
+
+            $assigned = $bookingRepo->assignVehicleToBooking(
+                $bookingId,
+                $assignedVehicleId,
+                $assignedOwnerId,
+                (float)($assignedVehicle['price_per_day'] ?? 0)
+            );
+            if (!$assigned) {
+                throw new Exception('Unable to assign vehicle to order');
+            }
+
+            $effectiveVehicleId = $assignedVehicleId;
+        }
 
         $ok = $bookingRepo->updateStatus($bookingId, $dbStatus);
         if (!$ok) {
             throw new Exception('Unable to update status');
         }
 
-        $vehicleId = (string)($booking['vehicle_id'] ?? '');
+        $vehicleId = $effectiveVehicleId;
         if ($vehicleId !== '') {
             if ($requestedStatus === 'in_progress') {
                 $bookingRepo->markVehicleRented($vehicleId);
@@ -219,7 +294,7 @@ try {
             }
         }
 
-        if ($requestedStatus === 'in_progress' && $currentStatus !== 'in_progress') {
+        if ($requestedStatus === 'in_progress' && $currentStatus === 'pending') {
             try {
                 require_once __DIR__ . '/../lib/invoice_mpdf.php';
                 require_once __DIR__ . '/../lib/mailer.php';
@@ -251,16 +326,15 @@ try {
                     $subject = 'Invoice - Booking #' . ($invoiceData['id'] ?? $bookingId);
                     $body = 'Hello ' . ($invoiceData['renter_name'] ?? 'Customer') . ",\n\nYour booking has been confirmed and is now in progress. Please find your invoice attached.\n\nThank you.";
 
-                    privatehire_send_mail(
+                    privatehire_send_email(
                         (string)$invoiceData['renter_email'],
-                        (string)($invoiceData['renter_name'] ?? 'Customer'),
                         $subject,
                         nl2br(htmlspecialchars($body, ENT_QUOTES, 'UTF-8')),
-                        [[
-                            'name' => 'invoice-' . ($invoiceData['id'] ?? $bookingId) . '.pdf',
-                            'type' => 'application/pdf',
-                            'data' => $pdf,
-                        ]]
+                        [
+                            'filename' => 'invoice-' . ($invoiceData['id'] ?? $bookingId) . '.pdf',
+                            'mime' => 'application/pdf',
+                            'content' => $pdf,
+                        ]
                     );
                 }
             } catch (Exception $mailErr) {

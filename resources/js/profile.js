@@ -53,9 +53,15 @@ async function uploadAvatar(input) {
 
         if (data.success) {
             showToast('✅ Avatar updated!', 'success');
-            // Update avatar display
+            // Update avatar display immediately
             const avatarEl = document.getElementById('profileAvatar');
-            avatarEl.innerHTML = `<img src="${data.avatar_url}" style="width:100%;height:100%;object-fit:cover;">`;
+            const avatarUrlWithCache = data.avatar_url + (data.avatar_url.includes('?') ? '&t=' : '?t=') + Date.now();
+            avatarEl.innerHTML = `<img src="${avatarUrlWithCache}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<span id=\\'avatarInitial\\'>' + (currentProfile?.full_name?.[0] ?? '?').toUpperCase() + '</span>'">`;
+            
+            // Refresh profile from database after short delay to verify save succeeded
+            setTimeout(() => {
+                loadProfile();
+            }, 500);
         } else {
             showToast(data.message || 'Failed to upload avatar.', 'error');
         }
@@ -91,7 +97,11 @@ async function loadProfile() {
         // Avatar - check for BLOB avatar first
         const avatarEl = document.getElementById('profileAvatar');
         if (u.avatar_url) {
-            avatarEl.innerHTML = `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<span id=\\'avatarInitial\\'>${initial}</span>'">`;
+            // Add cache-busting parameter to ensure fresh avatar
+            const avatarUrlWithCache = u.avatar_url.includes('?') 
+                ? u.avatar_url + '&t=' + Date.now()
+                : u.avatar_url + '?t=' + Date.now();
+            avatarEl.innerHTML = `<img src="${avatarUrlWithCache}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<span id=\\'avatarInitial\\'>${initial}</span>'">`;
         } else {
             avatarEl.innerHTML = `<span id="avatarInitial">${initial}</span>`;
         }

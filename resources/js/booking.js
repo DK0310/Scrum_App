@@ -460,6 +460,18 @@
           if (typeof showToast === 'function') showToast('Please select a scheduled pick-up date and time.', 'warning');
           return;
         }
+        // Validate scheduled time is in the future
+        try {
+          const scheduledTime = new Date(scheduledVal);
+          const now = new Date();
+          if (scheduledTime <= now) {
+            if (typeof showToast === 'function') showToast('⚠️ Scheduled pick-up time must be in the future. Please select a later date and time.', 'warning');
+            return;
+          }
+        } catch (e) {
+          if (typeof showToast === 'function') showToast('Invalid date and time format. Please check your input.', 'warning');
+          return;
+        }
         const pickupDate = document.getElementById('pickupDate');
         if (pickupDate) pickupDate.value = scheduledVal.split('T')[0];
       }
@@ -897,7 +909,7 @@
       if (data.success) {
         showBookingSuccess(data.booking);
         const vehicleName = selectedBookingType === 'minicab' 
-          ? (data.booking.vehicle_name || 'minicab') 
+          ? 'minicab trip' 
           : (carData ? carData.brand + ' ' + carData.model : 'vehicle');
         if (typeof addNotification === 'function') {
           addNotification('Booking Confirmed', 'Your ' + vehicleName + ' booking has been submitted!', 'booking');
@@ -928,7 +940,7 @@
     let vehicleName = '';
     if (selectedBookingType === 'minicab') {
       const tierLabels = { eco: '🌿 Eco', standard: '⭐ Standard', premium: '👑 Premium' };
-      vehicleName = (booking.vehicle_name || 'Auto-assigned') + ' (' + (tierLabels[selectedRideTier] || '') + ')';
+      vehicleName = 'Vehicle will be assigned when your trip starts' + (tierLabels[selectedRideTier] ? ' · ' + tierLabels[selectedRideTier] : '');
     } else {
       vehicleName = carData ? carData.brand + ' ' + carData.model : 'Vehicle';
     }

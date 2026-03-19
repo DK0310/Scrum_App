@@ -305,4 +305,16 @@ final class NotificationRepository
         $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Create a simple notification with just type, title, and message
+     */
+    public function createSimple(string $userId, string $type, string $title, string $message): bool
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO notifications (user_id, type, title, message, created_at)
+            VALUES (?, ?::notification_type, ?, ?, NOW())
+        ");
+        return $stmt->execute([$userId, $type, $title, $message]);
+    }
 }
