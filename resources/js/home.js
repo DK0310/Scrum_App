@@ -201,6 +201,54 @@ function startHeroAutoRotate() {
     }, 4000); // Change slide every 4 seconds
 }
 
+// ===== GLOBAL ACTIONS (for onclick handlers in templates) =====
+
+/**
+ * Filter vehicles by category
+ * Redirect to /api/cars.php with category parameter
+ */
+function filterByCategory(category) {
+    window.location.href = '/api/cars.php?category=' + encodeURIComponent(category);
+}
+
+/**
+ * Apply promotion code
+ * Save to localStorage and redirect to booking
+ */
+function applyPromo(code) {
+    // Save promo to wallet in localStorage
+    let saved = JSON.parse(localStorage.getItem('drivenow_saved_promos') || '[]');
+    if (!saved.includes(code.toUpperCase())) {
+        saved.push(code.toUpperCase());
+        localStorage.setItem('drivenow_saved_promos', JSON.stringify(saved));
+    }
+
+    if (typeof showToast === 'function') {
+        showToast('🎟️ Promo "' + code + '" saved to your wallet! Redirecting to booking...', 'success');
+    }
+    setTimeout(() => {
+        window.location.href = '/api/bookings.php?promo=' + encodeURIComponent(code);
+    }, 1000);
+}
+
+/**
+ * Book a specific car
+ * Check login first, then redirect to booking page
+ */
+function bookCar(carId) {
+    const isLoggedIn = window.isLoggedIn || false;
+    
+    if (!isLoggedIn) {
+        if (typeof showToast === 'function') showToast('Please sign in to book a car.', 'warning');
+        setTimeout(() => {
+            window.location.href = '/login.php?redirect=/api/bookings.php&car_id=' + encodeURIComponent(carId);
+        }, 1000);
+        return;
+    }
+    
+    window.location.href = '/api/bookings.php?car_id=' + encodeURIComponent(carId);
+}
+
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', () => {
     loadAvailableVehicles();
@@ -208,4 +256,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep existing homepage loaders (hero, reviews) if present
     if (typeof loadHeroSlides === 'function') loadHeroSlides();
     if (typeof loadHomeReviews === 'function') loadHomeReviews();
+
+    // Export functions to global scope for onclick handlers
+    window.filterByCategory = filterByCategory;
+    window.applyPromo = applyPromo;
+    window.bookCar = bookCar;
 });
