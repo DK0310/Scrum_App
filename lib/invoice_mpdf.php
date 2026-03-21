@@ -39,6 +39,11 @@ function privatehire_build_invoice_replacements(array $booking): array {
         $year  = trim((string)($booking['year'] ?? ''));
         $vehicleName = trim($brand . ' ' . $model . (empty($year) ? '' : (' ' . $year)));
     }
+    
+    // Fallback if still empty - search using alternative keys
+    if ($vehicleName === '') {
+        $vehicleName = trim((string)($booking['vehicle'] ?? '')) ?: 'Vehicle';
+    }
 
     $fmtMoney = function ($n) use ($currency): string {
         if ($n === null || $n === '') return '';
@@ -49,7 +54,9 @@ function privatehire_build_invoice_replacements(array $booking): array {
     $fmtPickupTime = function ($dateStr) use ($tz): string {
         if (!$dateStr || $dateStr === '') return '';
         try {
-            $dt = new DateTime($dateStr, new DateTimeZone($tz));
+            // Parse as UTC first (backend stores as UTC), then convert to target timezone
+            $dt = new DateTime($dateStr, new DateTimeZone('UTC'));
+            $dt->setTimeZone(new DateTimeZone($tz));
             return $dt->format('M d, Y \a\t h:i A');
         } catch (Exception $e) {
             return (string)$dateStr;

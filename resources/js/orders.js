@@ -186,6 +186,29 @@ async function updateOrderStatus(bookingId, newStatus) {
         const data = await res.json();
         if (data.success) {
             showToast('✅ Order updated!', 'success');
+            
+            // If booking is completed, refresh available vehicles so they display immediately
+            if (newStatus === 'completed' && data.vehicle_id && data.vehicle_status === 'available') {
+                // Broadcast update to any vehicle list displays
+                window.dispatchEvent(new CustomEvent('vehicleAvailabilityUpdated', {
+                    detail: {
+                        vehicle_id: data.vehicle_id,
+                        status: data.vehicle_status,
+                        booking_id: data.booking_id
+                    }
+                }));
+                
+                // Reload vehicle list on cars page if it exists
+                if (typeof window.loadCars === 'function') {
+                    setTimeout(() => window.loadCars(), 300);
+                }
+                
+                // Reload home page vehicle display if it exists
+                if (typeof window.loadHomeVehicles === 'function') {
+                    setTimeout(() => window.loadHomeVehicles(), 300);
+                }
+            }
+            
             loadOrders();
         } else {
             showToast('❌ ' + (data.message || 'Failed to update.'), 'error');
@@ -204,14 +227,24 @@ function formatDate(dateStr) {
 
 function formatDateTime(dateStr) {
     if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    return d.toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        
+        // Use Intl.DateTimeFormat to display in Asia/Ho_Chi_Minh timezone (UTC+7)
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Ho_Chi_Minh'
+        });
+        return formatter.format(d);
+    } catch (err) {
+        return dateStr;
+    }
 }
 
 function formatPickupDate(order) {

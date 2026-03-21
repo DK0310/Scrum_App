@@ -295,12 +295,25 @@ if ($action === 'create') {
 
         // Create booking via repository
         $numberOfPassengers = (int)($input['number_of_passengers'] ?? 1);
+        
+        // Ensure pickup_date is converted to UTC before storage
+        $pickupDateForDB = $pickupDate;
+        if (!empty($pickupDate)) {
+            try {
+                $dt = new DateTime($pickupDate);
+                $dt->setTimeZone(new DateTimeZone('UTC'));
+                $pickupDateForDB = $dt->format('Y-m-d H:i:s');
+            } catch (Exception $e) {
+                $pickupDateForDB = $pickupDate;
+            }
+        }
+        
         $booking = $bookingRepo->createBooking([
             'renter_id' => $renterId,
             'vehicle_id' => $vehicleId,
             'owner_id' => $vehicle['owner_id'],
             'booking_type' => $bookingType,
-            'pickup_date' => $pickupDate,
+            'pickup_date' => $pickupDateForDB,
             'return_date' => $returnDate,
             'pickup_location' => $pickupLocation,
             'return_location' => $returnLocation,
@@ -533,23 +546,39 @@ if ($action === 'update-status') {
         }
 
         // Update status via repository
-        $bookingRepo->updateBookingStatus($bookingId, $newStatus);
+        $bookingStatusUpdated = $bookingRepo->updateBookingStatus($bookingId, $newStatus);
+        if (!$bookingStatusUpdated) {
+            echo json_encode(['success' => false, 'message' => 'Failed to update booking status.']);
+            exit;
+        }
 
         // Update vehicle status & stats based on booking transition
         $vehicleId = $booking['vehicle_id'];
+        $updatedVehicleStatus = null;
 
         if ($newStatus === 'confirmed') {
             $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
+            $updatedVehicleStatus = 'rented';
             $bookingRepo->incrementVehicleStats($vehicleId, 'bookings');
         } elseif ($newStatus === 'in_progress') {
             $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
+            $updatedVehicleStatus = 'rented';
         } elseif ($newStatus === 'completed') {
-            $bookingRepo->updateVehicleStatus($vehicleId, 'available');
+            // Immediately set vehicle to available
+            $vehicleUpdateSuccess = $bookingRepo->updateVehicleStatus($vehicleId, 'available');
+            if (!$vehicleUpdateSuccess) {
+                echo json_encode(['success' => false, 'message' => 'Failed to update vehicle status to available.']);
+                exit;
+            }
+            $updatedVehicleStatus = 'available';
         } elseif ($newStatus === 'cancelled') {
             // Check if already rented before reverting to available
             $vehicleStatus = $bookingRepo->getVehicleStatus($vehicleId);
             if ($vehicleStatus === 'rented') {
                 $bookingRepo->updateVehicleStatus($vehicleId, 'available');
+                $updatedVehicleStatus = 'available';
+            } else {
+                $updatedVehicleStatus = $vehicleStatus;
             }
         }
 
@@ -621,6 +650,7 @@ if ($action === 'update-status') {
                         'license_plate' => $vehicleInfo['license_plate'] ?? '',
                         'pickup_location' => $bookingFullInfo['pickup_location'] ?? '',
                         'return_location' => $bookingFullInfo['return_location'] ?? '',
+                        'pickup_date' => $bookingFullInfo['pickup_date'] ?? '',
                         'customer_name' => $customerName,
                         'customer_email' => $customerEmail,
                         'customer_phone' => $customerPhone,
@@ -672,7 +702,14 @@ if ($action === 'update-status') {
             }
         }
 
-        echo json_encode(['success' => true, 'message' => 'Booking status updated to ' . $newStatus . '.']);
+        echo json_encode([
+            'success' => true,
+            'message' => 'Booking status updated to ' . $newStatus . '.',
+            'booking_id' => $bookingId,
+            'new_status' => $newStatus,
+            'vehicle_id' => $vehicleId,
+            'vehicle_status' => $updatedVehicleStatus
+        ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }
@@ -830,6 +867,7 @@ if ($action === 'confirm-payment') {
                     'license_plate' => $vRow['license_plate'] ?? '',
                     'pickup_location' => $bRow['pickup_location'] ?? '',
                     'return_location' => $bRow['return_location'] ?? '',
+                    'pickup_date' => $bRow['pickup_date'] ?? '',
                     'customer_name' => $customerName,
                     'customer_email' => $customerEmail,
                     'customer_phone' => $customerPhone,

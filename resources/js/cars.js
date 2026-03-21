@@ -677,6 +677,15 @@
     bindPriceRange();
     bindSearchFunctionality();
     loadCars();
+    
+    // Listen for vehicle availability updates from booking completion
+    window.addEventListener('vehicleAvailabilityUpdated', function(e) {
+      // Reload cars list when a vehicle becomes available
+      if (e.detail && e.detail.vehicle_status === 'available') {
+        console.log('Vehicle ' + e.detail.vehicle_id + ' is now available, refreshing cars list...');
+        setTimeout(() => loadCars(), 300);
+      }
+    });
   });
 
   // Export public functions to global scope

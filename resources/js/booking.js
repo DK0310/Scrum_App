@@ -870,6 +870,15 @@
     const pickupLocation = document.getElementById('pickupLocation');
     const pickupLoc = pickupLocation ? pickupLocation.value.trim() : '';
 
+    // Convert datetime-local to UTC ISO format for backend storage
+    const convertToUTCISO = function(datetimeLocalValue) {
+      if (!datetimeLocalValue) return '';
+      const dt = new Date(datetimeLocalValue);
+      const tzOffset = dt.getTimezoneOffset() * 60000;
+      const utcDate = new Date(dt.getTime() + tzOffset);
+      return utcDate.toISOString();
+    };
+
     const payload = {
       action: 'create',
       booking_type: selectedBookingType,
@@ -891,7 +900,7 @@
       payload.service_type = serviceType ? serviceType.value : '';
       payload.ride_timing = 'schedule';
       const scheduledDateTime = document.getElementById('scheduledDateTime');
-      payload.pickup_date = scheduledDateTime ? scheduledDateTime.value : '';
+      payload.pickup_date = convertToUTCISO(scheduledDateTime ? scheduledDateTime.value : '');
     } else {
       payload.vehicle_id = CAR_ID;
       const returnDate = document.getElementById('returnDate');

@@ -261,4 +261,14 @@ document.addEventListener('DOMContentLoaded', () => {
     window.filterByCategory = filterByCategory;
     window.applyPromo = applyPromo;
     window.bookCar = bookCar;
+    window.loadHomeVehicles = loadAvailableVehicles;
+    
+    // Listen for vehicle availability updates from booking completion
+    window.addEventListener('vehicleAvailabilityUpdated', function(e) {
+        // Reload available vehicles when a booking completes
+        if (e.detail && e.detail.vehicle_status === 'available') {
+            console.log('Vehicle ' + e.detail.vehicle_id + ' is now available, refreshing list...');
+            setTimeout(() => loadAvailableVehicles(), 300);
+        }
+    });
 });
