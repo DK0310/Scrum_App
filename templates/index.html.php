@@ -76,23 +76,14 @@
                 <a href="/api/cars.php" class="section-link">All Categories →</a>
             </div>
             <div class="category-grid">
-                <div class="category-card" onclick="filterByCategory('sedan')">
-                    <div class="category-name">Sedan</div>
+                <div class="category-card" onclick="filterByCategory('eco')">
+                    <div class="category-name">Eco</div>
                 </div>
-                <div class="category-card" onclick="filterByCategory('suv')">
-                    <div class="category-name">SUV</div>
+                <div class="category-card" onclick="filterByCategory('standard')">
+                    <div class="category-name">Standard</div>
                 </div>
                 <div class="category-card" onclick="filterByCategory('luxury')">
                     <div class="category-name">Luxury</div>
-                </div>
-                <div class="category-card" onclick="filterByCategory('electric')">
-                    <div class="category-name">Electric</div>
-                </div>
-                <div class="category-card" onclick="filterByCategory('van')">
-                    <div class="category-name">Van / Minibus</div>
-                </div>
-                <div class="category-card" onclick="filterByCategory('sports')">
-                    <div class="category-name">Sports</div>
                 </div>
             </div>
         </div>

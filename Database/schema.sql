@@ -145,11 +145,6 @@ CREATE TABLE IF NOT EXISTS vehicles (
     -- Images (stored in vehicle_images table as BYTEA)
     thumbnail_id    UUID,                       -- FK to vehicle_images.id (set after insert)
     
-    -- Pricing
-    price_per_day   DECIMAL(10, 2) NOT NULL,
-    price_per_week  DECIMAL(10, 2),
-    price_per_month DECIMAL(10, 2),
-    
     -- Location
     location_city   VARCHAR(100),
     location_address TEXT,

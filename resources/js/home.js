@@ -33,8 +33,9 @@ function escapeHtmlAttr(str) {
 // ===== VEHICLE CARD RENDERING =====
 function cardVehicle(v) {
     const name = vehicleName(v);
-    const price = money(v.price_per_day);
     const plate = (v.license_plate || '-');
+    const tier = (v.service_tier || v.tier || v.category || 'Standard').trim();
+    const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase();
     const img = v.vehicle_image;
 
     const imgHtml = img
@@ -47,7 +48,7 @@ function cardVehicle(v) {
             <div style="padding:14px 14px 12px;">
                 <div style="font-weight:800;color:var(--gray-900);font-size:0.98rem;line-height:1.25;">${escapeHtml(name)}</div>
                 <div style="margin-top:8px;display:flex;justify-content:space-between;gap:10px;align-items:center;">
-                    <div style="color:var(--primary);font-weight:900;">${escapeHtml(price)}<span style="color:var(--gray-400);font-weight:700;">/day</span></div>
+                    <div style="color:var(--primary);font-weight:900;font-size:0.9rem;">${escapeHtml(tierLabel)}</div>
                     <div style="font-size:0.82rem;color:var(--gray-600);font-weight:700;">${escapeHtml(plate)}</div>
                 </div>
                 <div style="margin-top:10px;">

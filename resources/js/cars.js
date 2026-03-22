@@ -421,9 +421,10 @@
             features +
           '</div>' +
           '<div class="car-card-footer">' +
-            '<div class="car-card-price">' +
-              '<span class="car-price-amount">$' + Number(car.price_per_day).toLocaleString() + '</span>' +
-              '<span class="car-price-unit">per day</span>' +
+            '<div class="car-card-tier">' +
+              '<span class="car-tier-badge" style="background:' + getTierColor(car.service_tier) + ';color:white;padding:4px 12px;border-radius:20px;font-size:0.85rem;font-weight:600;text-transform:capitalize;">' +
+                getTierIcon(car.service_tier) + ' ' + (car.service_tier || 'standard') +
+              '</span>' +
             '</div>' +
             '<div class="car-card-rating">' +
               '<span class="stars">' + stars + '</span>' +
@@ -433,6 +434,24 @@
         '</div>' +
       '</div>';
     }).join('');
+  }
+
+  function getTierColor(tier) {
+    const colors = {
+      'eco': '#10b981',
+      'standard': '#0f766e',
+      'luxury': '#f59e0b'
+    };
+    return colors[tier] || '#0f766e';
+  }
+
+  function getTierIcon(tier) {
+    const icons = {
+      'eco': '🌿',
+      'standard': '⭐',
+      'luxury': '👑'
+    };
+    return icons[tier] || '⭐';
   }
 
   function handleCarClick(carId) {
@@ -473,9 +492,13 @@
     if (detailTitle) detailTitle.textContent = car.brand + ' ' + car.model + ' ' + car.year;
     if (detailSub) detailSub.textContent = ucfirst(car.category) + ' • ' + ucfirst(car.transmission) + ' • ' + ucfirst(car.fuel_type) + (car.license_plate ? ' • ' + car.license_plate : '');
 
-    // Price
+    // Service Tier
     const detailPrice = document.getElementById('detailPrice');
-    if (detailPrice) detailPrice.textContent = '$' + Number(car.price_per_day).toLocaleString();
+    if (detailPrice) {
+      const tierColor = getTierColor(car.service_tier);
+      const tierIcon = getTierIcon(car.service_tier);
+      detailPrice.innerHTML = '<span style="color:' + tierColor + ';font-weight:700;font-size:1.1rem;">' + tierIcon + ' ' + (car.service_tier || 'Standard').toUpperCase() + '</span>';
+    }
 
     // Rating
     const detailRating = document.getElementById('detailRating');
@@ -562,30 +585,20 @@
     if (detailOwnerAvatar) detailOwnerAvatar.textContent = initials;
     if (detailOwnerName) detailOwnerName.textContent = ownerName;
 
-    // Price breakdown
+    // Hide price breakdown (no longer applicable - using service tiers instead)
     const detailDailyRate = document.getElementById('detailDailyRate');
-    if (detailDailyRate) detailDailyRate.textContent = '$' + Number(car.price_per_day).toLocaleString() + '/day';
+    if (detailDailyRate && detailDailyRate.parentElement) {
+      detailDailyRate.parentElement.style.display = 'none';
+    }
 
     const weeklyRow = document.getElementById('detailWeeklyRow');
-    const detailWeeklyRate = document.getElementById('detailWeeklyRate');
-    if (weeklyRow && detailWeeklyRate) {
-      if (car.price_per_week && parseFloat(car.price_per_week) > 0) {
-        weeklyRow.style.display = 'flex';
-        detailWeeklyRate.textContent = '$' + Number(car.price_per_week).toLocaleString() + '/week';
-      } else {
-        weeklyRow.style.display = 'none';
-      }
+    if (weeklyRow) {
+      weeklyRow.style.display = 'none';
     }
 
     const monthlyRow = document.getElementById('detailMonthlyRow');
-    const detailMonthlyRate = document.getElementById('detailMonthlyRate');
-    if (monthlyRow && detailMonthlyRate) {
-      if (car.price_per_month && parseFloat(car.price_per_month) > 0) {
-        monthlyRow.style.display = 'flex';
-        detailMonthlyRate.textContent = '$' + Number(car.price_per_month).toLocaleString() + '/month';
-      } else {
-        monthlyRow.style.display = 'none';
-      }
+    if (monthlyRow) {
+      monthlyRow.style.display = 'none';
     }
 
     // Book button

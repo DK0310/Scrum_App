@@ -226,5 +226,28 @@ class AuthRepository {
     public function isAdult($dobString) {
         return $this->calculateAge($dobString) >= 18;
     }
+
+    /**
+     * Update user role by email
+     */
+    public function updateUserRoleByEmail($email, $role) {
+        $email = strtolower(trim((string) $email));
+        $role = trim((string) $role) ?: 'user';
+
+        $query = "UPDATE users SET role = :role WHERE LOWER(email) = LOWER(:email)";
+        $stmt = $this->pdo->prepare($query);
+        return $stmt->execute([':role' => $role, ':email' => $email]);
+    }
+
+    /**
+     * Update user role by ID
+     */
+    public function updateUserRoleById($userId, $role) {
+        $role = trim((string) $role) ?: 'user';
+
+        $query = "UPDATE users SET role = :role WHERE id = :id";
+        $stmt = $this->pdo->prepare($query);
+        return $stmt->execute([':role' => $role, ':id' => $userId]);
+    }
 }
 ?>

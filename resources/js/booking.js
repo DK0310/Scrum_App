@@ -31,6 +31,15 @@
   let calculatedDistance = null;
   let transferCost = null;
 
+  // Ride tier configuration with passenger limits
+  const RIDE_TIER_CONFIG = {
+    'eco': { name: 'Economy', seats: 4, icon: '🚗', color: '#10b981' },
+    'standard': { name: 'Standard', seats: 7, icon: '🚙', color: '#0f766e' },
+    'luxury': { name: 'Luxury', seats: 7, icon: '👑', color: '#f59e0b' }
+  };
+
+  let availableTiersByPassengers = {};  // Track which tiers are available per passenger count
+
   // ===== INITIALIZATION =====
   document.addEventListener('DOMContentLoaded', async function() {
     const today = new Date().toISOString().split('T')[0];
@@ -327,14 +336,108 @@
     if (!recommendationEl) return;
     
     let recommendation = '';
-    if (passengerCount < 5) {
-      recommendation = '👤 ' + passengerCount + ' passenger' + (passengerCount > 1 ? 's' : '') + ' — Recommended: Eco or Standard';
-    } else if (passengerCount >= 5 && passengerCount <= 7) {
-      recommendation = '👥 ' + passengerCount + ' passengers — Recommended: Standard (' + (passengerCount <= 5 ? 5 : 6) + ' seats)';
+    if (passengerCount <= 4) {
+      recommendation = '👤 ' + passengerCount + ' passenger' + (passengerCount > 1 ? 's' : '') + ' — All tiers available';
+    } else if (passengerCount > 4 && passengerCount <= 7) {
+      recommendation = '👥 ' + passengerCount + ' passengers — Eco unavailable (max 4), choose Standard or Luxury';
     } else {
-      recommendation = '⚠️ ' + passengerCount + ' passengers — Sorry, no vehicles available for more than 7 passengers';
+      recommendation = '⚠️ ' + passengerCount + ' passengers — Only Standard or Luxury can accommodate';
     }
     recommendationEl.textContent = recommendation;
+    
+    // Check availability and update tier UI
+    checkAvailableTiers(passengerCount);
+  }
+
+  // ===== CHECK AVAILABLE TIERS =====
+  async function checkAvailableTiers(passengers = 1) {
+    try {
+      const response = await fetch('/api/vehicles.php?action=check-available-tiers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passengers: passengers })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        availableTiersByPassengers = result.available_tiers || {};
+      }
+
+      // Update ride tier UI based on availability and passenger count
+      updateRideTierUI(passengers, availableTiersByPassengers);
+    } catch (err) {
+      console.error('Error checking available tiers:', err);
+    }
+  }
+
+  // ===== UPDATE RIDE TIER UI =====
+  function updateRideTierUI(passengers, availableTiers) {
+    const tierCards = document.querySelectorAll('.ride-tier-card');
+    
+    tierCards.forEach(card => {
+      const tierType = card.getAttribute('data-tier');
+      const tierConfig = RIDE_TIER_CONFIG[tierType];
+      
+      if (!tierConfig) return;
+
+      let isDisabled = false;
+      let disableReason = '';
+
+      // Check: Passenger count exceeds tier capacity (eco = 4 passengers max)
+      if (tierType === 'eco' && passengers > 4) {
+        isDisabled = true;
+        disableReason = 'Max 4 passengers';
+      }
+      
+      // Check: No vehicles available for this tier
+      if (!availableTiers[tierType]) {
+        isDisabled = true;
+        disableReason = disableReason ? disableReason + ' • No vehicles available' : 'No vehicles available';
+      }
+
+      // Update card UI
+      if (isDisabled) {
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+        card.style.cursor = 'not-allowed';
+        card.setAttribute('data-disabled', 'true');
+        
+        card.title = disableReason;
+
+        // Add disabled indicator
+        let disabledLabel = card.querySelector('.tier-disabled-label');
+        if (!disabledLabel) {
+          disabledLabel = document.createElement('div');
+          disabledLabel.className = 'tier-disabled-label';
+          disabledLabel.style.cssText = `
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7); color: white; padding: 8px 12px;
+            border-radius: 6px; font-size: 0.75rem; font-weight: 600; z-index: 10;
+            white-space: nowrap;
+          `;
+          card.style.position = 'relative';
+          card.appendChild(disabledLabel);
+        }
+        disabledLabel.textContent = disableReason;
+
+        // Deselect if this tier was selected
+        if (selectedRideTier === tierType) {
+          selectedRideTier = null;
+          card.classList.remove('active');
+        }
+      } else {
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+        card.style.cursor = 'pointer';
+        card.removeAttribute('data-disabled');
+        
+        let disabledLabel = card.querySelector('.tier-disabled-label');
+        if (disabledLabel) {
+          disabledLabel.remove();
+        }
+      }
+    });
   }
 
   // ===== TRIP SUMMARY =====
@@ -1004,24 +1107,25 @@
     }
 
     const tiers = [
-      { key: 'eco', icon: '🌿', name: 'Eco', seats: '5-seat cars', rate: 1, badge: 'Best Value' },
-      { key: 'standard', icon: '⭐', name: 'Standard', seats: 'Comfort cars', rate: 2, badge: '' },
-      { key: 'premium', icon: '👑', name: 'Premium', seats: 'Luxury cars', rate: 5, badge: 'Premium' }
+      { key: 'eco', icon: '🌿', name: 'Economy', seats: 4, badge: 'Best Value', color: '#10b981' },
+      { key: 'standard', icon: '⭐', name: 'Standard', seats: 7, badge: 'Popular', color: '#0f766e' },
+      { key: 'luxury', icon: '👑', name: 'Luxury', seats: 7, badge: 'Premium', color: '#f59e0b' }
     ];
 
     grid.innerHTML = tiers.map(t => {
-      const fare = Math.round(calculatedDistance * t.rate * 100) / 100;
       const isActive = selectedRideTier === t.key ? ' active' : '';
-      const badge = t.badge ? '<span class="ride-tier-badge">' + t.badge + '</span>' : '';
-      return '<div class="ride-tier-card ' + t.key + isActive + '" data-tier="' + t.key + '" onclick="selectRideTier(\'' + t.key + '\')">' +
+      const badge = t.badge ? '<span class="ride-tier-badge" style="background:' + t.color + ';">' + t.badge + '</span>' : '';
+      return '<div class="ride-tier-card ' + t.key + isActive + '" data-tier="' + t.key + '" onclick="selectRideTier(\'' + t.key + '\')" style="border-color:' + t.color + ';">' +
         badge +
         '<span class="ride-tier-icon">' + t.icon + '</span>' +
         '<span class="ride-tier-name">' + t.name + '</span>' +
-        '<span class="ride-tier-seats">' + t.seats + '</span>' +
-        '<span class="ride-tier-rate">$' + t.rate + '/km</span>' +
-        '<span class="ride-tier-price">$' + fare.toFixed(2) + '</span>' +
+        '<span class="ride-tier-seats">👥 ' + t.seats + ' seats</span>' +
       '</div>';
     }).join('');
+
+    // Check available tiers
+    const passengerCount = parseInt(document.getElementById('passengerCount').value) || 1;
+    checkAvailableTiers(passengerCount);
   }
 
   function calculateRouteDistance() {

@@ -131,6 +131,40 @@ if ($action === 'filter-options') {
 }
 
 // ==========================================================
+// CHECK AVAILABLE TIERS (public - check which tiers have available vehicles)
+// ==========================================================
+if ($action === 'check-available-tiers') {
+    $passengers = (int) ($input['passengers'] ?? 1);
+    
+    try {
+        // Get available vehicles grouped by service_tier
+        $query = "SELECT DISTINCT service_tier FROM vehicles WHERE status = 'available' AND service_tier IN ('eco', 'standard', 'luxury')";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute();
+        
+        $availableTiers = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $availableTiers[$row['service_tier']] = true;
+        }
+        
+        // Filter by passenger count
+        // Eco: max 4 passengers
+        if ($passengers > 4 && isset($availableTiers['eco'])) {
+            unset($availableTiers['eco']);
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'available_tiers' => $availableTiers,
+            'passenger_count' => $passengers
+        ]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Error checking available tiers']);
+    }
+    exit;
+}
+
+// ==========================================================
 // SEARCH SUGGESTIONS (public - brand-only autocomplete)
 // ==========================================================
 if ($action === 'search-suggestions') {

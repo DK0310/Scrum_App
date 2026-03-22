@@ -84,6 +84,7 @@ let regOtpResendTimer = 0;
 
 function showRegisterModal() {
     document.getElementById('registerModalOverlay').style.display = 'flex';
+    setDOBDateRange();
     regGoToStep(1);
 }
 
@@ -93,13 +94,18 @@ function closeRegisterModal() {
 }
 
 function resetRegisterForm() {
-    document.getElementById('regFullName').value = '';
+    document.getElementById('regUsername').value = '';
     document.getElementById('regEmail').value = '';
     document.getElementById('regPhone').value = '';
     document.getElementById('regDOB').value = '';
     document.getElementById('regPassword').value = '';
     document.getElementById('regConfirmPassword').value = '';
+    document.getElementById('regUsernameError').style.display = 'none';
+    document.getElementById('regEmailError').style.display = 'none';
+    document.getElementById('regPhoneError').style.display = 'none';
+    document.getElementById('regDOBError').style.display = 'none';
     regSelectedRole = null;
+    setDOBDateRange();
 }
 
 function switchAuthModal(mode) {
@@ -150,18 +156,198 @@ function regGoToStep(stepNum) {
     }
 }
 
+// Real-time validation functions
+function setDOBDateRange() {
+    const dobInput = document.getElementById('regDOB');
+    const today = new Date();
+    
+    // Maximum date: today (must be at least 18 today)
+    // Minimum date: 100 years ago
+    const maxDate = today.toISOString().split('T')[0]; // Today
+    
+    const minDate = new Date(today);
+    minDate.setFullYear(today.getFullYear() - 100);
+    const minDateStr = minDate.toISOString().split('T')[0]; // 100 years ago
+    
+    dobInput.max = maxDate;
+    dobInput.min = minDateStr;
+}
+
+async function validateRegUsername() {
+    const username = document.getElementById('regUsername').value.trim();
+    const errorDiv = document.getElementById('regUsernameError');
+    
+    if (!username) {
+        errorDiv.style.display = 'none';
+        return;
+    }
+
+    if (username.length < 3) {
+        errorDiv.textContent = 'Username must be at least 3 characters';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    // Check if username exists
+    try {
+        const formData = new FormData();
+        formData.append('action', 'check-username');
+        formData.append('username', username);
+
+        const response = await fetch('/api/register.php', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+            errorDiv.textContent = result.message || 'Username already taken';
+            errorDiv.style.display = 'block';
+        } else {
+            errorDiv.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Username validation error:', error);
+    }
+}
+
+async function validateRegEmail() {
+    const email = document.getElementById('regEmail').value.trim();
+    const errorDiv = document.getElementById('regEmailError');
+    
+    if (!email) {
+        errorDiv.style.display = 'none';
+        return;
+    }
+
+    if (!email.includes('@')) {
+        errorDiv.textContent = 'Invalid email format';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    // Check if email exists
+    try {
+        const formData = new FormData();
+        formData.append('action', 'check-email');
+        formData.append('email', email);
+
+        const response = await fetch('/api/register.php', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+            errorDiv.textContent = result.message || 'Email already registered';
+            errorDiv.style.display = 'block';
+        } else {
+            errorDiv.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Email validation error:', error);
+    }
+}
+
+async function validateRegPhone() {
+    const phone = document.getElementById('regPhone').value.trim();
+    const errorDiv = document.getElementById('regPhoneError');
+    
+    if (!phone) {
+        errorDiv.style.display = 'none';
+        return;
+    }
+
+    // Basic phone validation: at least 10 digits
+    const digitsOnly = phone.replace(/\D/g, '');
+    if (digitsOnly.length < 10) {
+        errorDiv.textContent = 'Phone number must have at least 10 digits';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    // Check if phone exists
+    try {
+        const formData = new FormData();
+        formData.append('action', 'check-phone');
+        formData.append('phone', phone);
+
+        const response = await fetch('/api/register.php', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+            errorDiv.textContent = result.message || 'Phone already registered';
+            errorDiv.style.display = 'block';
+        } else {
+            errorDiv.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Phone validation error:', error);
+    }
+}
+
+function validateRegAge() {
+    const dob = document.getElementById('regDOB').value.trim();
+    let errorDiv = document.getElementById('regDOBError');
+    
+    if (!errorDiv) {
+        errorDiv = document.createElement('div');
+        errorDiv.id = 'regDOBError';
+        errorDiv.style.color = '#dc2626';
+        errorDiv.style.fontSize = '12px';
+        errorDiv.style.marginTop = '4px';
+        document.getElementById('regDOB').parentNode.appendChild(errorDiv);
+    }
+    
+    if (!dob) {
+        errorDiv.style.display = 'none';
+        return;
+    }
+
+    const dobDate = new Date(dob + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    let age = today.getFullYear() - dobDate.getFullYear();
+    const monthDiff = today.getMonth() - dobDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+        age--;
+    }
+
+    // Check age constraints
+    if (age < 18) {
+        errorDiv.textContent = 'You must be at least 18 years old';
+        errorDiv.style.display = 'block';
+    } else if (age > 100) {
+        errorDiv.textContent = 'Age cannot exceed 100 years';
+        errorDiv.style.display = 'block';
+    } else {
+        errorDiv.style.display = 'none';
+    }
+}
+
 async function regGoToStep2() {
-    const fullName = document.getElementById('regFullName').value.trim();
+    const username = document.getElementById('regUsername').value.trim();
     const email = document.getElementById('regEmail').value.trim();
     const phone = document.getElementById('regPhone').value.trim();
-    const dob = document.getElementById('regDOB').value;
+    const dob = document.getElementById('regDOB').value.trim();
     const password = document.getElementById('regPassword').value;
     const confirmPassword = document.getElementById('regConfirmPassword').value;
     const statusDiv = document.getElementById('regStep1Status');
 
-    // Validation
-    if (!fullName || !email || !phone || !dob || !password || !confirmPassword) {
+    if (!username || !email || !phone || !dob || !password || !confirmPassword) {
         showRegStatus('Please fill in all fields', 'error', 1);
+        return;
+    }
+
+    if (username.length < 3) {
+        showRegStatus('Username must be at least 3 characters', 'error', 1);
         return;
     }
 
@@ -180,9 +366,10 @@ async function regGoToStep2() {
         return;
     }
 
-    // Check age (18+)
-    const dobDate = new Date(dob);
+    // Check age (18+) - convert date string to proper date object
+    const dobDate = new Date(dob + 'T00:00:00');
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     let age = today.getFullYear() - dobDate.getFullYear();
     const monthDiff = today.getMonth() - dobDate.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
@@ -194,13 +381,22 @@ async function regGoToStep2() {
         return;
     }
 
+    if (age > 100) {
+        showRegStatus('Age cannot exceed 100 years', 'error', 1);
+        return;
+    }
+
     // Send OTP
     showRegStatus('Sending verification code...', 'loading', 1);
 
     try {
         const formData = new FormData();
         formData.append('action', 'send-otp');
+        formData.append('username', username);
         formData.append('email', email);
+        formData.append('phone', phone);
+        formData.append('dob', dob);
+        formData.append('password', password);
 
         const response = await fetch('/api/register.php', {
             method: 'POST',
@@ -310,7 +506,7 @@ function regResendOtp() {
     btn.style.opacity = '0.5';
 
     const formData = new FormData();
-    formData.append('action', 'send-otp');
+    formData.append('action', 'resend-otp');
     formData.append('email', email);
 
     fetch('/api/register.php', {
@@ -371,23 +567,15 @@ async function regGoToStep4() {
         return;
     }
 
-    const fullName = document.getElementById('regFullName').value.trim();
     const email = document.getElementById('regEmail').value.trim();
-    const phone = document.getElementById('regPhone').value.trim();
-    const dob = document.getElementById('regDOB').value;
-    const password = document.getElementById('regPassword').value;
     const statusDiv = document.getElementById('regStep3Status');
 
-    showRegStatus('Creating your account...', 'loading', 3);
+    showRegStatus('Confirming your role...', 'loading', 3);
 
     try {
         const formData = new FormData();
-        formData.append('action', 'register');
-        formData.append('full_name', fullName);
+        formData.append('action', 'set-user-role');
         formData.append('email', email);
-        formData.append('phone', phone);
-        formData.append('dob', dob);
-        formData.append('password', password);
         formData.append('role', regSelectedRole);
 
         const response = await fetch('/api/register.php', {
@@ -398,7 +586,7 @@ async function regGoToStep4() {
         const result = await response.json();
 
         if (!result.success) {
-            showRegStatus('✗ ' + (result.message || 'Unable to create account'), 'error', 3);
+            showRegStatus('✗ ' + (result.message || 'Failed to set role'), 'error', 3);
             return;
         }
 
@@ -410,7 +598,7 @@ async function regGoToStep4() {
             window.location.reload();
         }, 1500);
     } catch (error) {
-        console.error('Register error:', error);
+        console.error('Role update error:', error);
         showRegStatus('✗ Network error. Please try again.', 'error', 3);
     }
 }

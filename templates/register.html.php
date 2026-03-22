@@ -21,43 +21,51 @@
                 <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 24px; font-weight: 600;">Create Account</h2>
                 <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 1 of 4: Your Information</p>
 
-                <!-- Full Name -->
+                <!-- Username -->
                 <div style="margin-bottom: 18px;">
-                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Full Name</label>
-                    <input type="text" id="regFullName" 
-                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
-                           placeholder="Enter your full name"
+                    <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Username</label>
+                    <input type="text" id="regUsername" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: border-color 0.3s ease;"
+                           placeholder="Choose a username"
+                           oninput="validateRegUsername()"
                            onblur="this.style.borderColor = '#ddd'"
                            onfocus="this.style.borderColor = '#0f766e'">
+                    <div id="regUsernameError" style="display: none; color: #dc2626; font-size: 12px; margin-top: 4px;"></div>
                 </div>
 
                 <!-- Email -->
                 <div style="margin-bottom: 18px;">
                     <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Email Address</label>
                     <input type="email" id="regEmail" 
-                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: border-color 0.3s ease;"
                            placeholder="you@example.com"
+                           oninput="validateRegEmail()"
                            onblur="this.style.borderColor = '#ddd'"
                            onfocus="this.style.borderColor = '#0f766e'">
+                    <div id="regEmailError" style="display: none; color: #dc2626; font-size: 12px; margin-top: 4px;"></div>
                 </div>
 
                 <!-- Phone -->
                 <div style="margin-bottom: 18px;">
                     <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Phone Number</label>
                     <input type="tel" id="regPhone" 
-                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: border-color 0.3s ease;"
                            placeholder="Your phone number"
+                           oninput="validateRegPhone()"
                            onblur="this.style.borderColor = '#ddd'"
                            onfocus="this.style.borderColor = '#0f766e'">
+                    <div id="regPhoneError" style="display: none; color: #dc2626; font-size: 12px; margin-top: 4px;"></div>
                 </div>
 
                 <!-- Date of Birth -->
                 <div style="margin-bottom: 18px;">
                     <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Date of Birth</label>
                     <input type="date" id="regDOB" 
-                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: border-color 0.3s ease;"
+                           oninput="validateRegAge()"
                            onblur="this.style.borderColor = '#ddd'"
                            onfocus="this.style.borderColor = '#0f766e'">
+                    <div id="regDOBError" style="display: none; color: #dc2626; font-size: 12px; margin-top: 4px;"></div>
                 </div>
 
                 <!-- Password -->

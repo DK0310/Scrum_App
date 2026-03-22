@@ -66,7 +66,7 @@ final class VehicleRepository
             $params[] = '%' . strtolower($q) . '%';
         }
 
-        $sql = "SELECT id, brand, model, price_per_day, license_plate\n                FROM vehicles\n                WHERE " . implode(' AND ', $where) . "\n                ORDER BY brand, model\n                LIMIT ?";
+        $sql = "SELECT id, brand, model, service_tier, license_plate, seats\n                FROM vehicles\n                WHERE " . implode(' AND ', $where) . "\n                ORDER BY brand, model\n                LIMIT ?";
         $params[] = $limit;
 
         $stmt = $this->pdo->prepare($sql);
@@ -109,10 +109,7 @@ final class VehicleRepository
             $where[] = 'LOWER(v.transmission) = LOWER(?)';
             $params[] = $transmission;
         }
-        if ($maxPrice > 0 && $maxPrice < 9999) {
-            $where[] = 'v.price_per_day <= ?';
-            $params[] = $maxPrice;
-        }
+        // Note: Price filtering removed - now filtering by service_tier instead
         if ($location !== '') {
             $where[] = '(LOWER(v.location_city) ILIKE ? OR LOWER(v.location_address) ILIKE ?)';
             $params[] = '%' . strtolower($location) . '%';
@@ -270,13 +267,11 @@ final class VehicleRepository
             (id, owner_id, brand, model, year, license_plate,
                          category, service_tier, transmission, fuel_type, seats, color,
              engine_size, consumption, features,
-             price_per_day, price_per_week, price_per_month,
              location_city, location_address,
              status, created_at, updated_at)
             VALUES
             (?, ?, ?, ?, ?, ?,
                          ?, ?, ?, ?, ?, ?,
-             ?, ?, ?,
              ?, ?, ?,
              ?, ?,
              'available', NOW(), NOW())
@@ -298,9 +293,6 @@ final class VehicleRepository
             $data['engine_size'] ?? null,
             $data['consumption'] ?? null,
             isset($data['features']) ? json_encode($data['features']) : null,
-            (float)$data['price_per_day'],
-            isset($data['price_per_week']) ? (float)$data['price_per_week'] : null,
-            isset($data['price_per_month']) ? (float)$data['price_per_month'] : null,
             $data['location_city'] ?? null,
             $data['location_address'] ?? null,
         ]);
