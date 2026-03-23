@@ -117,9 +117,16 @@
                         <label>Ride Tier *</label>
                         <select class="cc-select" id="ccRideTier" required>
                             <option value="">Select tier</option>
-                            <option value="eco">Eco ($1/km)</option>
-                            <option value="standard">Standard ($2/km)</option>
-                            <option value="premium">Premium ($5/km)</option>
+                            <option value="eco">Eco</option>
+                            <option value="standard">Standard</option>
+                            <option value="luxury">Luxury</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Seat Capacity *</label>
+                        <select class="cc-select" id="ccSeatCapacity" required>
+                            <option value="4">4 seats</option>
+                            <option value="7">7 seats</option>
                         </select>
                     </div>
                     <div>
@@ -172,6 +179,9 @@
                     <div class="full">
                         <label>Note</label>
                         <textarea class="cc-textarea" id="ccSpecialRequests"></textarea>
+                    </div>
+                    <div class="full" style="font-size:0.82rem;color:#64748b;line-height:1.5;">
+                        Phone booking rates: 4 seats (Eco £2.50, Standard £3.00, Luxury £4.00 per mile) · 7 seats (Eco £3.00, Standard £3.50, Luxury £5.00 per mile) + £2.00 booking fee.
                     </div>
                 </div>
 

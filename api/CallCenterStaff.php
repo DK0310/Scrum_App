@@ -139,8 +139,13 @@ try {
         }
 
         $rideTier = strtolower(trim((string)($payload['ride_tier'] ?? '')));
-        if (!in_array($rideTier, ['eco', 'standard', 'premium'], true)) {
-            throw new Exception('Invalid ride tier. Use eco, standard, or premium.');
+        if (!in_array($rideTier, ['eco', 'standard', 'luxury'], true)) {
+            throw new Exception('Invalid ride tier. Use eco, standard, or luxury.');
+        }
+
+        $seatCapacity = (int)($payload['seat_capacity'] ?? 4);
+        if (!in_array($seatCapacity, [4, 7], true)) {
+            throw new Exception('Invalid seat capacity. Use 4 or 7 seats.');
         }
 
         $pickupDate = trim((string)($payload['pickup_date'] ?? ''));
@@ -168,11 +173,24 @@ try {
 
         $vehicleId = (string)$vehicle['id'];
 
-        $pricePerDay = (float)($vehicle['price_per_day'] ?? 0);
-        $tierRates = ['eco' => 1.0, 'standard' => 2.0, 'premium' => 5.0];
-        $subtotal = ($distanceKm !== null && $distanceKm > 0)
-            ? round($distanceKm * $tierRates[$rideTier], 2)
-            : max(1.0, $pricePerDay);
+        // Phone booking rates in £/mile by seat capacity + £2.00 booking fee
+        $tierRates = [
+            4 => ['eco' => 2.50, 'standard' => 3.00, 'luxury' => 4.00],
+            7 => ['eco' => 3.00, 'standard' => 3.50, 'luxury' => 5.00],
+        ];
+        $bookingFee = 2.00;
+        $ratePerMile = $tierRates[$seatCapacity][$rideTier] ?? null;
+        if ($ratePerMile === null) {
+            throw new Exception('Unable to calculate fare for selected tier and seat capacity.');
+        }
+        
+        if ($distanceKm !== null && $distanceKm > 0) {
+            // Convert km to miles and calculate with phone booking rates
+            $distanceMiles = $distanceKm * 0.621371;
+            $subtotal = round(($distanceMiles * $ratePerMile) + $bookingFee, 2);
+        } else {
+            $subtotal = $bookingFee;
+        }
 
         // Call Center always creates minicab requests in pending status for Control Staff approval.
         $booking = $staffBookingRepo->createPhoneBooking(
@@ -191,6 +209,7 @@ try {
                 'initial_status' => 'pending',
                 'payment_method' => $paymentMethod,
                 'days' => $days,
+                'number_of_passengers' => $seatCapacity,
                 'subtotal' => $subtotal,
                 'discount_amount' => 0,
                 'total_amount' => $subtotal,
@@ -207,6 +226,7 @@ try {
                 'status' => 'pending',
                 'total_amount' => $subtotal,
                 'ride_tier' => $rideTier,
+                'seat_capacity' => $seatCapacity,
                 'assigned_vehicle' => trim(((string)($vehicle['brand'] ?? '')) . ' ' . ((string)($vehicle['model'] ?? ''))),
             ],
         ]);

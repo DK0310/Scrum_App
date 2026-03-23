@@ -52,15 +52,15 @@ final class BookingRepository
 
         $tierConditions = '';
         match ($rideTier) {
-            'eco' => $tierConditions = "(LOWER(COALESCE(v.service_tier, '')) = 'eco' OR (v.service_tier IS NULL AND v.price_per_day <= 40 AND v.seats = 5))",
-            'standard' => $tierConditions = "(LOWER(COALESCE(v.service_tier, '')) = 'standard' OR (v.service_tier IS NULL AND v.price_per_day > 40 AND v.price_per_day <= 100))",
-            'premium' => $tierConditions = "(LOWER(COALESCE(v.service_tier, '')) IN ('luxury', 'premium') OR (v.service_tier IS NULL AND v.price_per_day > 100))",
+            'eco' => $tierConditions = "LOWER(COALESCE(v.service_tier, '')) = 'eco'",
+            'standard' => $tierConditions = "LOWER(COALESCE(v.service_tier, '')) = 'standard'",
+            'luxury' => $tierConditions = "LOWER(COALESCE(v.service_tier, '')) IN ('luxury', 'premium')",
             default => throw new Exception('Invalid ride tier')
         };
 
         $stmt = $this->pdo->prepare("
-            SELECT v.id, v.owner_id, v.price_per_day, v.price_per_week, v.price_per_month, 
-                   v.category, v.status, v.brand, v.model, v.seats
+            SELECT v.id, v.owner_id, v.service_tier, 
+                   v.category, v.status, v.brand, v.model, v.seats, v.owner_id as owner_id
             FROM vehicles v
             WHERE v.status = 'available' AND {$tierConditions} AND v.owner_id != ?
             ORDER BY RANDOM()
@@ -78,7 +78,7 @@ final class BookingRepository
     public function getVehicleForBooking(string $vehicleId): ?array
     {
         $stmt = $this->pdo->prepare("
-            SELECT id, owner_id, price_per_day, price_per_week, price_per_month, 
+            SELECT id, owner_id, service_tier, 
                    category, status, brand, model
             FROM vehicles
             WHERE id = ?
@@ -96,8 +96,8 @@ final class BookingRepository
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO bookings (
-                renter_id, vehicle_id, owner_id, booking_type, pickup_date, return_date,
-                pickup_location, return_location, total_days, price_per_day, subtotal,
+                renter_id, vehicle_id, owner_id, booking_type, pickup_date, pickup_time, return_date,
+                pickup_location, return_location, total_days, subtotal,
                 discount_amount, total_amount, promo_code, special_requests, driver_requested,
                 distance_km, transfer_cost, service_type, number_of_passengers, ride_tier, status
             ) VALUES (
@@ -112,11 +112,11 @@ final class BookingRepository
             $data['owner_id'],
             $data['booking_type'],
             $data['pickup_date'],
+            $data['pickup_time'] ?? null,
             $data['return_date'] ?? null,
             $data['pickup_location'],
             $data['return_location'] ?? null,
             $data['total_days'],
-            $data['price_per_day'],
             $data['subtotal'],
             $data['discount_amount'],
             $data['total_amount'],
@@ -429,13 +429,14 @@ final class BookingRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT b.id, b.renter_id, b.owner_id, b.vehicle_id, b.booking_type,
-                   b.pickup_date, b.return_date, b.pickup_location, b.return_location,
+                   b.pickup_date, b.pickup_time, b.return_date, b.pickup_location, b.return_location,
                    b.airport_name, b.total_days, b.price_per_day, b.subtotal,
                    b.discount_amount, b.total_amount, b.promo_code, b.status,
                    b.special_requests, b.driver_requested, b.created_at,
                    b.confirmed_at, b.completed_at, b.cancelled_at,
                    b.distance_km, b.transfer_cost, b.service_type,
-                   v.brand, v.model, v.year, v.category,
+                   b.number_of_passengers, b.ride_tier,
+                   v.brand, v.model, v.year, v.category, v.license_plate,
                    u_renter.full_name AS renter_name,
                    u_renter.email AS renter_email,
                    p.method AS payment_method,
@@ -443,7 +444,7 @@ final class BookingRepository
                    rev.id AS review_id,
                    rev.rating AS review_rating
             FROM bookings b
-            JOIN vehicles v ON b.vehicle_id = v.id
+            LEFT JOIN vehicles v ON b.vehicle_id = v.id
             LEFT JOIN users u_renter ON b.renter_id = u_renter.id
             LEFT JOIN payments p ON p.booking_id = b.id
             LEFT JOIN reviews rev ON rev.booking_id = b.id AND rev.user_id = ?
@@ -452,6 +453,19 @@ final class BookingRepository
         ");
         $stmt->execute([$userId, $userId, $userId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Clear assigned vehicle from a booking (used when pending booking is cancelled/rejected)
+     */
+    public function unassignVehicleFromBooking(string $bookingId): bool
+    {
+        $stmt = $this->pdo->prepare(" 
+            UPDATE bookings
+            SET vehicle_id = NULL, owner_id = NULL, price_per_day = NULL
+            WHERE id = ?
+        ");
+        return $stmt->execute([$bookingId]);
     }
 
     /**

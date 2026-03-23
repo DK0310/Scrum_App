@@ -80,8 +80,10 @@
                     <input type="password" id="regPassword" 
                            style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
                            placeholder="At least 6 characters"
+                              oninput="validateRegPasswords()"
                            onblur="this.style.borderColor = '#ddd'"
                            onfocus="this.style.borderColor = '#0f766e'">
+                          <div id="regPasswordError" style="display: none; color: #dc2626; font-size: 12px; margin-top: 4px;"></div>
                 </div>
 
                 <!-- Confirm Password -->
@@ -96,8 +98,10 @@
                     <input type="password" id="regConfirmPassword" 
                            style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
                            placeholder="Confirm your password"
+                              oninput="validateRegPasswords()"
                            onblur="this.style.borderColor = '#ddd'"
                            onfocus="this.style.borderColor = '#0f766e'">
+                          <div id="regConfirmPasswordError" style="display: none; color: #dc2626; font-size: 12px; margin-top: 4px;"></div>
                 </div>
 
                 <!-- Status Message -->

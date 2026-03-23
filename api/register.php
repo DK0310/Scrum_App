@@ -316,6 +316,23 @@ try {
 
         // ===== OTP VERIFIED: Now create the actual user account =====
         $pendingData = $_SESSION['pending_registration'];
+
+        // Re-check uniqueness to avoid race conditions between send-otp and verify-otp.
+        if ($authRepo->usernameExists($pendingData['username'] ?? '')) {
+            $response['message'] = 'Username already taken';
+            echo json_encode($response);
+            exit;
+        }
+        if ($authRepo->emailExists($pendingData['email'] ?? '')) {
+            $response['message'] = 'Email already registered';
+            echo json_encode($response);
+            exit;
+        }
+        if ($authRepo->phoneExists($pendingData['phone'] ?? '')) {
+            $response['message'] = 'Phone already registered';
+            echo json_encode($response);
+            exit;
+        }
         
         try {
             $userId = $authRepo->createUser(

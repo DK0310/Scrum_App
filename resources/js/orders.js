@@ -6,6 +6,24 @@
 // ===== CONSTANTS & CONFIGURATION =====
 const BOOKINGS_API = '/api/bookings.php';
 const VEHICLES_API = '/api/vehicles.php';
+const ORDER_STATUS_LABELS = {
+    pending: 'Pending',
+    confirmed: 'Confirmed',
+    in_progress: 'In Progress',
+    completed: 'Completed',
+    cancelled: 'Cancelled'
+};
+const ORDER_TYPE_LABELS = {
+    minicab: 'Minicab',
+    'with-driver': 'With Driver',
+    'self-drive': 'Self-Drive'
+};
+const PAYMENT_METHOD_LABELS = {
+    cash: 'Cash',
+    bank_transfer: 'Bank Transfer',
+    paypal: 'PayPal',
+    credit_card: 'Card'
+};
 
 // ===== STATE MANAGEMENT =====
 let allOrders = [];
@@ -17,7 +35,10 @@ let reviewBookingId = null;
 let reviewRating = 0;
 
 // ===== INITIALIZATION =====
-document.addEventListener('DOMContentLoaded', loadOrders);
+document.addEventListener('DOMContentLoaded', () => {
+    initTripDetailModalEvents();
+    loadOrders();
+});
 
 // ===== LOAD ORDERS =====
 async function loadOrders() {
@@ -76,11 +97,7 @@ function renderOrders(orders) {
             completed: '✔️ Completed',
             cancelled: '❌ Cancelled'
         };
-        const typeLabels = {
-            'minicab': 'Minicab',
-            'with-driver': 'With Driver',
-            'self-drive': 'Self-Drive'
-        };
+        const typeLabels = ORDER_TYPE_LABELS;
         const pmLabels = {
             cash: '💵 Cash',
             bank_transfer: '🏦 Banking',
@@ -88,10 +105,14 @@ function renderOrders(orders) {
             credit_card: '💳 Card'
         };
 
+        const canOpenTripDetail = order.status !== 'cancelled';
+        const cardClassName = canOpenTripDetail ? 'order-card can-open' : 'order-card';
+        const cardAttrs = ' data-status="' + order.status + '" data-booking-id="' + order.id + '" data-can-open="' + (canOpenTripDetail ? '1' : '0') + '"';
+
         const shouldHideVehicle = (
             !!order.is_renter
             && order.booking_type === 'minicab'
-            && (order.status === 'pending' || order.status === 'confirmed')
+            && (order.status === 'pending' || order.status === 'confirmed' || order.status === 'cancelled')
         );
 
         const displayVehicleName = shouldHideVehicle
@@ -119,12 +140,10 @@ function renderOrders(orders) {
             }
         }
 
-        // Renter: free cancel for scheduled minicab only when pickup is at least 48h away
+        // Renter: can cancel only while order is still pending
         if (order.is_renter && order.status === 'pending') {
             if (canCustomerCancelOrder(order)) {
                 actionsHtml = '<button class="btn btn-danger btn-sm" onclick="updateOrderStatus(\'' + order.id + '\', \'cancelled\')">❌ Cancel</button>';
-            } else if (order.booking_type === 'minicab') {
-                actionsHtml = '<span style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:999px;font-size:0.74rem;font-weight:700;background:#fff7ed;color:#9a3412;">⏱️ Cancel locked (&lt; 48h)</span>';
             }
         }
 
@@ -143,7 +162,7 @@ function renderOrders(orders) {
             renterInfoHtml = '<div class="owner-renter-info">👤 Renter: <span>' + order.renter_name + '</span> — ' + (order.renter_email || '') + '</div>';
         }
 
-        return '<div class="order-card" data-status="' + order.status + '">' +
+        return '<div class="' + cardClassName + '"' + cardAttrs + '>' +
             '<div class="order-card-header">' +
                 '<div class="order-card-left">' +
                     '<div class="order-car-thumb">' + thumbHtml + '</div>' +
@@ -165,11 +184,123 @@ function renderOrders(orders) {
                 '<div class="order-detail-item"><div class="order-detail-label">Booked On</div><div class="order-detail-value">' + formatDate(order.created_at) + '</div></div>' +
             '</div>' +
             '<div class="order-card-footer">' +
-                '<div class="order-total">$' + parseFloat(order.total_amount).toFixed(2) + '</div>' +
+                '<div class="order-total">£' + parseFloat(order.total_amount).toFixed(2) + '</div>' +
                 '<div class="order-actions">' + actionsHtml + '</div>' +
             '</div>' +
         '</div>';
     }).join('');
+
+    bindOrderCardClicks();
+}
+
+function bindOrderCardClicks() {
+    document.querySelectorAll('.order-card[data-can-open="1"]').forEach(card => {
+        card.addEventListener('click', event => {
+            if (event.target.closest('.order-actions') || event.target.closest('button') || event.target.closest('a')) {
+                return;
+            }
+            openTripDetailModal(card.dataset.bookingId);
+        });
+    });
+}
+
+function initTripDetailModalEvents() {
+    const overlay = document.getElementById('tripDetailModalOverlay');
+    if (!overlay) return;
+
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay) {
+            closeTripDetailModal();
+        }
+    });
+
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            closeTripDetailModal();
+        }
+    });
+}
+
+function openTripDetailModal(bookingId) {
+    const order = allOrders.find(o => String(o.id) === String(bookingId));
+    const overlay = document.getElementById('tripDetailModalOverlay');
+    if (!order || !overlay || order.status === 'cancelled') return;
+
+    const totalAmount = Number(order.total_amount);
+
+    setDetailField('tripDetailOrderId', '#' + String(order.id).substring(0, 8));
+    setDetailField('tripDetailStatus', ORDER_STATUS_LABELS[order.status] || order.status || '-');
+    setDetailField('tripDetailBookingType', ORDER_TYPE_LABELS[order.booking_type] || order.booking_type || '-');
+    setDetailField('tripDetailServiceType', formatServiceType(order.service_type));
+    setDetailField('tripDetailRideTier', formatRideTier(order.ride_tier));
+    setDetailField('tripDetailSeatCapacity', formatSeatCapacity(order));
+    setDetailField('tripDetailPickupDate', formatPickupDate(order));
+    setDetailField('tripDetailReturnDate', order.return_date ? formatDate(order.return_date) : '-');
+    setDetailField('tripDetailPickupLocation', order.pickup_location || '-');
+    setDetailField('tripDetailDestination', order.return_location || '-');
+    setDetailField('tripDetailDistance', order.distance_km ? parseFloat(order.distance_km).toFixed(1) + ' km' : '-');
+    setDetailField('tripDetailPaymentMethod', PAYMENT_METHOD_LABELS[order.payment_method] || order.payment_method || 'N/A');
+    setDetailField('tripDetailBookedOn', formatDate(order.created_at));
+    setDetailField('tripDetailTotalAmount', Number.isFinite(totalAmount) ? '£' + totalAmount.toFixed(2) : '-');
+
+    updateTripVehicleSpotlight(order);
+
+    overlay.style.display = 'flex';
+}
+
+function closeTripDetailModal() {
+    const overlay = document.getElementById('tripDetailModalOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+function setDetailField(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = value ?? '-';
+    }
+}
+
+function formatServiceType(serviceType) {
+    if (!serviceType) return '-';
+    return serviceType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function formatRideTier(rideTier) {
+    if (!rideTier) return '-';
+    const normalized = rideTier === 'premium' ? 'luxury' : rideTier;
+    return normalized.replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function formatSeatCapacity(order) {
+    const seat = order && (order.seat_capacity || order.number_of_passengers);
+    if (!seat) return '-';
+    return String(seat) + ' seats';
+}
+
+function updateTripVehicleSpotlight(order) {
+    const vehicleBox = document.getElementById('tripVehicleSpotlight');
+    const waitingBox = document.getElementById('tripVehicleWaiting');
+    if (!vehicleBox || !waitingBox) return;
+
+    const isPending = String(order.status || '') === 'pending';
+    const hasVehicleData = !!(order.brand || order.model || order.license_plate);
+
+    if (isPending || !hasVehicleData) {
+        vehicleBox.style.display = 'none';
+        waitingBox.style.display = 'flex';
+        return;
+    }
+
+    const vehicleName = (((order.brand || '') + ' ' + (order.model || '')).trim() || 'Assigned Vehicle');
+    const licensePlate = (order.license_plate || '').trim() || 'Updating...';
+
+    setDetailField('tripVehicleName', vehicleName);
+    setDetailField('tripVehiclePlate', licensePlate);
+
+    vehicleBox.style.display = 'flex';
+    waitingBox.style.display = 'none';
 }
 
 // ===== UPDATE ORDER STATUS =====
@@ -221,25 +352,33 @@ async function updateOrderStatus(bookingId, newStatus) {
 // ===== DATE & STRING UTILITIES =====
 function formatDate(dateStr) {
     if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    try {
+        // Parse as UTC by appending Z if not already present
+        const utcStr = dateStr.includes('Z') || dateStr.includes('+') || dateStr.includes('-00:00') ? dateStr : dateStr + 'Z';
+        const d = new Date(utcStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (err) {
+        return dateStr;
+    }
 }
 
 function formatDateTime(dateStr) {
     if (!dateStr) return '-';
     try {
-        const d = new Date(dateStr);
+        // Parse as UTC by appending Z if not already present
+        const utcStr = dateStr.includes('Z') || dateStr.includes('+') || dateStr.includes('-00:00') ? dateStr : dateStr + 'Z';
+        const d = new Date(utcStr);
         if (isNaN(d.getTime())) return dateStr;
         
-        // Use Intl.DateTimeFormat to display in Asia/Ho_Chi_Minh timezone (UTC+7)
+        // Format in user's local timezone (no specific timezone forced)
         const formatter = new Intl.DateTimeFormat('en-US', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
-            hour12: true,
-            timeZone: 'Asia/Ho_Chi_Minh'
+            hour12: true
         });
         return formatter.format(d);
     } catch (err) {
@@ -250,6 +389,11 @@ function formatDateTime(dateStr) {
 function formatPickupDate(order) {
     if (!order || !order.pickup_date) return '-';
     if (order.booking_type === 'minicab') {
+        // If pickup_time is available, combine date with the correct time
+        if (order.pickup_time) {
+            const dateOnly = formatDate(order.pickup_date); // e.g., "27 Mar 2026"
+            return dateOnly + ', ' + order.pickup_time; // e.g., "27 Mar 2026, 10:00AM"
+        }
         return formatDateTime(order.pickup_date);
     }
     return formatDate(order.pickup_date);
@@ -258,13 +402,7 @@ function formatPickupDate(order) {
 function canCustomerCancelOrder(order) {
     if (!order || !order.is_renter || order.status !== 'pending') return false;
     if (order.booking_type !== 'minicab') return false;
-    if (!order.pickup_date) return false;
-
-    const pickupMs = new Date(order.pickup_date).getTime();
-    if (!Number.isFinite(pickupMs)) return false;
-
-    const cutoffMs = Date.now() + (48 * 60 * 60 * 1000);
-    return pickupMs >= cutoffMs;
+    return true;
 }
 
 function truncate(str, max) {

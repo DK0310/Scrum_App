@@ -79,11 +79,23 @@ class AuthRepository {
     }
 
     /**
-     * Legacy compatibility: schema has no username column.
-     * Keep method to avoid breaking existing register flow callers.
+     * Check if username already exists.
+     * The app uses full_name as the displayed username in register flow.
      */
     public function usernameExists($username) {
-        return false;
+        $username = trim((string) $username);
+        if ($username === '') {
+            return false;
+        }
+
+        $query = "SELECT 1
+                  FROM users
+                  WHERE LOWER(BTRIM(COALESCE(full_name, ''))) = LOWER(BTRIM(:username))
+                  LIMIT 1";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([':username' => $username]);
+
+        return (bool)$stmt->fetch();
     }
 
     /**
@@ -91,11 +103,18 @@ class AuthRepository {
      * Keeps legacy signature for compatibility.
      */
     public function createUser($username, $email, $phone, $password, $fullName, $dateOfBirth = null, $role = 'user') {
+        $username = trim((string) $username);
         $email = strtolower(trim((string) $email));
         $phone = trim((string) $phone);
         $fullName = trim((string) $fullName);
         $dateOfBirth = $dateOfBirth ? trim((string) $dateOfBirth) : null;
         $role = trim((string) $role) ?: 'user';
+
+        // Safety check in repository layer to prevent duplicate usernames.
+        if ($this->usernameExists($username !== '' ? $username : $fullName)) {
+            throw new Exception('Username already taken');
+        }
+
         $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
 
         $query = "INSERT INTO users (email, phone, password_hash, full_name, date_of_birth, auth_provider, role, is_active, created_at)

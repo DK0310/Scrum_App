@@ -83,6 +83,7 @@
                                 <option value="airport-transfer">✈️ Airport Transfer</option>
                                 <option value="hotel-transfer">🏨 Hotel Transfer</option>
                             </select>
+                            <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">Available seat classes for every service type: 4-seat and 7-seat.</small>
                         </div>
 
                         <!-- Ride Timing (minicab only) -->
@@ -113,6 +114,8 @@
                             <div class="form-group" id="scheduledDateTimeGroup" style="display:none;">
                                 <label class="form-label">📅 Scheduled Pick-up Date & Time</label>
                                 <input type="datetime-local" class="form-input" id="scheduledDateTime" min="">
+                                <div id="pickupDateTimeError" style="display:none;margin-top:8px;padding:10px 12px;background:#fee;border-radius:6px;border-left:3px solid #d32f2f;color:#d32f2f;font-size:0.85rem;"></div>
+                                <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">📌 <strong>Cancellation Policy:</strong> Free cancellation available if pickup is more than 48 hours away. Same-day and rush bookings are non-refundable.</small>
                             </div>
                         </div>
 
@@ -146,16 +149,16 @@
                             <div id="airportSelectWrapper" style="display:none;">
                                 <select class="form-input" id="airportSelect" onchange="onAirportSelect()">
                                     <option value="">-- Select Airport --</option>
-                                    <option value="Tan Son Nhat International Airport, Ho Chi Minh City">✈️ Tan Son Nhat (SGN) — Ho Chi Minh City</option>
-                                    <option value="Noi Bai International Airport, Hanoi">✈️ Noi Bai (HAN) — Hanoi</option>
-                                    <option value="Da Nang International Airport, Da Nang">✈️ Da Nang (DAD) — Da Nang</option>
-                                    <option value="Cam Ranh International Airport, Khanh Hoa">✈️ Cam Ranh (CXR) — Khanh Hoa</option>
-                                    <option value="Phu Bai International Airport, Hue">✈️ Phu Bai (HUI) — Hue</option>
-                                    <option value="Cat Bi International Airport, Hai Phong">✈️ Cat Bi (HPH) — Hai Phong</option>
-                                    <option value="Lien Khuong Airport, Da Lat">✈️ Lien Khuong (DLI) — Da Lat</option>
-                                    <option value="Phu Quoc International Airport, Phu Quoc">✈️ Phu Quoc (PQC) — Phu Quoc</option>
-                                    <option value="Van Don International Airport, Quang Ninh">✈️ Van Don (VDO) — Quang Ninh</option>
-                                    <option value="Can Tho International Airport, Can Tho">✈️ Can Tho (VCA) — Can Tho</option>
+                                    <option value="Heathrow Airport, London, United Kingdom">✈️ Heathrow (LHR) — London</option>
+                                    <option value="Gatwick Airport, London, United Kingdom">✈️ Gatwick (LGW) — London</option>
+                                    <option value="Stansted Airport, London, United Kingdom">✈️ Stansted (STN) — London</option>
+                                    <option value="Luton Airport, London, United Kingdom">✈️ Luton (LTN) — London</option>
+                                    <option value="London City Airport, London, United Kingdom">✈️ London City (LCY) — London</option>
+                                    <option value="Manchester Airport, Manchester, United Kingdom">✈️ Manchester (MAN) — Manchester</option>
+                                    <option value="Birmingham Airport, Birmingham, United Kingdom">✈️ Birmingham (BHX) — Birmingham</option>
+                                    <option value="Edinburgh Airport, Edinburgh, United Kingdom">✈️ Edinburgh (EDI) — Edinburgh</option>
+                                    <option value="Glasgow Airport, Glasgow, United Kingdom">✈️ Glasgow (GLA) — Glasgow</option>
+                                    <option value="Bristol Airport, Bristol, United Kingdom">✈️ Bristol (BRS) — Bristol</option>
                                 </select>
                             </div>
                             <div id="returnMapContainer" class="map-picker-container" style="display:none;">
@@ -170,13 +173,20 @@
                             </div>
                         </div>
 
-                        <!-- Number of Passengers (minicab only) -->
-                        <div class="form-group" id="passengerCountGroup" style="display:none;">
-                            <label class="form-label">Number of Passengers</label>
-                            <div style="display:flex;gap:10px;align-items:center;">
-                                <input type="number" class="form-input" id="passengerCount" min="1" max="7" value="1" onchange="updateTierRecommendation()" style="max-width:100px;">
-                                <span style="color:var(--gray-500);font-size:0.9rem;" id="tierRecommendationText"></span>
+                        <!-- Seat Capacity (minicab only) -->
+                        <div class="form-group" id="seatCapacityGroup" style="display:none;">
+                            <label class="form-label">Choose Seat Capacity</label>
+                            <div class="seat-capacity-grid" id="seatCapacityGrid">
+                                <button type="button" class="seat-capacity-option active" data-seat="4" onclick="selectSeatCapacity(4)">
+                                    <span class="seat-capacity-title">🚕 4 Seats</span>
+                                    <span class="seat-capacity-sub">Compact fare class</span>
+                                </button>
+                                <button type="button" class="seat-capacity-option" data-seat="7" onclick="selectSeatCapacity(7)">
+                                    <span class="seat-capacity-title">🚐 7 Seats</span>
+                                    <span class="seat-capacity-sub">Group fare class</span>
+                                </button>
                             </div>
+                            <div id="tierRecommendationText" style="margin-top:8px;color:var(--gray-500);font-size:0.85rem;"></div>
                         </div>
 
                         <!-- Ride Tier Selection (with-driver only — shown after locations selected) -->
@@ -522,23 +532,34 @@
         }
         .ride-tier-card.eco { }
         .ride-tier-card.standard { }
-        .ride-tier-card.premium { }
+        .ride-tier-card.luxury { }
         .ride-tier-card.active.eco { border-color: #10b981; background: #ecfdf5; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
         .ride-tier-card.active.standard { border-color: var(--primary); background: var(--primary-50); }
-        .ride-tier-card.active.premium { border-color: #f59e0b; background: #fffbeb; box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
+        .ride-tier-card.active.luxury { border-color: #f59e0b; background: #fffbeb; box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
         .ride-tier-icon { font-size: 1.75rem; }
         .ride-tier-name { font-size: 0.9rem; font-weight: 800; color: var(--gray-800); }
         .ride-tier-seats { font-size: 0.7rem; color: var(--gray-500); }
+        .ride-tier-desc { font-size: 0.72rem; color: var(--gray-600); min-height: 32px; line-height: 1.35; }
         .ride-tier-rate { font-size: 0.75rem; color: var(--gray-500); }
         .ride-tier-price { font-size: 1.25rem; font-weight: 800; color: var(--primary); margin-top: 2px; }
         .ride-tier-card.eco .ride-tier-price { color: #10b981; }
-        .ride-tier-card.premium .ride-tier-price { color: #f59e0b; }
+        .ride-tier-card.luxury .ride-tier-price { color: #f59e0b; }
         .ride-tier-badge {
             position: absolute; top: -8px; right: -8px; font-size: 0.6rem; font-weight: 700;
             padding: 2px 8px; border-radius: 999px; text-transform: uppercase;
         }
         .ride-tier-card.eco .ride-tier-badge { background: #d1fae5; color: #065f46; }
-        .ride-tier-card.premium .ride-tier-badge { background: #fef3c7; color: #92400e; }
+        .ride-tier-card.luxury .ride-tier-badge { background: #fef3c7; color: #92400e; }
+        .seat-capacity-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .seat-capacity-option {
+            border: 2px solid var(--gray-200); border-radius: var(--radius-md); background: white;
+            padding: 12px 10px; text-align: center; cursor: pointer; transition: all 0.2s;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .seat-capacity-option:hover { border-color: var(--primary-300); background: var(--primary-50); }
+        .seat-capacity-option.active { border-color: var(--primary); background: var(--primary-50); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+        .seat-capacity-title { font-size: 0.9rem; font-weight: 700; color: var(--gray-800); }
+        .seat-capacity-sub { font-size: 0.75rem; color: var(--gray-500); }
         @media (max-width: 480px) { .ride-tier-grid { grid-template-columns: 1fr; } }
 
         .location-input-wrapper { display: flex; gap: 8px; align-items: center; position: relative; }
@@ -777,6 +798,8 @@
         }
     </style>
 
+<?php include __DIR__ . '/layout/footer.html.php'; ?>
+
     <!-- ===== BOOKING JAVASCRIPT ===== -->
     <script>
         // Pass PHP variables to booking.js module
@@ -786,5 +809,3 @@
         window.isLoggedIn = <?= $isLoggedIn ? 'true' : 'false' ?>;
     </script>
     <script src="/resources/js/booking.js"></script>
-
-<?php include __DIR__ . '/layout/footer.html.php'; ?>

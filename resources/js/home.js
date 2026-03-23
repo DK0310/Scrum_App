@@ -14,7 +14,7 @@ function vehicleName(v) {
 function money(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return '';
-    return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    return '£' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
 function escapeHtml(str) {

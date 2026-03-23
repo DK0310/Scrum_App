@@ -397,13 +397,19 @@ final class UserRepository
     }
 
     /**
-     * Check if username exists
-     * NOTE: No username column in schema; check email instead for compatibility
+     * Check if username exists.
+     * Username is stored in full_name in the current schema.
      */
     public function usernameExists(string $username): bool
     {
-        // Kept for API compatibility but always returns false (no username column)
-        return false;
+        $username = trim($username);
+        if ($username === '') {
+            return false;
+        }
+
+        $stmt = $this->pdo->prepare("SELECT 1 FROM users WHERE LOWER(BTRIM(COALESCE(full_name, ''))) = LOWER(BTRIM(?)) LIMIT 1");
+        $stmt->execute([$username]);
+        return (bool)$stmt->fetch();
     }
 
     /**

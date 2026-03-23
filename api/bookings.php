@@ -169,6 +169,7 @@ if ($action === 'create') {
     $vehicleId = $input['vehicle_id'] ?? '';
     $bookingType = $input['booking_type'] ?? 'with-driver';
     $pickupDate = $input['pickup_date'] ?? '';
+    $pickupTime = $input['pickup_time'] ?? ''; // e.g., "08:00AM", "12:00PM"
     $returnDate = $input['return_date'] ?? null;
     $pickupLocation = $input['pickup_location'] ?? '';
     $returnLocation = $input['return_location'] ?? '';
@@ -178,7 +179,8 @@ if ($action === 'create') {
     $distanceKm = isset($input['distance_km']) ? floatval($input['distance_km']) : null;
     $pickupCoords = isset($input['pickup_coords']) && is_array($input['pickup_coords']) ? $input['pickup_coords'] : [];
     $destinationCoords = isset($input['destination_coords']) && is_array($input['destination_coords']) ? $input['destination_coords'] : [];
-    $rideTier = $input['ride_tier'] ?? null; // 'eco', 'standard', 'premium'
+    $rideTier = strtolower(trim((string)($input['ride_tier'] ?? ''))); // 'eco', 'standard', 'luxury'
+    $seatCapacity = (int)($input['seat_capacity'] ?? $input['number_of_passengers'] ?? 4);
     $frontendRideFare = isset($input['ride_fare']) ? floatval($input['ride_fare']) : null;
     $serviceType = $input['service_type'] ?? 'local'; // 'local', 'long-distance', 'airport-transfer', 'hotel-transfer'
     $rideTiming = strtolower(trim((string)($input['ride_timing'] ?? '')));
@@ -201,8 +203,12 @@ if ($action === 'create') {
 
     // For minicab, ride_tier is required
     if ($bookingType === 'minicab') {
-        if (empty($rideTier) || !in_array($rideTier, ['eco', 'standard', 'premium'])) {
-            echo json_encode(['success' => false, 'message' => 'Please select a valid ride tier (eco, standard, premium).']);
+        if (empty($rideTier) || !in_array($rideTier, ['eco', 'standard', 'luxury'])) {
+            echo json_encode(['success' => false, 'message' => 'Please select a valid ride tier (eco, standard, luxury).']);
+            exit;
+        }
+        if (!in_array($seatCapacity, [4, 7], true)) {
+            echo json_encode(['success' => false, 'message' => 'Please select a valid seat capacity (4 or 7 seats).']);
             exit;
         }
         if (empty($returnLocation)) {
@@ -232,14 +238,21 @@ if ($action === 'create') {
 
     try {
         $vehicle = null;
-        $pricePerDay = 0;
         $totalDays = 1;
         $subtotal = 0;
 
         if ($bookingType === 'minicab') {
             // ==== MINICAB: Auto-assign vehicle based on tier ====
-            $tierRates = ['eco' => 1, 'standard' => 2, 'premium' => 5];
-            $ratePerKm = $tierRates[$rideTier] ?? 1;
+            // Online booking rates in £/mile by seat capacity
+            $tierRates = [
+                4 => ['eco' => 2.00, 'standard' => 2.50, 'luxury' => 3.50],
+                7 => ['eco' => 3.00, 'standard' => 3.50, 'luxury' => 4.50],
+            ];
+            $ratePerMile = $tierRates[$seatCapacity][$rideTier] ?? 0.0;
+            if ($ratePerMile <= 0) {
+                echo json_encode(['success' => false, 'message' => 'Unable to calculate fare for selected tier and seats.']);
+                exit;
+            }
 
             // Find a random available vehicle matching the tier (exclude own vehicles)
             $vehicle = $bookingRepo->findVehicleForTier($rideTier, $renterId);
@@ -250,15 +263,16 @@ if ($action === 'create') {
             }
 
             $vehicleId = $vehicle['id'];
-            $pricePerDay = (float)$vehicle['price_per_day'];
 
-            // Calculate fare based on distance × rate per km
+            // Calculate fare based on distance × rate per mile (convert km to miles: 1 km = 0.621371 miles)
             if ($distanceKm !== null && $distanceKm > 0) {
-                $subtotal = round($distanceKm * $ratePerKm, 2);
+                $distanceMiles = $distanceKm * 0.621371;
+                $subtotal = round($distanceMiles * $ratePerMile, 2);
             } elseif ($frontendRideFare !== null && $frontendRideFare > 0) {
                 $subtotal = $frontendRideFare;
             } else {
-                $subtotal = $pricePerDay; // fallback to daily rate
+                echo json_encode(['success' => false, 'message' => 'Unable to calculate fare. Distance information is required.']);
+                exit;
             }
             $totalDays = 1; // single trip
             $returnDate = null;
@@ -294,7 +308,7 @@ if ($action === 'create') {
         $bookingRepo->ensureBookingColumnsExist();
 
         // Create booking via repository
-        $numberOfPassengers = (int)($input['number_of_passengers'] ?? 1);
+        $numberOfPassengers = ($bookingType === 'minicab') ? $seatCapacity : (int)($input['number_of_passengers'] ?? 1);
         
         // Ensure pickup_date is converted to UTC before storage
         $pickupDateForDB = $pickupDate;
@@ -314,11 +328,11 @@ if ($action === 'create') {
             'owner_id' => $vehicle['owner_id'],
             'booking_type' => $bookingType,
             'pickup_date' => $pickupDateForDB,
+            'pickup_time' => $pickupTime,
             'return_date' => $returnDate,
             'pickup_location' => $pickupLocation,
             'return_location' => $returnLocation,
             'total_days' => $totalDays,
-            'price_per_day' => $pricePerDay,
             'subtotal' => $subtotal,
             'discount_amount' => $discountAmount,
             'total_amount' => $totalAmount,
@@ -515,28 +529,6 @@ if ($action === 'update-status') {
         } elseif ($newStatus === 'completed' && $currentStatus === 'in_progress' && ($isOwner || $isAdmin)) {
             $allowed = true;
         } elseif ($newStatus === 'cancelled' && $currentStatus === 'pending' && ($isOwner || $isRenter || $isAdmin)) {
-            if ($isRenter && !$isAdmin) {
-                if (($booking['booking_type'] ?? '') === 'minicab') {
-                    try {
-                        $pickupAt = new DateTime((string)$booking['pickup_date']);
-                        $cutoff = new DateTime('now');
-                        $cutoff->add(new DateInterval('PT48H'));
-                        if ($pickupAt < $cutoff) {
-                            echo json_encode([
-                                'success' => false,
-                                'message' => 'Free cancellation is only available at least 48 hours before pickup time.'
-                            ]);
-                            exit;
-                        }
-                    } catch (Exception $e) {
-                        echo json_encode([
-                            'success' => false,
-                            'message' => 'Unable to verify pickup time for cancellation.'
-                        ]);
-                        exit;
-                    }
-                }
-            }
             $allowed = true;
         }
 
@@ -579,6 +571,12 @@ if ($action === 'update-status') {
                 $updatedVehicleStatus = 'available';
             } else {
                 $updatedVehicleStatus = $vehicleStatus;
+            }
+
+            // Pending minicab cancellations should not keep assigned vehicle info.
+            if (($booking['booking_type'] ?? '') === 'minicab' && $currentStatus === 'pending') {
+                $bookingRepo->unassignVehicleFromBooking($bookingId);
+                $vehicleId = null;
             }
         }
 

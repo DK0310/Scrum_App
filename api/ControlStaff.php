@@ -296,8 +296,8 @@ try {
 
         if ($requestedStatus === 'in_progress' && $currentStatus === 'pending') {
             try {
-                require_once __DIR__ . '/../lib/invoice_mpdf.php';
-                require_once __DIR__ . '/../lib/mailer.php';
+                require_once __DIR__ . '/../invoice/invoice_mpdf.php';
+                require_once __DIR__ . '/../invoice/mailer.php';
 
                 $invoiceData = $bookingRepo->getInvoiceData($bookingId);
                 if ($invoiceData && !empty($invoiceData['renter_email'])) {
@@ -346,7 +346,7 @@ try {
         exit;
     }
 
-    if ($action === 'delete_order') {
+    if ($action === 'reject_order') {
         $bookingId = trim((string)($bodyJson['booking_id'] ?? $_POST['booking_id'] ?? ''));
         if ($bookingId === '') {
             throw new Exception('Missing booking_id');
@@ -357,17 +357,25 @@ try {
             throw new Exception('Order not found');
         }
 
-        $ok = $bookingRepo->deleteBooking($bookingId);
-        if (!$ok) {
-            throw new Exception('Unable to delete order');
+        $currentStatus = control_normalize_booking_status((string)($booking['status'] ?? 'pending'));
+        if ($currentStatus !== 'pending') {
+            throw new Exception('Only pending orders can be rejected');
         }
+
+        $cancelledDbStatus = control_resolve_db_booking_status($pdo, 'cancelled');
+        $ok = $bookingRepo->updateStatus($bookingId, $cancelledDbStatus);
+        if (!$ok) {
+            throw new Exception('Unable to reject order');
+        }
+
+        $bookingRepo->unassignVehicleFromBooking($bookingId);
 
         $vehicleId = (string)($booking['vehicle_id'] ?? '');
         if ($vehicleId !== '') {
             $bookingRepo->markVehicleAvailable($vehicleId);
         }
 
-        echo json_encode(['success' => true, 'message' => 'Order deleted']);
+        echo json_encode(['success' => true, 'message' => 'Order rejected']);
         exit;
     }
 

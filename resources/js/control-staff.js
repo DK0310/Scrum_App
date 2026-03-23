@@ -152,6 +152,10 @@
             const nextActionHtml = nextAction
                 ? '<button class="ctrl-btn ctrl-btn-primary" data-role="advance-order" data-id="' + id + '" data-next-status="' + nextAction.nextStatus + '">' + escapeHtml(nextAction.label) + '</button>'
                 : '<button class="ctrl-btn ctrl-btn-muted" disabled>No further action</button>';
+            const canReject = status === 'pending';
+            const rejectBtnHtml = canReject
+                ? '<button class="ctrl-btn ctrl-btn-danger" data-role="reject-order" data-id="' + id + '">Reject</button>'
+                : '<button class="ctrl-btn ctrl-btn-muted" data-role="reject-order" data-id="' + id + '" disabled style="opacity:0.45;cursor:not-allowed;">Reject</button>';
 
             return '<tr>' +
                 '<td>' + id + '</td>' +
@@ -164,7 +168,7 @@
                         nextActionHtml +
                         '<div class="ctrl-order-actions">' +
                             '<button class="ctrl-btn ctrl-btn-muted" data-role="detail-order" data-id="' + id + '">View</button>' +
-                            '<button class="ctrl-btn ctrl-btn-danger" data-role="delete-order" data-id="' + id + '">Delete</button>' +
+                            rejectBtnHtml +
                         '</div>' +
                     '</div>' +
                 '</td>' +
@@ -182,13 +186,37 @@
             btn.addEventListener('click', async () => {
                 const id = btn.getAttribute('data-id');
                 const status = btn.getAttribute('data-next-status');
+                const btnText = btn.textContent.trim();
                 console.log('Advance order clicked - id:', id, 'next status:', status);
                 if (!id || !status) {
                     console.log('Missing id or status');
                     return;
                 }
 
+                // Check if already processing
+                if (btn.disabled) {
+                    return; // Prevent duplicate clicks
+                }
+
+                // Show confirmation alert with action-specific message
+                let confirmMessage = `Are you sure you want to ${btnText.toLowerCase()} this order?`;
+                if (status === 'in_progress') {
+                    confirmMessage = '⚠️ Start Trip Confirmation\n\n' +
+                        'Are you sure you want to start this trip?\n\n' +
+                        '📧 An invoice will be automatically sent to the customer.\n' +
+                        'Please ensure all trip details are correct before proceeding.';
+                }
+
+                if (!confirm(confirmMessage)) {
+                    return; // User cancelled
+                }
+
+                // Disable button to prevent duplicate submissions
                 btn.disabled = true;
+                const originalText = btn.textContent;
+                btn.textContent = 'Processing...';
+                btn.style.opacity = '0.6';
+
                 try {
                     console.log('Posting update_order_status:', { booking_id: id, status: status });
                     const data = await apiPost({ action: 'update_order_status', booking_id: id, status: status });
@@ -205,6 +233,8 @@
                     setOrderMsg('Error: ' + (err?.message || 'Unknown error'), true);
                     console.error('Advance order error:', err);
                     btn.disabled = false;
+                    btn.textContent = originalText;
+                    btn.style.opacity = '1';
                 }
             });
         });
@@ -225,23 +255,46 @@
             });
         });
 
-        Array.from(el.ordersTable.querySelectorAll('button[data-role="delete-order"]')).forEach((btn) => {
+        Array.from(el.ordersTable.querySelectorAll('button[data-role="reject-order"]')).forEach((btn) => {
             btn.addEventListener('click', async () => {
+                if (btn.disabled) return;
                 const id = btn.getAttribute('data-id');
                 if (!id) return;
-                if (!confirm('Delete this order permanently?')) return;
+                if (!confirm('Reject this pending order? The customer will see it as cancelled.')) return;
 
-                const data = await apiPost({ action: 'delete_order', booking_id: id });
+                const data = await apiPost({ action: 'reject_order', booking_id: id });
                 if (!data.success) {
-                    setOrderMsg(data.message || 'Delete failed', true);
+                    setOrderMsg(data.message || 'Reject failed', true);
                     return;
                 }
 
-                setOrderMsg('Order deleted.');
+                setOrderMsg('Order rejected.');
                 await loadOrders();
                 await loadVehicles();
             });
         });
+    }
+
+    function formatPickupDatetime(pickupDate, pickupTime) {
+        if (!pickupDate) return '-';
+        try {
+            // If pickup_time is available, combine date with the correct time
+            if (pickupTime) {
+                // Parse UTC datetime from database to get date only
+                const date = new Date(pickupDate + 'Z'); // Append Z to indicate UTC
+                const options = { year: 'numeric', month: 'short', day: 'numeric' };
+                const dateStr = date.toLocaleString('en-US', options); // e.g., "28 Mar 2026"
+                return dateStr + ', ' + pickupTime; // e.g., "28 Mar 2026, 10:00AM"
+            }
+            
+            // Fallback to original behavior if no pickup_time
+            const date = new Date(pickupDate + 'Z'); // Append Z to indicate UTC
+            // Format in user's local timezone (no specific timezone forced)
+            const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: undefined };
+            return date.toLocaleString('en-US', options);
+        } catch (e) {
+            return escapeHtml(pickupDate);
+        }
     }
 
     function openOrderDetailModal(order) {
@@ -254,9 +307,11 @@
         const vehicleText = canShowVehicle
             ? escapeHtml([order.brand, order.model, order.license_plate].filter(Boolean).join(' ') || '-')
             : 'Pending assignment';
-        const pickupText = escapeHtml((order.pickup_location || '-') + ' @ ' + (order.pickup_date || '-'));
+        const pickupLocation = escapeHtml(order.pickup_location || '-');
+        const pickupDateTime = formatPickupDatetime(order.pickup_date, order.pickup_time);
+        const pickupText = pickupLocation + ' @ ' + pickupDateTime;
         const destinationText = escapeHtml(order.return_location || '-');
-        const amountText = '$' + Number(order.total_amount || 0).toFixed(2);
+        const amountText = '£' + Number(order.total_amount || 0).toFixed(2);
 
         el.orderModalTitle.textContent = 'Order #' + (order.id || '');
         el.orderModalBody.innerHTML =

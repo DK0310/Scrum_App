@@ -62,6 +62,28 @@
             margin-bottom: 16px; transition: all 0.2s;
         }
         .order-card:hover { box-shadow: var(--shadow-md); }
+        .order-card.can-open { cursor: pointer; }
+        .order-card.can-open:hover { transform: translateY(-1px); }
+
+        .trip-vehicle-spotlight {
+            display: flex; align-items: center; gap: 12px;
+            background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+            border: 1px solid #67e8f9; border-radius: 14px;
+            padding: 12px 14px; margin-bottom: 14px;
+        }
+        .trip-vehicle-icon {
+            width: 42px; height: 42px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: #0f766e; color: #fff; font-size: 1.2rem; flex-shrink: 0;
+        }
+        .trip-vehicle-meta strong { color: #0f172a; font-size: 0.96rem; display: block; }
+        .trip-vehicle-meta span { color: #0f766e; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.02em; }
+        .trip-vehicle-waiting {
+            display: flex; align-items: center; gap: 10px;
+            background: #fffbeb; border: 1px dashed #f59e0b;
+            border-radius: 12px; padding: 10px 12px; margin-bottom: 14px;
+            color: #92400e; font-size: 0.84rem; font-weight: 600;
+        }
 
         .order-card-header {
             display: flex; align-items: center; justify-content: space-between;
@@ -116,6 +138,50 @@
             .order-card-body { grid-template-columns: 1fr 1fr; }
         }
     </style>
+
+    <div class="review-modal-overlay" id="tripDetailModalOverlay" style="display:none;">
+        <div class="review-modal" role="dialog" aria-modal="true" aria-labelledby="tripDetailTitle">
+            <div class="review-modal-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                <div style="text-align:left;">
+                    <h3 id="tripDetailTitle" style="margin:0 0 4px;color:var(--gray-900);">Trip Details</h3>
+                    <p style="margin:0;color:var(--gray-600);font-size:0.88rem;">Detail of your selected booking</p>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeTripDetailModal()" style="min-width:44px;padding:8px 12px;">✕</button>
+            </div>
+            <div class="review-modal-body" style="padding-top:18px;">
+                <div class="trip-vehicle-spotlight" id="tripVehicleSpotlight" style="display:none;">
+                    <div class="trip-vehicle-icon">🚘</div>
+                    <div class="trip-vehicle-meta">
+                        <strong id="tripVehicleName">Assigned Vehicle</strong>
+                        <span>License Plate: <span id="tripVehiclePlate">-</span></span>
+                    </div>
+                </div>
+                <div class="trip-vehicle-waiting" id="tripVehicleWaiting" style="display:none;">
+                    ⏳ Vehicle details will appear once your trip moves to In Progress.
+                </div>
+
+                <div class="order-card-body" style="padding:0;grid-template-columns:1fr 1fr;gap:14px;">
+                    <div class="order-detail-item"><div class="order-detail-label">Order ID</div><div class="order-detail-value" id="tripDetailOrderId">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Status</div><div class="order-detail-value" id="tripDetailStatus">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Booking Type</div><div class="order-detail-value" id="tripDetailBookingType">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Service Type</div><div class="order-detail-value" id="tripDetailServiceType">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Ride Tier</div><div class="order-detail-value" id="tripDetailRideTier">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Seat Capacity</div><div class="order-detail-value" id="tripDetailSeatCapacity">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Pick-up Date</div><div class="order-detail-value" id="tripDetailPickupDate">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Return Date</div><div class="order-detail-value" id="tripDetailReturnDate">-</div></div>
+                    <div class="order-detail-item" style="grid-column:1 / -1;"><div class="order-detail-label">Pick-up Location</div><div class="order-detail-value" id="tripDetailPickupLocation">-</div></div>
+                    <div class="order-detail-item" style="grid-column:1 / -1;"><div class="order-detail-label">Destination</div><div class="order-detail-value" id="tripDetailDestination">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Distance</div><div class="order-detail-value" id="tripDetailDistance">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Payment</div><div class="order-detail-value" id="tripDetailPaymentMethod">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Booked On</div><div class="order-detail-value" id="tripDetailBookedOn">-</div></div>
+                    <div class="order-detail-item"><div class="order-detail-label">Total</div><div class="order-detail-value" id="tripDetailTotalAmount">-</div></div>
+                </div>
+            </div>
+            <div class="review-modal-footer" style="padding-top:8px;justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeTripDetailModal()">Close</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/resources/js/orders.js"></script>
     

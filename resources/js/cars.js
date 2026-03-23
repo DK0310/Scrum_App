@@ -109,7 +109,7 @@
     
     if (rangeFill) rangeFill.style.width = pct + '%';
     if (priceLabel) {
-      priceLabel.textContent = val >= max ? '$0 – $500+' : '$0 – $' + val;
+      priceLabel.textContent = val >= max ? '£0 – £500+' : '£0 – £' + val;
     }
   }
 

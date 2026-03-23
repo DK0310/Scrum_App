@@ -81,6 +81,8 @@ function showFaceIdLogin() {
 
 let regSelectedRole = null;
 let regOtpResendTimer = 0;
+let regUsernameCheckTimer = null;
+let regUsernameRequestSeq = 0;
 
 function showRegisterModal() {
     document.getElementById('registerModalOverlay').style.display = 'flex';
@@ -104,6 +106,10 @@ function resetRegisterForm() {
     document.getElementById('regEmailError').style.display = 'none';
     document.getElementById('regPhoneError').style.display = 'none';
     document.getElementById('regDOBError').style.display = 'none';
+    const passError = document.getElementById('regPasswordError');
+    const confirmError = document.getElementById('regConfirmPasswordError');
+    if (passError) passError.style.display = 'none';
+    if (confirmError) confirmError.style.display = 'none';
     regSelectedRole = null;
     setDOBDateRange();
 }
@@ -173,22 +179,9 @@ function setDOBDateRange() {
     dobInput.min = minDateStr;
 }
 
-async function validateRegUsername() {
-    const username = document.getElementById('regUsername').value.trim();
+async function checkRegUsernameAvailability(username, requestId) {
     const errorDiv = document.getElementById('regUsernameError');
-    
-    if (!username) {
-        errorDiv.style.display = 'none';
-        return;
-    }
 
-    if (username.length < 3) {
-        errorDiv.textContent = 'Username must be at least 3 characters';
-        errorDiv.style.display = 'block';
-        return;
-    }
-
-    // Check if username exists
     try {
         const formData = new FormData();
         formData.append('action', 'check-username');
@@ -201,15 +194,87 @@ async function validateRegUsername() {
 
         const result = await response.json();
 
+        // Ignore stale responses while user keeps typing.
+        if (requestId !== regUsernameRequestSeq) {
+            return true;
+        }
+
         if (!result.success) {
             errorDiv.textContent = result.message || 'Username already taken';
             errorDiv.style.display = 'block';
-        } else {
-            errorDiv.style.display = 'none';
+            return false;
         }
+
+        errorDiv.style.display = 'none';
+        return true;
     } catch (error) {
         console.error('Username validation error:', error);
+        return false;
     }
+}
+
+async function validateRegUsername(immediate = false) {
+    const username = document.getElementById('regUsername').value.trim();
+    const errorDiv = document.getElementById('regUsernameError');
+    
+    if (!username) {
+        errorDiv.style.display = 'none';
+        return false;
+    }
+
+    if (username.length < 3) {
+        errorDiv.textContent = 'Username must be at least 3 characters';
+        errorDiv.style.display = 'block';
+        return false;
+    }
+
+    // For click Next, run DB check immediately.
+    if (immediate) {
+        regUsernameRequestSeq += 1;
+        return checkRegUsernameAvailability(username, regUsernameRequestSeq);
+    }
+
+    // Debounce DB calls while typing.
+    if (regUsernameCheckTimer) {
+        clearTimeout(regUsernameCheckTimer);
+    }
+    regUsernameCheckTimer = setTimeout(() => {
+        regUsernameRequestSeq += 1;
+        checkRegUsernameAvailability(username, regUsernameRequestSeq);
+    }, 300);
+
+    return true;
+}
+
+function validateRegPasswords() {
+    const password = document.getElementById('regPassword').value;
+    const confirmPassword = document.getElementById('regConfirmPassword').value;
+    const passError = document.getElementById('regPasswordError');
+    const confirmError = document.getElementById('regConfirmPasswordError');
+
+    if (passError) {
+        if (!password) {
+            passError.style.display = 'none';
+        } else if (password.length < 6) {
+            passError.textContent = 'Password must be at least 6 characters';
+            passError.style.display = 'block';
+        } else {
+            passError.style.display = 'none';
+        }
+    }
+
+    if (confirmError) {
+        if (!confirmPassword) {
+            confirmError.style.display = 'none';
+        } else if (password !== confirmPassword) {
+            confirmError.textContent = 'Passwords do not match';
+            confirmError.style.display = 'block';
+        } else {
+            confirmError.style.display = 'none';
+        }
+    }
+
+    return password.length >= 6 && confirmPassword.length > 0 && password === confirmPassword;
 }
 
 async function validateRegEmail() {
@@ -351,6 +416,12 @@ async function regGoToStep2() {
         return;
     }
 
+    const usernameAvailable = await validateRegUsername(true);
+    if (!usernameAvailable) {
+        showRegStatus('Username already taken. Please choose another one.', 'error', 1);
+        return;
+    }
+
     if (!email.includes('@')) {
         showRegStatus('Invalid email format', 'error', 1);
         return;
@@ -361,7 +432,7 @@ async function regGoToStep2() {
         return;
     }
 
-    if (password !== confirmPassword) {
+    if (!validateRegPasswords()) {
         showRegStatus('Passwords do not match', 'error', 1);
         return;
     }

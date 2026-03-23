@@ -99,10 +99,23 @@ function getVehicleImageUrls($pdo, $vehicleId) {
     $storage = new SupabaseStorage();
     $repo = new VehicleImageRepository($pdo);
     $rows = $repo->listByVehicleId((string)$vehicleId);
-    return array_map(function($row) use ($storage) {
-        // storage_path-only
-        return $storage->getPublicUrl($row['storage_path']);
-    }, $rows);
+
+    $urls = [];
+    foreach ($rows as $row) {
+        $storagePath = trim((string)($row['storage_path'] ?? ''));
+        if ($storagePath === '') {
+            continue;
+        }
+
+        try {
+            $urls[] = $storage->getPublicUrl($storagePath);
+        } catch (Throwable $e) {
+            // Skip broken image records and continue returning valid JSON response.
+            continue;
+        }
+    }
+
+    return $urls;
 }
 
 // Helper: get image IDs for a vehicle
@@ -135,22 +148,21 @@ if ($action === 'filter-options') {
 // ==========================================================
 if ($action === 'check-available-tiers') {
     $passengers = (int) ($input['passengers'] ?? 1);
+    $passengers = ($passengers >= 7) ? 7 : 4;
     
     try {
         // Get available vehicles grouped by service_tier
-        $query = "SELECT DISTINCT service_tier FROM vehicles WHERE status = 'available' AND service_tier IN ('eco', 'standard', 'luxury')";
+        $query = "SELECT DISTINCT service_tier FROM vehicles WHERE status = 'available' AND seats >= ? AND service_tier IN ('eco', 'standard', 'luxury', 'premium')";
         $stmt = $pdo->prepare($query);
-        $stmt->execute();
+        $stmt->execute([$passengers]);
         
         $availableTiers = [];
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $availableTiers[$row['service_tier']] = true;
-        }
-        
-        // Filter by passenger count
-        // Eco: max 4 passengers
-        if ($passengers > 4 && isset($availableTiers['eco'])) {
-            unset($availableTiers['eco']);
+            $tier = strtolower((string)$row['service_tier']);
+            if ($tier === 'premium') {
+                $tier = 'luxury';
+            }
+            $availableTiers[$tier] = true;
         }
         
         echo json_encode([
@@ -245,10 +257,11 @@ if ($action === 'list') {
         foreach ($vehicles as &$v) {
             $v['images'] = getVehicleImageUrls($pdo, $v['id']);
             $v['image_ids'] = getVehicleImageIds($pdo, $v['id']);
-            $v['features'] = $v['features'] ? trim($v['features'], '{}') : '';
-            $v['features'] = $v['features'] ? explode(',', str_replace('"', '', $v['features'])) : [];
-            $v['price_per_day'] = (float)$v['price_per_day'];
-            $v['avg_rating'] = (float)$v['avg_rating'];
+            $rawFeatures = $v['features'] ?? '';
+            $rawFeatures = is_string($rawFeatures) ? trim($rawFeatures, '{}') : '';
+            $v['features'] = $rawFeatures !== '' ? explode(',', str_replace('"', '', $rawFeatures)) : [];
+            $v['price_per_day'] = isset($v['price_per_day']) ? (float)$v['price_per_day'] : 0.0;
+            $v['avg_rating'] = isset($v['avg_rating']) ? (float)$v['avg_rating'] : 0.0;
             unset($v['thumbnail_id']);
         }
 
@@ -262,7 +275,7 @@ if ($action === 'list') {
             'limit' => $limit,
             'offset' => $offset
         ]);
-    } catch (PDOException $e) {
+    } catch (Throwable $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }
     exit;

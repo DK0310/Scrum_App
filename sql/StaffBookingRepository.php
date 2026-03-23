@@ -39,7 +39,7 @@ final class StaffBookingRepository
 
         try {
             // Verify vehicle exists and is available
-            $vehicleStmt = $this->pdo->prepare("SELECT owner_id, status, price_per_day FROM vehicles WHERE id = ? FOR UPDATE");
+            $vehicleStmt = $this->pdo->prepare("SELECT owner_id, status FROM vehicles WHERE id = ? FOR UPDATE");
             $vehicleStmt->execute([$vehicleId]);
             $vehicle = $vehicleStmt->fetch(PDO::FETCH_ASSOC);
             if (!$vehicle) {
@@ -73,14 +73,14 @@ final class StaffBookingRepository
                 INSERT INTO bookings (
                     renter_id, owner_id, vehicle_id, booking_type, status,
                     pickup_date, return_date, pickup_location, return_location,
-                    total_days, price_per_day, subtotal, discount_amount, total_amount,
+                    total_days, subtotal, discount_amount, total_amount,
                     special_requests, driver_requested, phone_customer_name,
                     phone_customer_phone, phone_customer_email, created_by_staff_id,
                     booking_ref, created_at, updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?,
                     ?, NOW(), NOW()
                 )
@@ -100,7 +100,6 @@ final class StaffBookingRepository
                 $data['pickup_location'],
                 $data['return_location'] ?? null,
                 $data['days'] ?? 1,
-                $vehicle['price_per_day'],
                 $data['subtotal'] ?? 0,
                 $data['discount_amount'] ?? 0,
                 $data['total_amount'] ?? 0,
@@ -296,7 +295,7 @@ final class StaffBookingRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT id, brand, model, license_plate, status, seats, 
-                   price_per_day, thumbnail_url, category
+                   thumbnail_url, category
             FROM vehicles
             ORDER BY brand ASC, model ASC
             LIMIT ?
