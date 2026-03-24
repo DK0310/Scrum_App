@@ -310,11 +310,11 @@
     if (filterState.fuel) params.set('fuel', filterState.fuel);
     if (filterState.max_price < 500) params.set('max_price', filterState.max_price);
     if (filterState.category) params.set('category', filterState.category);
-    window.location.href = 'cars.php?' + params.toString();
+    window.location.href = '/api/cars.php?' + params.toString();
   }
 
   function resetFilters() {
-    window.location.href = 'cars.php';
+    window.location.href = '/api/cars.php';
   }
 
   // ===== LOAD CARS FROM API =====

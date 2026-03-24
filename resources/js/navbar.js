@@ -69,9 +69,9 @@ document.addEventListener('keydown', function(e) {
             navSug.classList.remove('open');
             const q = navInput.value.trim();
             if (q) {
-                window.location.href = 'cars.php?search=' + encodeURIComponent(q);
+                window.location.href = '/api/cars.php?search=' + encodeURIComponent(q);
             } else {
-                window.location.href = 'cars.php';
+                window.location.href = '/api/cars.php';
             }
         }
     });
@@ -103,9 +103,9 @@ document.addEventListener('keydown', function(e) {
                         const text = this.dataset.text;
                         navSug.classList.remove('open');
                         if (type === 'brand') {
-                            window.location.href = 'cars.php?brand=' + encodeURIComponent(text);
+                            window.location.href = '/api/cars.php?brand=' + encodeURIComponent(text);
                         } else {
-                            window.location.href = 'cars.php?search=' + encodeURIComponent(text);
+                            window.location.href = '/api/cars.php?search=' + encodeURIComponent(text);
                         }
                     });
                 });

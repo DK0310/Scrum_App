@@ -25,7 +25,7 @@ $userRole = $_SESSION['role'] ?? 'user';
 // Only redirect driver to driver dashboard
 // Admin, Staff, User can all see the home page (index.php)
 if ($isLoggedIn && $userRole === 'driver') {
-    header('Location: driver.php');
+    header('Location: /api/driver.php');
     exit;
 }
 
