@@ -160,7 +160,7 @@
                     ⏳ Vehicle details will appear once your trip moves to In Progress.
                 </div>
 
-                <div class="order-card-body" style="padding:0;grid-template-columns:1fr 1fr;gap:14px;">
+                <div class="order-card-body trip-detail-grid" style="padding:0;gap:14px;">
                     <div class="order-detail-item"><div class="order-detail-label">Order ID</div><div class="order-detail-value" id="tripDetailOrderId">-</div></div>
                     <div class="order-detail-item"><div class="order-detail-label">Status</div><div class="order-detail-value" id="tripDetailStatus">-</div></div>
                     <div class="order-detail-item"><div class="order-detail-label">Booking Type</div><div class="order-detail-value" id="tripDetailBookingType">-</div></div>
@@ -222,6 +222,55 @@
             color: #f59e0b; transform: scale(1.15);
         }
         .review-star-btn:hover { text-shadow: 0 0 12px rgba(245,158,11,0.4); }
+
+        #tripDetailModalOverlay {
+            padding: 12px;
+            align-items: center;
+        }
+        #tripDetailModalOverlay .review-modal {
+            width: min(96vw, 680px);
+            max-width: 680px;
+            max-height: calc(100vh - 24px);
+            display: flex;
+            flex-direction: column;
+        }
+        #tripDetailModalOverlay .review-modal-body {
+            overflow-y: auto;
+            max-height: calc(100vh - 220px);
+        }
+        .trip-detail-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .trip-detail-grid .order-detail-value {
+            word-break: break-word;
+        }
+
+        @media (max-width: 768px) {
+            #tripDetailModalOverlay {
+                padding: 8px;
+                align-items: flex-end;
+            }
+            #tripDetailModalOverlay .review-modal {
+                width: 100%;
+                max-width: none;
+                max-height: calc(100vh - 12px);
+                border-radius: 16px 16px 0 0;
+            }
+            #tripDetailModalOverlay .review-modal-header {
+                padding: 18px 16px 12px;
+            }
+            #tripDetailModalOverlay .review-modal-body {
+                padding: 16px;
+                max-height: calc(100vh - 180px);
+            }
+            #tripDetailModalOverlay .review-modal-footer {
+                padding: 10px 16px 16px;
+            }
+            .trip-detail-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+        }
     </style>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>

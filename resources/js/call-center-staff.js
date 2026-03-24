@@ -1,9 +1,14 @@
 (function () {
     const API = '/api/CallCenterStaff.php';
+    const UK_DEFAULT_CENTER = { lat: 51.5074, lon: -0.1278 }; // London
+    const MIN_PICKUP_LEAD_MINUTES = 1;
+    const TIER_ORDER = ['eco', 'standard', 'premium'];
+    const SEAT_ORDER = [4, 7];
 
     let searchTimer = null;
     let autocompleteTimers = {};
     let selectedAddresses = { pickup: null, return: null };
+    let availabilityMap = {};
     let pickupMapObj = null;
     let returnMapObj = null;
     let pickupMarker = null;
@@ -26,7 +31,10 @@
         specialRequests: document.getElementById('ccSpecialRequests'),
         formStatus: document.getElementById('ccFormStatus'),
         requestsTable: document.getElementById('ccRequestsTable'),
-        resetBtn: document.getElementById('ccResetBtn')
+        resetBtn: document.getElementById('ccResetBtn'),
+        pickupDateHint: document.getElementById('ccPickupDateHint'),
+        rideTierHint: document.getElementById('ccRideTierHint'),
+        seatCapacityHint: document.getElementById('ccSeatCapacityHint')
     };
 
     function setFormStatus(text, isError) {
@@ -69,9 +77,154 @@
     function resetForm() {
         el.customerId.value = '';
         el.form.reset();
+        if (el.rideTier) el.rideTier.value = '';
         setFormStatus('');
         hideCustomerResults();
         selectedAddresses = { pickup: null, return: null };
+        applyAvailabilityToOptions();
+        validatePickupDateTimeRealtime();
+    }
+
+    function normalizeTier(tier) {
+        const value = String(tier || '').trim().toLowerCase();
+        if (value === 'luxury') return 'premium';
+        return value;
+    }
+
+    function normalizeSeat(seat) {
+        const n = Number(seat);
+        if (n > 4) return 7;
+        return 4;
+    }
+
+    function inferTier(vehicle) {
+        const explicitTier = normalizeTier(
+            vehicle.ride_tier || vehicle.vehicle_tier || vehicle.tier || vehicle.service_tier || ''
+        );
+        if (TIER_ORDER.includes(explicitTier)) {
+            return explicitTier;
+        }
+
+        const categoryTier = normalizeTier(vehicle.category || '');
+        if (TIER_ORDER.includes(categoryTier)) {
+            return categoryTier;
+        }
+
+        const price = Number(vehicle.price_per_day || 0);
+        if (price > 100) return 'premium';
+        if (price > 40) return 'standard';
+        return 'eco';
+    }
+
+    function buildAvailabilityMap(vehicles) {
+        const map = {
+            eco: { 4: 0, 7: 0 },
+            standard: { 4: 0, 7: 0 },
+            premium: { 4: 0, 7: 0 }
+        };
+
+        (vehicles || []).forEach((v) => {
+            const status = String(v.status || '').toLowerCase();
+            if (status !== 'available') return;
+
+            const seats = normalizeSeat(v.seats);
+            const tier = inferTier(v);
+
+            map[tier][seats] = (map[tier][seats] || 0) + 1;
+        });
+
+        return map;
+    }
+
+    function setOptionAvailability(selectEl, value, available, count) {
+        if (!selectEl) return;
+        const option = Array.from(selectEl.options).find((o) => String(o.value) === String(value));
+        if (!option) return;
+        option.disabled = !available;
+        option.textContent = !available
+            ? option.textContent.replace(/\s*\(.*\)$/, '') + ' (Unavailable)'
+            : option.textContent.replace(/\s*\(.*\)$/, '') + (typeof count === 'number' ? ' (' + count + ')' : '');
+    }
+
+    function applyAvailabilityToOptions() {
+        const map = availabilityMap;
+        if (!map || !el.rideTier || !el.seatCapacity) return;
+
+        TIER_ORDER.forEach((tier) => {
+            const tierCount = (map[tier][4] || 0) + (map[tier][7] || 0);
+            setOptionAvailability(el.rideTier, tier, tierCount > 0, tierCount);
+        });
+
+        const selectedTier = normalizeTier(el.rideTier.value || '');
+
+        // Seat capacity must be selected only after ride tier is selected.
+        if (!selectedTier) {
+            el.seatCapacity.disabled = true;
+            SEAT_ORDER.forEach((seat) => {
+                const count = TIER_ORDER.reduce((sum, t) => sum + (map[t][seat] || 0), 0);
+                setOptionAvailability(el.seatCapacity, seat, false, count);
+            });
+
+            if (el.rideTierHint) {
+                el.rideTierHint.textContent = 'Please select a ride tier to view seat availability.';
+                el.rideTierHint.className = 'cc-help';
+            }
+
+            if (el.seatCapacityHint) {
+                el.seatCapacityHint.textContent = 'Please select ride tier first.';
+                el.seatCapacityHint.className = 'cc-help';
+            }
+
+            return;
+        }
+
+        el.seatCapacity.disabled = false;
+        SEAT_ORDER.forEach((seat) => {
+            const count = selectedTier && map[selectedTier] ? (map[selectedTier][seat] || 0) : 0;
+            setOptionAvailability(el.seatCapacity, seat, count > 0, count);
+        });
+
+        // Ensure current values are valid after availability update
+        const selectedSeatOption = el.seatCapacity.options[el.seatCapacity.selectedIndex];
+        if (selectedSeatOption && selectedSeatOption.disabled) {
+            const firstEnabledSeat = Array.from(el.seatCapacity.options).find((o) => !o.disabled && o.value);
+            el.seatCapacity.value = firstEnabledSeat ? firstEnabledSeat.value : '';
+        }
+
+        const tierValue = normalizeTier(el.rideTier.value || '');
+        const tierCount = tierValue && map[tierValue] ? ((map[tierValue][4] || 0) + (map[tierValue][7] || 0)) : 0;
+        if (el.rideTierHint) {
+            if (tierCount > 0) {
+                el.rideTierHint.textContent = 'Selected tier has ' + tierCount + ' available vehicle(s).';
+                el.rideTierHint.className = 'cc-help cc-help-ok';
+            } else {
+                el.rideTierHint.textContent = 'Please choose a tier that is currently available.';
+                el.rideTierHint.className = 'cc-help cc-help-error';
+            }
+        }
+
+        const seat = Number(el.seatCapacity.value || 0);
+        const seatCount = tierValue && map[tierValue] ? (map[tierValue][seat] || 0) : 0;
+        if (el.seatCapacityHint) {
+            if (seatCount > 0) {
+                el.seatCapacityHint.textContent = 'Selected seat capacity has ' + seatCount + ' available vehicle(s) for this tier.';
+                el.seatCapacityHint.className = 'cc-help cc-help-ok';
+            } else {
+                el.seatCapacityHint.textContent = 'Selected seat capacity is unavailable for this tier.';
+                el.seatCapacityHint.className = 'cc-help cc-help-error';
+            }
+        }
+    }
+
+    async function loadAvailabilityOptions() {
+        try {
+            const data = await apiGet({ action: 'get_vehicles' });
+            if (!data.success) return;
+            availabilityMap = buildAvailabilityMap(data.vehicles || []);
+            applyAvailabilityToOptions();
+        } catch (err) {
+            // Keep form usable with current static options if availability fetch fails.
+        }
     }
 
     function hideCustomerResults() {
@@ -219,6 +372,19 @@
 
     async function submitRequest(event) {
         event.preventDefault();
+
+        if (!validatePickupDateTimeRealtime()) {
+            setFormStatus('Please choose a valid pickup date & time.', true);
+            return;
+        }
+
+        const selectedTier = normalizeTier(el.rideTier.value || '');
+        const selectedSeat = normalizeSeat(el.seatCapacity ? el.seatCapacity.value : 4);
+        if (!availabilityMap[selectedTier] || (availabilityMap[selectedTier][selectedSeat] || 0) <= 0) {
+            setFormStatus('Selected ride tier and seat capacity are not available. Please choose another option.', true);
+            return;
+        }
+
         setFormStatus('Submitting request...');
 
         const payload = {
@@ -227,8 +393,8 @@
             customer_name: el.customerName.value,
             customer_phone: el.customerPhone.value,
             customer_email: el.customerEmail.value,
-            ride_tier: el.rideTier.value,
-            seat_capacity: el.seatCapacity ? Number(el.seatCapacity.value || 4) : 4,
+            ride_tier: selectedTier,
+            seat_capacity: selectedSeat,
             pickup_date: el.pickupDate.value,
             pickup_location: el.pickupLocation.value,
             return_location: el.returnLocation.value,
@@ -268,7 +434,7 @@
 
     async function searchNominatim(query, dropdown, input, type) {
         try {
-            const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&addressdetails=1', {
+            const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&addressdetails=1&countrycodes=gb&viewbox=-8.9,60.9,1.8,49.8&bounded=1', {
                 headers: { 'Accept-Language': 'en' }
             });
             const results = await res.json();
@@ -367,7 +533,7 @@
             }
 
             const saved = selectedAddresses[type];
-            const center = saved ? [saved.lat, saved.lon] : [10.8231, 106.6297];
+            const center = saved ? [saved.lat, saved.lon] : [UK_DEFAULT_CENTER.lat, UK_DEFAULT_CENTER.lon];
             const zoom = saved ? 16 : 13;
 
             const map = L.map(mapDiv).setView(center, zoom);
@@ -458,6 +624,20 @@
             });
         }
 
+        if (el.rideTier) {
+            el.rideTier.addEventListener('change', applyAvailabilityToOptions);
+        }
+
+        if (el.seatCapacity) {
+            el.seatCapacity.addEventListener('change', applyAvailabilityToOptions);
+        }
+
+        if (el.pickupDate) {
+            el.pickupDate.addEventListener('input', validatePickupDateTimeRealtime);
+            el.pickupDate.addEventListener('change', validatePickupDateTimeRealtime);
+            el.pickupDate.addEventListener('blur', validatePickupDateTimeRealtime);
+        }
+
         document.addEventListener('click', function (e) {
             if (!el.results) return;
             if (!el.results.contains(e.target) && e.target !== el.search) {
@@ -468,7 +648,7 @@
 
     function initPickupMinDateTime() {
         const dt = new Date();
-        dt.setMinutes(dt.getMinutes() + 30);
+        dt.setMinutes(dt.getMinutes() + MIN_PICKUP_LEAD_MINUTES);
         const yyyy = dt.getFullYear();
         const mm = String(dt.getMonth() + 1).padStart(2, '0');
         const dd = String(dt.getDate()).padStart(2, '0');
@@ -477,10 +657,49 @@
         el.pickupDate.min = yyyy + '-' + mm + '-' + dd + 'T' + hh + ':' + mi;
     }
 
+    function validatePickupDateTimeRealtime() {
+        if (!el.pickupDate) return true;
+
+        // Refresh min constraint each time for true realtime validation.
+        initPickupMinDateTime();
+
+        const value = el.pickupDate.value;
+        if (!value) {
+            el.pickupDate.setCustomValidity('Pickup date & time is required.');
+            if (el.pickupDateHint) {
+                el.pickupDateHint.textContent = 'Pickup date & time is required.';
+                el.pickupDateHint.className = 'cc-help cc-help-error';
+            }
+            return false;
+        }
+
+        const selected = new Date(value);
+        const minAllowed = new Date();
+        minAllowed.setMinutes(minAllowed.getMinutes() + MIN_PICKUP_LEAD_MINUTES);
+
+        if (Number.isNaN(selected.getTime()) || selected.getTime() < minAllowed.getTime()) {
+            el.pickupDate.setCustomValidity('Pickup must be at least 1 minute from now.');
+            if (el.pickupDateHint) {
+                el.pickupDateHint.textContent = 'Invalid time: pickup must be at least 1 minute from now.';
+                el.pickupDateHint.className = 'cc-help cc-help-error';
+            }
+            return false;
+        }
+
+        el.pickupDate.setCustomValidity('');
+        if (el.pickupDateHint) {
+            el.pickupDateHint.textContent = 'Pickup time is valid.';
+            el.pickupDateHint.className = 'cc-help cc-help-ok';
+        }
+        return true;
+    }
+
     async function init() {
         bindEvents();
         initLeafletAutocomplete();
         initPickupMinDateTime();
+        validatePickupDateTimeRealtime();
+        await loadAvailabilityOptions();
         await loadRequests();
     }
 

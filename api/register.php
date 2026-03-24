@@ -52,6 +52,13 @@ try {
             exit;
         }
 
+        $phoneDigits = preg_replace('/\D/', '', $phone);
+        if (strlen($phoneDigits) < 10) {
+            $response['message'] = 'Phone number must have at least 10 digits';
+            echo json_encode($response);
+            exit;
+        }
+
         if (empty($dob) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
             $response['message'] = 'Date of birth is required';
             echo json_encode($response);

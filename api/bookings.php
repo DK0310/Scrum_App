@@ -378,6 +378,7 @@ if ($action === 'create') {
 
             $paypalOrder = $paypalGateway->createOrder((float)$totalAmount, 'GBP', (string)$booking['id'], $returnUrl, $cancelUrl);
             if (empty($paypalOrder['success'])) {
+                $bookingRepo->removeUnpaidPaypalBooking((string)$booking['id'], (string)$renterId);
                 echo json_encode([
                     'success' => false,
                     'message' => $paypalOrder['message'] ?? 'Unable to initialize PayPal checkout.'
@@ -571,9 +572,14 @@ if ($action === 'paypal-cancel') {
             'stage' => 'cancel',
             'cancelled_at' => gmdate('c'),
         ]);
+
+        $bookingId = (string)($payment['booking_id'] ?? '');
+        if ($bookingId !== '') {
+            $bookingRepo->removeUnpaidPaypalBooking($bookingId, (string)($_SESSION['user_id'] ?? ''));
+        }
     }
 
-    echo json_encode(['success' => true, 'message' => 'PayPal payment was cancelled.']);
+    echo json_encode(['success' => true, 'message' => 'PayPal payment was cancelled and the pending order was removed.']);
     exit;
 }
 

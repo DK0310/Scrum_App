@@ -139,8 +139,11 @@ try {
         }
 
         $rideTier = strtolower(trim((string)($payload['ride_tier'] ?? '')));
-        if (!in_array($rideTier, ['eco', 'standard', 'luxury'], true)) {
-            throw new Exception('Invalid ride tier. Use eco, standard, or luxury.');
+        if ($rideTier === 'luxury') {
+            $rideTier = 'premium';
+        }
+        if (!in_array($rideTier, ['eco', 'standard', 'premium'], true)) {
+            throw new Exception('Invalid ride tier. Use eco, standard, or premium.');
         }
 
         $seatCapacity = (int)($payload['seat_capacity'] ?? 4);
@@ -175,8 +178,8 @@ try {
 
         // Phone booking rates in £/mile by seat capacity + £2.00 booking fee
         $tierRates = [
-            4 => ['eco' => 2.50, 'standard' => 3.00, 'luxury' => 4.00],
-            7 => ['eco' => 3.00, 'standard' => 3.50, 'luxury' => 5.00],
+            4 => ['eco' => 2.50, 'standard' => 3.00, 'premium' => 4.00],
+            7 => ['eco' => 3.00, 'standard' => 3.50, 'premium' => 5.00],
         ];
         $bookingFee = 2.00;
         $ratePerMile = $tierRates[$seatCapacity][$rideTier] ?? null;

@@ -7,13 +7,13 @@
         <div style="padding: 40px;">
             <!-- Progress Indicator -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; gap: 10px;">
-                <div class="step-dot active" data-step="1" style="width: 40px; height: 40px; border-radius: 50%; background: #0f766e; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer;" onclick="regGoToStep(1)">1</div>
+                <div class="step-dot active" data-step="1" aria-disabled="true" style="width: 40px; height: 40px; border-radius: 50%; background: #0f766e; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: default;">1</div>
                 <div style="flex: 1; height: 2px; background: #ddd;"></div>
-                <div class="step-dot" data-step="2" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer;" onclick="regGoToStep(2)">2</div>
+                <div class="step-dot" data-step="2" aria-disabled="true" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: default;">2</div>
                 <div style="flex: 1; height: 2px; background: #ddd;"></div>
-                <div class="step-dot" data-step="3" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer;" onclick="regGoToStep(3)">3</div>
+                <div class="step-dot" data-step="3" aria-disabled="true" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: default;">3</div>
                 <div style="flex: 1; height: 2px; background: #ddd;"></div>
-                <div class="step-dot" data-step="4" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600;">4</div>
+                <div class="step-dot" data-step="4" aria-disabled="true" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: default;">4</div>
             </div>
 
             <!-- ===== STEP 1: PERSONAL INFO ===== -->
@@ -277,6 +277,11 @@
     .otp-input:focus {
         border-color: #0f766e;
         outline: none;
+    }
+
+    .step-dot {
+        pointer-events: none;
+        user-select: none;
     }
 
     @keyframes fadeIn {

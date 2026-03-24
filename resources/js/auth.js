@@ -427,6 +427,12 @@ async function regGoToStep2() {
         return;
     }
 
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+        showRegStatus('Phone number must have at least 10 digits', 'error', 1);
+        return;
+    }
+
     if (password.length < 6) {
         showRegStatus('Password must be at least 6 characters', 'error', 1);
         return;

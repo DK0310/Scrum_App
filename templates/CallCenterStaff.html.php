@@ -31,6 +31,9 @@
     .cc-in-progress { background: #dbeafe; color: #1d4ed8; }
     .cc-done { background: #dcfce7; color: #166534; }
     .cc-cancelled { background: #fee2e2; color: #991b1b; }
+    .cc-help { display: block; margin-top: 6px; font-size: 0.78rem; color: #64748b; }
+    .cc-help-error { color: #b91c1c; }
+    .cc-help-ok { color: #166534; }
 
     .location-input-wrapper { display: flex; gap: 8px; align-items: center; position: relative; }
     .location-input-wrapper .cc-input { flex: 1; }
@@ -119,8 +122,9 @@
                             <option value="">Select tier</option>
                             <option value="eco">Eco</option>
                             <option value="standard">Standard</option>
-                            <option value="luxury">Luxury</option>
+                            <option value="premium">Premium</option>
                         </select>
+                        <small id="ccRideTierHint" class="cc-help">Checking available ride tiers...</small>
                     </div>
                     <div>
                         <label>Seat Capacity *</label>
@@ -128,10 +132,12 @@
                             <option value="4">4 seats</option>
                             <option value="7">7 seats</option>
                         </select>
+                        <small id="ccSeatCapacityHint" class="cc-help">Choose seat capacity based on available fleet.</small>
                     </div>
                     <div>
                         <label>Pickup Date & Time *</label>
                         <input class="cc-input" id="ccPickupDate" type="datetime-local" required>
+                        <small id="ccPickupDateHint" class="cc-help">Pickup must be at least 30 minutes from now.</small>
                     </div>
                     <div>
                         <label>Pickup Location *</label>
@@ -180,9 +186,7 @@
                         <label>Note</label>
                         <textarea class="cc-textarea" id="ccSpecialRequests"></textarea>
                     </div>
-                    <div class="full" style="font-size:0.82rem;color:#64748b;line-height:1.5;">
-                        Phone booking rates: 4 seats (Eco £2.50, Standard £3.00, Luxury £4.00 per mile) · 7 seats (Eco £3.00, Standard £3.50, Luxury £5.00 per mile) + £2.00 booking fee.
-                    </div>
+                    
                 </div>
 
                 <div class="cc-actions">

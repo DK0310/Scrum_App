@@ -770,6 +770,82 @@ final class BookingRepository
     }
 
     /**
+     * Remove an unpaid PayPal booking after checkout cancellation.
+     * Only allows deleting renter-owned, pending bookings with non-paid PayPal payment state.
+     */
+    public function removeUnpaidPaypalBooking(string $bookingId, string $userId): bool
+    {
+        try {
+            $this->pdo->beginTransaction();
+
+            $stmt = $this->pdo->prepare("SELECT id, status, renter_id FROM bookings WHERE id = ? FOR UPDATE");
+            $stmt->execute([$bookingId]);
+            $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$booking) {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            if ((string)($booking['renter_id'] ?? '') !== $userId) {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            if ((string)($booking['status'] ?? '') !== 'pending') {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            $stmt = $this->pdo->prepare("SELECT id, method, status FROM payments WHERE booking_id = ? FOR UPDATE");
+            $stmt->execute([$bookingId]);
+            $payment = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$payment || (string)($payment['method'] ?? '') !== 'paypal') {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            if ((string)($payment['status'] ?? '') === 'paid') {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            try {
+                $stmt = $this->pdo->prepare("DELETE FROM active_trips WHERE booking_id = ?");
+                $stmt->execute([$bookingId]);
+            } catch (Throwable $e) {
+                // Optional table in some environments.
+            }
+
+            try {
+                $stmt = $this->pdo->prepare("DELETE FROM driver_notifications WHERE booking_id = ?");
+                $stmt->execute([$bookingId]);
+            } catch (Throwable $e) {
+                // Optional table in some environments.
+            }
+
+            $stmt = $this->pdo->prepare("DELETE FROM payments WHERE booking_id = ?");
+            $stmt->execute([$bookingId]);
+
+            $stmt = $this->pdo->prepare("DELETE FROM bookings WHERE id = ?");
+            $stmt->execute([$bookingId]);
+
+            if ($stmt->rowCount() < 1) {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            $this->pdo->commit();
+            return true;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            return false;
+        }
+    }
+
+    /**
      * Get active drivers for minicab
      * @return array<int,array<string,mixed>>
      */
