@@ -487,7 +487,7 @@ final class BookingRepository
      */
     public function markPaymentAsPaid(string $bookingId): bool
     {
-        $stmt = $this->pdo->prepare("UPDATE payments SET status = 'paid'::payment_status WHERE booking_id = ?");
+        $stmt = $this->pdo->prepare("UPDATE payments SET status = 'paid'::payment_status, paid_at = NOW() WHERE booking_id = ?");
         return $stmt->execute([$bookingId]) && $stmt->rowCount() > 0;
     }
 
@@ -691,6 +691,82 @@ final class BookingRepository
             VALUES (?, ?, ?, ?, 'pending')
         ");
         return $stmt->execute([$bookingId, $userId, $amount, $method]);
+    }
+
+    /**
+     * Persist gateway transaction data for an existing booking payment row
+     */
+    public function attachPaymentTransaction(string $bookingId, string $transactionId, array $paymentDetails = []): bool
+    {
+        $detailsJson = json_encode($paymentDetails);
+        $stmt = $this->pdo->prepare("
+            UPDATE payments
+            SET transaction_id = ?, payment_details = ?::jsonb
+            WHERE booking_id = ?
+        ");
+        return $stmt->execute([$transactionId, $detailsJson ?: '{}', $bookingId]) && $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Load payment row by PayPal order/transaction ID
+     * @return array<string,mixed>|null
+     */
+    public function getPaymentByTransactionId(string $transactionId): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM payments WHERE transaction_id = ? LIMIT 1");
+        $stmt->execute([$transactionId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Load payment row by booking ID
+     * @return array<string,mixed>|null
+     */
+    public function getPaymentByBookingId(string $bookingId): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT * FROM payments WHERE booking_id = ? LIMIT 1");
+        $stmt->execute([$bookingId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Mark payment as paid/failed and optionally persist gateway response
+     */
+    public function updatePaymentByTransactionId(string $transactionId, string $status, array $paymentDetails = [], bool $setPaidAt = false): bool
+    {
+        if (!in_array($status, ['pending', 'paid', 'refunded', 'failed'], true)) {
+            return false;
+        }
+
+        $detailsJson = json_encode($paymentDetails);
+        $sql = "UPDATE payments SET status = ?::payment_status, payment_details = ?::jsonb";
+        if ($setPaidAt) {
+            $sql .= ", paid_at = NOW()";
+        }
+        $sql .= " WHERE transaction_id = ?";
+
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute([$status, $detailsJson ?: '{}', $transactionId]) && $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Update payment by booking ID and optionally persist gateway response.
+     */
+    public function updatePaymentByBookingId(string $bookingId, string $status, array $paymentDetails = [], bool $setPaidAt = false): bool
+    {
+        if (!in_array($status, ['pending', 'paid', 'refunded', 'failed'], true)) {
+            return false;
+        }
+
+        $detailsJson = json_encode($paymentDetails);
+        $sql = "UPDATE payments SET status = ?::payment_status, payment_details = ?::jsonb";
+        if ($setPaidAt) {
+            $sql .= ", paid_at = NOW()";
+        }
+        $sql .= " WHERE booking_id = ?";
+
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute([$status, $detailsJson ?: '{}', $bookingId]) && $stmt->rowCount() > 0;
     }
 
     /**

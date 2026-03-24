@@ -63,6 +63,7 @@ require_once __DIR__ . '/../sql/PromotionRepository.php';
 require_once __DIR__ . '/../sql/VehicleRepository.php';
 require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 require_once __DIR__ . '/../sql/UserRepository.php';
+require_once __DIR__ . '/../lib/payments/PayPalGateway.php';
 
 // Initialize repositories
 $bookingRepo = new BookingRepository($pdo);
@@ -70,6 +71,7 @@ $promotionRepo = new PromotionRepository($pdo);
 $vehicleRepo = new VehicleRepository($pdo);
 $vehicleImageRepo = new VehicleImageRepository($pdo);
 $userRepo = new UserRepository($pdo);
+$paypalGateway = new PayPalGateway();
 
 // Include notification helper functions
 require_once __DIR__ . '/notification-helpers.php';
@@ -80,6 +82,12 @@ function requireAuth() {
         echo json_encode(['success' => false, 'message' => 'Authentication required.', 'require_login' => true]);
         exit;
     }
+}
+
+function getAppBaseUrl(): string {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost:8000';
+    return $scheme . '://' . $host;
 }
 
 // ==========================================================
@@ -362,6 +370,39 @@ if ($action === 'create') {
         // Create payment record
         $bookingRepo->createPayment($booking['id'], $renterId, $totalAmount, $paymentMethod);
 
+        $paypalMeta = null;
+        if ($paymentMethod === 'paypal') {
+            $baseUrl = getAppBaseUrl();
+            $returnUrl = $baseUrl . '/api/bookings.php?paypal=return&booking_id=' . urlencode((string)$booking['id']);
+            $cancelUrl = $baseUrl . '/api/bookings.php?paypal=cancel&booking_id=' . urlencode((string)$booking['id']);
+
+            $paypalOrder = $paypalGateway->createOrder((float)$totalAmount, 'GBP', (string)$booking['id'], $returnUrl, $cancelUrl);
+            if (empty($paypalOrder['success'])) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => $paypalOrder['message'] ?? 'Unable to initialize PayPal checkout.'
+                ]);
+                exit;
+            }
+
+            $bookingRepo->attachPaymentTransaction(
+                (string)$booking['id'],
+                (string)$paypalOrder['order_id'],
+                [
+                    'provider' => 'paypal',
+                    'stage' => 'create_order',
+                    'response' => $paypalOrder['raw'] ?? [],
+                    'mock' => !empty($paypalOrder['mock']),
+                ]
+            );
+
+            $paypalMeta = [
+                'order_id' => $paypalOrder['order_id'],
+                'approval_url' => $paypalOrder['approval_url'],
+                'mock' => !empty($paypalOrder['mock']),
+            ];
+        }
+
         // --- Notifications ---
         $vehicleName = ($vehicle ? $vehicle['brand'] . ' ' . $vehicle['model'] : 'Vehicle');
 
@@ -414,11 +455,125 @@ if ($action === 'create') {
                 'vehicle_name' => ($bookingType === 'minicab') ? null : $vehicleName,
                 'ride_tier' => $rideTier,
                 'service_type' => ($bookingType === 'minicab') ? $serviceType : null
-            ]
+            ],
+            'paypal' => $paypalMeta
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Payment initialization failed: ' . $e->getMessage()]);
     }
+    exit;
+}
+
+if ($action === 'paypal-capture') {
+    requireAuth();
+
+    $orderId = trim((string)($input['order_id'] ?? ''));
+    $payerId = trim((string)($input['payer_id'] ?? ''));
+    if ($orderId === '') {
+        echo json_encode(['success' => false, 'message' => 'PayPal order ID is required.']);
+        exit;
+    }
+
+    $payment = $bookingRepo->getPaymentByTransactionId($orderId);
+    if (!$payment) {
+        echo json_encode(['success' => false, 'message' => 'Payment record not found for this PayPal order.']);
+        exit;
+    }
+
+    if ((string)$payment['user_id'] !== (string)($_SESSION['user_id'] ?? '')) {
+        echo json_encode(['success' => false, 'message' => 'You are not allowed to capture this payment.']);
+        exit;
+    }
+
+    if ((string)$payment['status'] === 'paid') {
+        $bookingData = $bookingRepo->getBookingWithUserAndDriver((string)$payment['booking_id']);
+        echo json_encode([
+            'success' => true,
+            'message' => 'Payment already captured.',
+            'booking_id' => $payment['booking_id'],
+            'booking' => [
+                'booking_type' => $bookingData['booking_type'] ?? 'minicab',
+                'total_days' => (int)($bookingData['total_days'] ?? 1),
+                'subtotal' => (float)($bookingData['subtotal'] ?? $payment['amount'] ?? 0),
+                'discount' => (float)($bookingData['discount_amount'] ?? 0),
+                'total' => (float)($bookingData['total_amount'] ?? $payment['amount'] ?? 0),
+                'promo_applied' => $bookingData['promo_code'] ?? null,
+                'payment_method' => $payment['method'] ?? 'paypal',
+                'distance_km' => isset($bookingData['distance_km']) ? (float)$bookingData['distance_km'] : null,
+                'ride_tier' => $bookingData['ride_tier'] ?? null,
+            ],
+        ]);
+        exit;
+    }
+
+    try {
+        $capture = $paypalGateway->captureOrder($orderId);
+        if (empty($capture['success'])) {
+            $bookingRepo->updatePaymentByTransactionId($orderId, 'failed', [
+                'provider' => 'paypal',
+                'stage' => 'capture',
+                'payer_id' => $payerId,
+                'response' => $capture['raw'] ?? [],
+                'error' => $capture['message'] ?? 'capture_failed',
+            ]);
+            echo json_encode(['success' => false, 'message' => $capture['message'] ?? 'PayPal capture failed.']);
+            exit;
+        }
+
+        $bookingRepo->updatePaymentByTransactionId($orderId, 'paid', [
+            'provider' => 'paypal',
+            'stage' => 'capture',
+            'payer_id' => $payerId,
+            'capture_id' => $capture['capture_id'] ?? null,
+            'response' => $capture['raw'] ?? [],
+            'mock' => !empty($capture['mock']),
+        ], true);
+
+        $bookingData = $bookingRepo->getBookingWithUserAndDriver((string)$payment['booking_id']);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'PayPal payment captured successfully.',
+            'booking_id' => $payment['booking_id'],
+            'booking' => [
+                'booking_type' => $bookingData['booking_type'] ?? 'minicab',
+                'total_days' => (int)($bookingData['total_days'] ?? 1),
+                'subtotal' => (float)($bookingData['subtotal'] ?? $payment['amount'] ?? 0),
+                'discount' => (float)($bookingData['discount_amount'] ?? 0),
+                'total' => (float)($bookingData['total_amount'] ?? $payment['amount'] ?? 0),
+                'promo_applied' => $bookingData['promo_code'] ?? null,
+                'payment_method' => $payment['method'] ?? 'paypal',
+                'distance_km' => isset($bookingData['distance_km']) ? (float)$bookingData['distance_km'] : null,
+                'ride_tier' => $bookingData['ride_tier'] ?? null,
+            ],
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'PayPal capture error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'paypal-cancel') {
+    requireAuth();
+
+    $orderId = trim((string)($input['order_id'] ?? ''));
+    if ($orderId === '') {
+        echo json_encode(['success' => false, 'message' => 'PayPal order ID is required.']);
+        exit;
+    }
+
+    $payment = $bookingRepo->getPaymentByTransactionId($orderId);
+    if ($payment && (string)$payment['user_id'] === (string)($_SESSION['user_id'] ?? '')) {
+        $bookingRepo->updatePaymentByTransactionId($orderId, 'failed', [
+            'provider' => 'paypal',
+            'stage' => 'cancel',
+            'cancelled_at' => gmdate('c'),
+        ]);
+    }
+
+    echo json_encode(['success' => true, 'message' => 'PayPal payment was cancelled.']);
     exit;
 }
 
@@ -514,13 +669,17 @@ if ($action === 'update-status') {
             exit;
         }
 
-        $isOwner = ($booking['owner_id'] === $userId);
-        $isRenter = ($booking['renter_id'] === $userId);
+        $currentUserId = (string)($userId ?? '');
+        $bookingOwnerId = (string)($booking['owner_id'] ?? '');
+        $bookingRenterId = (string)($booking['renter_id'] ?? '');
+
+        $isOwner = ($bookingOwnerId !== '' && $bookingOwnerId === $currentUserId);
+        $isRenter = ($bookingRenterId !== '' && $bookingRenterId === $currentUserId);
         $isAdmin = (($_SESSION['role'] ?? '') === 'admin');
 
         // Permission & transition checks
         $allowed = false;
-        $currentStatus = $booking['status'];
+        $currentStatus = strtolower(trim((string)($booking['status'] ?? '')));
 
         if ($newStatus === 'confirmed' && $currentStatus === 'pending' && ($isOwner || $isAdmin)) {
             $allowed = true;
@@ -528,13 +687,66 @@ if ($action === 'update-status') {
             $allowed = true;
         } elseif ($newStatus === 'completed' && $currentStatus === 'in_progress' && ($isOwner || $isAdmin)) {
             $allowed = true;
-        } elseif ($newStatus === 'cancelled' && $currentStatus === 'pending' && ($isOwner || $isRenter || $isAdmin)) {
+        } elseif ($newStatus === 'cancelled' && in_array($currentStatus, ['pending', 'confirmed'], true) && ($isOwner || $isRenter || $isAdmin)) {
             $allowed = true;
         }
 
         if (!$allowed) {
             echo json_encode(['success' => false, 'message' => 'You are not allowed to perform this action.']);
             exit;
+        }
+
+        if ($newStatus === 'cancelled') {
+            $payment = $bookingRepo->getPaymentByBookingId($bookingId);
+            if ($payment) {
+                $paymentMethod = strtolower(trim((string)($payment['method'] ?? '')));
+                $paymentStatus = strtolower(trim((string)($payment['status'] ?? '')));
+
+                if ($paymentMethod === 'paypal' && $paymentStatus === 'paid') {
+                    $paymentDetails = $payment['payment_details'] ?? [];
+                    if (is_string($paymentDetails)) {
+                        $decoded = json_decode($paymentDetails, true);
+                        $paymentDetails = is_array($decoded) ? $decoded : [];
+                    }
+                    if (!is_array($paymentDetails)) {
+                        $paymentDetails = [];
+                    }
+
+                    $captureId = trim((string)($paymentDetails['capture_id'] ?? ''));
+                    if ($captureId === '') {
+                        echo json_encode([
+                            'success' => false,
+                            'message' => 'Unable to auto-refund PayPal payment because capture ID is missing. Please contact support.',
+                        ]);
+                        exit;
+                    }
+
+                    $refund = $paypalGateway->refundCapture(
+                        $captureId,
+                        isset($payment['amount']) ? (float)$payment['amount'] : null,
+                        'GBP'
+                    );
+
+                    if (empty($refund['success'])) {
+                        echo json_encode([
+                            'success' => false,
+                            'message' => $refund['message'] ?? 'PayPal refund failed. Cancellation was not completed.',
+                        ]);
+                        exit;
+                    }
+
+                    $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', [
+                        'provider' => 'paypal',
+                        'stage' => 'refund',
+                        'capture_id' => $captureId,
+                        'refund_id' => $refund['refund_id'] ?? null,
+                        'refund_status' => $refund['status'] ?? null,
+                        'response' => $refund['raw'] ?? [],
+                        'mock' => !empty($refund['mock']),
+                        'refunded_at' => gmdate('c'),
+                    ]);
+                }
+            }
         }
 
         // Update status via repository
@@ -564,19 +776,16 @@ if ($action === 'update-status') {
             }
             $updatedVehicleStatus = 'available';
         } elseif ($newStatus === 'cancelled') {
-            // Check if already rented before reverting to available
-            $vehicleStatus = $bookingRepo->getVehicleStatus($vehicleId);
-            if ($vehicleStatus === 'rented') {
-                $bookingRepo->updateVehicleStatus($vehicleId, 'available');
-                $updatedVehicleStatus = 'available';
-            } else {
-                $updatedVehicleStatus = $vehicleStatus;
-            }
-
-            // Pending minicab cancellations should not keep assigned vehicle info.
-            if (($booking['booking_type'] ?? '') === 'minicab' && $currentStatus === 'pending') {
-                $bookingRepo->unassignVehicleFromBooking($bookingId);
-                $vehicleId = null;
+            // Keep booking vehicle linkage intact because bookings.vehicle_id is NOT NULL in current schema.
+            // Only release vehicle availability when it was actively marked rented.
+            if (!empty($vehicleId)) {
+                $vehicleStatus = $bookingRepo->getVehicleStatus($vehicleId);
+                if ($vehicleStatus === 'rented') {
+                    $bookingRepo->updateVehicleStatus($vehicleId, 'available');
+                    $updatedVehicleStatus = 'available';
+                } else {
+                    $updatedVehicleStatus = $vehicleStatus;
+                }
             }
         }
 

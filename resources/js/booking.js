@@ -87,6 +87,11 @@
 
   // ===== INITIALIZATION =====
   document.addEventListener('DOMContentLoaded', async function() {
+    const paypalHandled = await processPayPalCallback();
+    if (paypalHandled) {
+      return;
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const pickupDateEl = document.getElementById('pickupDate');
     const returnDateEl = document.getElementById('returnDate');
@@ -135,6 +140,99 @@
     }
     initLeafletAutocomplete();
   });
+
+  async function processPayPalCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const paypalState = (params.get('paypal') || '').toLowerCase();
+    if (!paypalState) return false;
+
+    const orderId = params.get('token') || '';
+    const payerId = params.get('PayerID') || '';
+
+    if (paypalState === 'cancel') {
+      if (orderId) {
+        try {
+          await fetch(BOOKINGS_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'paypal-cancel', order_id: orderId })
+          });
+        } catch (err) {
+          console.error('PayPal cancel notify failed:', err);
+        }
+      }
+
+      if (typeof showToast === 'function') {
+        showToast('PayPal payment was cancelled. You can choose another payment method.', 'warning');
+      }
+      clearPayPalQueryParams();
+      return false;
+    }
+
+    if (paypalState === 'return' && orderId) {
+      try {
+        const res = await fetch(BOOKINGS_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'paypal-capture',
+            order_id: orderId,
+            payer_id: payerId,
+          })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          if (typeof showToast === 'function') {
+            showToast('✅ PayPal payment captured successfully.', 'success');
+          }
+
+          clearPayPalQueryParams();
+          showBookingSuccess(data.booking || {
+            booking_type: 'minicab',
+            total_days: 1,
+            subtotal: 0,
+            discount: 0,
+            total: 0,
+            promo_applied: '',
+            payment_method: 'paypal',
+            distance_km: null,
+            ride_tier: null,
+          });
+
+          const successMessage = document.getElementById('successMessage');
+          if (successMessage) {
+            successMessage.textContent = 'Your PayPal payment has been captured successfully. You can track your trip status in My Orders.';
+          }
+
+          return true;
+        } else if (typeof showToast === 'function') {
+          showToast('❌ ' + (data.message || 'PayPal capture failed.'), 'error');
+        }
+      } catch (err) {
+        console.error('PayPal capture error:', err);
+        if (typeof showToast === 'function') {
+          showToast('❌ Failed to verify PayPal payment. Please contact support.', 'error');
+        }
+      }
+
+      clearPayPalQueryParams();
+      return false;
+    }
+
+    return false;
+  }
+
+  function clearPayPalQueryParams() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete('paypal');
+    params.delete('token');
+    params.delete('PayerID');
+
+    const qs = params.toString();
+    const newUrl = window.location.pathname + (qs ? ('?' + qs) : '');
+    window.history.replaceState({}, '', newUrl);
+  }
 
   // ===== REAL-TIME DATETIME VALIDATION =====
   function validatePickupDateTime() {
@@ -1156,6 +1254,18 @@
       });
       const data = await res.json();
       if (data.success) {
+        if (selectedPaymentMethod === 'paypal') {
+          const approvalUrl = data.paypal && data.paypal.approval_url ? data.paypal.approval_url : '';
+          if (!approvalUrl) {
+            if (typeof showToast === 'function') {
+              showToast('❌ PayPal checkout could not be started. Please try again.', 'error');
+            }
+          } else {
+            window.location.href = approvalUrl;
+            return;
+          }
+        }
+
         showBookingSuccess(data.booking);
         const vehicleName = selectedBookingType === 'minicab' 
           ? 'minicab trip' 
@@ -1186,27 +1296,39 @@
     if (bookingSuccess) bookingSuccess.style.display = 'block';
 
     const tl = { 'minicab': 'Minicab', 'with-driver': 'With Driver' };
+    const bookingType = booking && booking.booking_type ? booking.booking_type : selectedBookingType;
+    const rideTierValue = booking && booking.ride_tier ? booking.ride_tier : selectedRideTier;
+    const distanceValue = booking && booking.distance_km !== null && booking.distance_km !== undefined
+      ? Number(booking.distance_km)
+      : calculatedDistance;
+    const subtotal = Number(booking && booking.subtotal !== undefined ? booking.subtotal : 0);
+    const discount = Number(booking && booking.discount !== undefined ? booking.discount : 0);
+    const total = Number(booking && booking.total !== undefined ? booking.total : subtotal - discount);
+    const totalDays = Number(booking && booking.total_days !== undefined ? booking.total_days : 1);
+    const paymentMethod = booking && booking.payment_method ? booking.payment_method : selectedPaymentMethod;
+    const promoApplied = booking && booking.promo_applied ? booking.promo_applied : '';
+
     let vehicleName = '';
-    if (selectedBookingType === 'minicab') {
+    if (bookingType === 'minicab') {
       const tierLabels = { eco: '🌿 Eco', standard: '⭐ Standard', luxury: '👑 Luxury' };
-      vehicleName = 'Vehicle will be assigned when your trip starts' + (tierLabels[selectedRideTier] ? ' · ' + tierLabels[selectedRideTier] : '');
+      vehicleName = 'Vehicle will be assigned when your trip starts' + (tierLabels[rideTierValue] ? ' · ' + tierLabels[rideTierValue] : '');
     } else {
       vehicleName = carData ? carData.brand + ' ' + carData.model : 'Vehicle';
     }
 
     let html = '<div class="sb-row"><span>Vehicle</span><span>' + escapeHtml(vehicleName) + '</span></div>';
-    html += '<div class="sb-row"><span>Type</span><span>' + (tl[selectedBookingType] || selectedBookingType) + '</span></div>';
-    if (selectedBookingType === 'minicab') {
-      html += '<div class="sb-row"><span>Distance</span><span>' + (calculatedDistance ? calculatedDistance.toFixed(1) + ' km' : '-') + '</span></div>';
+    html += '<div class="sb-row"><span>Type</span><span>' + (tl[bookingType] || bookingType) + '</span></div>';
+    if (bookingType === 'minicab') {
+      html += '<div class="sb-row"><span>Distance</span><span>' + (distanceValue ? distanceValue.toFixed(1) + ' km' : '-') + '</span></div>';
     } else {
-      html += '<div class="sb-row"><span>Duration</span><span>' + booking.total_days + ' day' + (booking.total_days > 1 ? 's' : '') + '</span></div>';
+      html += '<div class="sb-row"><span>Duration</span><span>' + totalDays + ' day' + (totalDays > 1 ? 's' : '') + '</span></div>';
     }
-    html += '<div class="sb-row"><span>Subtotal</span><span>£' + parseFloat(booking.subtotal).toFixed(2) + '</span></div>';
-    if (booking.discount > 0) {
-      html += '<div class="sb-row" style="color:var(--success);"><span>Discount (' + booking.promo_applied + ')</span><span>-£' + parseFloat(booking.discount).toFixed(2) + '</span></div>';
+    html += '<div class="sb-row"><span>Subtotal</span><span>£' + subtotal.toFixed(2) + '</span></div>';
+    if (discount > 0) {
+      html += '<div class="sb-row" style="color:var(--success);"><span>Discount (' + escapeHtml(promoApplied || 'Promo') + ')</span><span>-£' + discount.toFixed(2) + '</span></div>';
     }
-    html += '<div class="sb-row total"><span>Total</span><span>£' + parseFloat(booking.total).toFixed(2) + '</span></div>';
-    html += '<div class="sb-row"><span>Payment</span><span>' + formatPaymentMethod(booking.payment_method) + '</span></div>';
+    html += '<div class="sb-row total"><span>Total</span><span>£' + total.toFixed(2) + '</span></div>';
+    html += '<div class="sb-row"><span>Payment</span><span>' + formatPaymentMethod(paymentMethod) + '</span></div>';
     html += '<div class="sb-row"><span>Status</span><span style="color:var(--warning);font-weight:600;">⏳ Pending</span></div>';
     
     const successSummary = document.getElementById('successSummary');
