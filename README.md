@@ -1,4 +1,4 @@
-# 🚗 Private Hire — Premium Car Rental Platform and mobile
+# 🚗 Private Hire — Premium Car Rental Platform
 
 > Full-stack premium car rental and transportation platform built with PHP 8.2 + PostgreSQL (Supabase). This document provides comprehensive architecture context for developers and team members working on the platform
 
