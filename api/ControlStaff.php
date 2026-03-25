@@ -122,6 +122,38 @@ function control_resolve_db_booking_status(PDO $pdo, string $canonicalStatus): s
     throw new Exception('Status is not supported by current booking_status enum');
 }
 
+function control_driver_dispatch_status(array $driver): string
+{
+    $assignedVehicleId = trim((string)($driver['assigned_vehicle_id'] ?? ''));
+    return $assignedVehicleId === '' ? 'pending' : 'dispatched';
+}
+
+function control_get_drivers_with_status(UserRepository $userRepo, string $statusFilter = 'all'): array
+{
+    $drivers = $userRepo->getDriversWithVehicles();
+
+    $drivers = array_map(static function (array $driver): array {
+        $status = control_driver_dispatch_status($driver);
+        $driver['status'] = $status;
+        return $driver;
+    }, $drivers);
+
+    if ($statusFilter === 'pending' || $statusFilter === 'dispatched') {
+        $drivers = array_values(array_filter($drivers, static function (array $driver) use ($statusFilter): bool {
+            return (($driver['status'] ?? 'pending') === $statusFilter);
+        }));
+    }
+
+    return $drivers;
+}
+
+function control_get_available_vehicles(PDO $pdo): array
+{
+    $stmt = $pdo->query("\n        SELECT v.id, v.brand, v.model, v.license_plate, v.service_tier, v.status\n        FROM vehicles v\n        LEFT JOIN users u ON u.assigned_vehicle_id = v.id AND u.role = 'driver' AND u.is_active = true\n        WHERE v.status = 'available'\n          AND u.id IS NULL\n        ORDER BY v.brand ASC, v.model ASC\n    ");
+
+    return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+}
+
 if (!isset($_SESSION['user_id'])) {
     header('Location: /index.php');
     exit;
@@ -383,6 +415,86 @@ try {
         ensure_vehicle_service_tier_column($pdo);
         $vehicles = $vehicleRepo->listAll();
         echo json_encode(['success' => true, 'vehicles' => $vehicles]);
+        exit;
+    }
+
+    if ($action === 'get_drivers') {
+        $statusFilter = strtolower(trim((string)($_GET['status'] ?? 'all')));
+        if (!in_array($statusFilter, ['all', 'pending', 'dispatched'], true)) {
+            $statusFilter = 'all';
+        }
+
+        $drivers = control_get_drivers_with_status($userRepo, $statusFilter);
+        echo json_encode(['success' => true, 'drivers' => $drivers]);
+        exit;
+    }
+
+    if ($action === 'get_available_vehicles') {
+        $vehicles = control_get_available_vehicles($pdo);
+        echo json_encode(['success' => true, 'vehicles' => $vehicles]);
+        exit;
+    }
+
+    if ($action === 'dispatch_driver') {
+        $driverId = trim((string)($bodyJson['driver_id'] ?? $_POST['driver_id'] ?? ''));
+        $vehicleId = trim((string)($bodyJson['vehicle_id'] ?? $_POST['vehicle_id'] ?? ''));
+
+        if ($driverId === '' || $vehicleId === '') {
+            throw new Exception('Missing driver_id or vehicle_id');
+        }
+
+        $driver = $userRepo->findById($driverId);
+        if (!$driver || (string)($driver['role'] ?? '') !== 'driver' || !((bool)($driver['is_active'] ?? false))) {
+            throw new Exception('Driver is not available for dispatch');
+        }
+
+        if (trim((string)($driver['assigned_vehicle_id'] ?? '')) !== '') {
+            throw new Exception('Driver is already dispatched');
+        }
+
+        $vehicle = $vehicleRepo->getById($vehicleId);
+        if (!$vehicle || (string)($vehicle['status'] ?? '') !== 'available') {
+            throw new Exception('Vehicle is not available');
+        }
+
+        $assignedDriverStmt = $pdo->prepare("SELECT id FROM users WHERE assigned_vehicle_id = ? AND role = 'driver' AND is_active = true LIMIT 1");
+        $assignedDriverStmt->execute([$vehicleId]);
+        if ($assignedDriverStmt->fetch(PDO::FETCH_ASSOC)) {
+            throw new Exception('Vehicle is already dispatched to another driver');
+        }
+
+        $ok = $vehicleRepo->assignToDriver($userId, $driverId, $vehicleId, date('Y-m-d'));
+        if (!$ok) {
+            throw new Exception('Unable to dispatch driver');
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Driver dispatched successfully']);
+        exit;
+    }
+
+    if ($action === 'unassign_driver') {
+        $driverId = trim((string)($bodyJson['driver_id'] ?? $_POST['driver_id'] ?? ''));
+        if ($driverId === '') {
+            throw new Exception('Missing driver_id');
+        }
+
+        $driver = $userRepo->findById($driverId);
+        if (!$driver || (string)($driver['role'] ?? '') !== 'driver') {
+            throw new Exception('Driver not found');
+        }
+
+        $assignedVehicleId = trim((string)($driver['assigned_vehicle_id'] ?? ''));
+        if ($assignedVehicleId === '') {
+            throw new Exception('Driver is already pending');
+        }
+
+        $clearDriverStmt = $pdo->prepare("UPDATE users SET assigned_vehicle_id = NULL, assigned_vehicle_assigned_at = NULL WHERE id = ?");
+        $clearDriverStmt->execute([$driverId]);
+
+        $closeAssignmentStmt = $pdo->prepare("UPDATE vehicle_assignments SET unassigned_at = NOW() WHERE driver_id = ? AND unassigned_at IS NULL");
+        $closeAssignmentStmt->execute([$driverId]);
+
+        echo json_encode(['success' => true, 'message' => 'Driver unassigned successfully']);
         exit;
     }
 

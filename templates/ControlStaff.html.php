@@ -74,6 +74,7 @@
     <div class="ctrl-tabs">
         <button class="ctrl-tab active" data-tab="orders">Orders</button>
         <button class="ctrl-tab" data-tab="vehicles">Vehicles</button>
+        <button class="ctrl-tab" data-tab="assign-driver">Assign Driver</button>
     </div>
 
     <section class="ctrl-panel active" id="ordersPanel">
@@ -158,6 +159,38 @@
                 </thead>
                 <tbody id="ctrlVehiclesTable">
                     <tr><td colspan="6">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="ctrl-panel" id="assignDriverPanel">
+        <div class="ctrl-card">
+            <div class="ctrl-row">
+                <label>Driver Status:</label>
+                <select id="ctrlDriverStatusFilter" class="ctrl-select">
+                    <option value="all">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="dispatched">Dispatched</option>
+                </select>
+                <button class="ctrl-btn ctrl-btn-primary" id="ctrlReloadDrivers">Reload</button>
+            </div>
+            <div class="ctrl-status" id="ctrlDriverStatusMsg"></div>
+        </div>
+
+        <div class="ctrl-card ctrl-table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Driver</th>
+                        <th>Contact</th>
+                        <th>Assigned Vehicle</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="ctrlDriversTable">
+                    <tr><td colspan="5">Loading...</td></tr>
                 </tbody>
             </table>
         </div>

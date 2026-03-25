@@ -207,10 +207,6 @@ final class VehicleRepository
         ");
         $stmt->execute([$vehicleId, $driverId]);
 
-        // Mark vehicle status
-        $stmt = $this->pdo->prepare("UPDATE vehicles SET status = 'assigned' WHERE id = ?");
-        $stmt->execute([$vehicleId]);
-
         return true;
     }
 

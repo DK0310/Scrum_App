@@ -1,0 +1,3 @@
+id,owner_id,brand,model,year,license_plate,category,transmission,fuel_type,seats,color,features,thumbnail_id,latitude,longitude,status,gps_enabled,avg_rating,total_reviews,total_bookings,created_at,updated_at,service_tier
+324d543e-3c18-41fa-ad26-8ee2578fcb58,7fd7574b-db38-48ea-9496-2bf544a812ac,Honda,Civic,2025,51F-23501,sedan,automatic,petrol,5,White,,6c5bd3b2-370b-4ccd-8035-e113662b1ecb,,,available,false,0.0,0,0,2026-03-21 17:41:45.321637+00,2026-03-24 07:17:32.86065+00,standard
+fea61fec-0c3c-4467-825e-4eb10c335b27,7fd7574b-db38-48ea-9496-2bf544a812ac,Mercedes,s450,2025,51F-12411,sedan,automatic,petrol,5,Black,,22798a25-f4fd-489c-a47a-874f8e7bb269,,,available,false,0.0,0,0,2026-03-21 17:39:52.264859+00,2026-03-21 17:39:52.481812+00,luxury

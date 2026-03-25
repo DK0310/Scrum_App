@@ -3,11 +3,14 @@
 
     let ordersCache = [];
     let vehiclesCache = [];
+    let driversCache = [];
+    let availableVehiclesCache = [];
 
     const el = {
         tabs: document.querySelectorAll('.ctrl-tab'),
         ordersPanel: document.getElementById('ordersPanel'),
         vehiclesPanel: document.getElementById('vehiclesPanel'),
+        assignDriverPanel: document.getElementById('assignDriverPanel'),
 
         orderFilter: document.getElementById('ctrlOrderStatusFilter'),
         reloadOrdersBtn: document.getElementById('ctrlReloadOrders'),
@@ -31,7 +34,12 @@
         saveVehicleBtn: document.getElementById('ctrlSaveVehicle'),
         resetVehicleBtn: document.getElementById('ctrlResetVehicle'),
         vehiclesTable: document.getElementById('ctrlVehiclesTable'),
-        vehicleMsg: document.getElementById('ctrlVehicleStatusMsg')
+        vehicleMsg: document.getElementById('ctrlVehicleStatusMsg'),
+
+        driverFilter: document.getElementById('ctrlDriverStatusFilter'),
+        reloadDriversBtn: document.getElementById('ctrlReloadDrivers'),
+        driversTable: document.getElementById('ctrlDriversTable'),
+        driverMsg: document.getElementById('ctrlDriverStatusMsg')
     };
 
     function setOrderMsg(text, isError) {
@@ -42,6 +50,12 @@
     function setVehicleMsg(text, isError) {
         el.vehicleMsg.textContent = text || '';
         el.vehicleMsg.style.color = isError ? '#b91c1c' : '#334155';
+    }
+
+    function setDriverMsg(text, isError) {
+        if (!el.driverMsg) return;
+        el.driverMsg.textContent = text || '';
+        el.driverMsg.style.color = isError ? '#b91c1c' : '#334155';
     }
 
     function statusBadgeClass(status) {
@@ -99,6 +113,13 @@
         });
         el.ordersPanel.classList.toggle('active', target === 'orders');
         el.vehiclesPanel.classList.toggle('active', target === 'vehicles');
+        if (el.assignDriverPanel) {
+            el.assignDriverPanel.classList.toggle('active', target === 'assign-driver');
+        }
+
+        if (target === 'assign-driver') {
+            loadDrivers();
+        }
     }
 
     function normalizeDisplayStatus(status) {
@@ -458,6 +479,167 @@
         });
     }
 
+    function driverStatusBadgeClass(status) {
+        if (status === 'dispatched') return 'ctrl-badge ctrl-in-progress';
+        return 'ctrl-badge ctrl-pending';
+    }
+
+    async function loadAvailableVehicles() {
+        const data = await apiGet({ action: 'get_available_vehicles' });
+        if (!data.success) {
+            throw new Error(data.message || 'Cannot load available vehicles');
+        }
+        availableVehiclesCache = data.vehicles || [];
+    }
+
+    async function loadDrivers() {
+        if (!el.driversTable) return;
+        const status = el.driverFilter ? el.driverFilter.value : 'all';
+        setDriverMsg('Loading drivers...');
+
+        try {
+            await loadAvailableVehicles();
+            const data = await apiGet({ action: 'get_drivers', status: status || 'all' });
+            if (!data.success) {
+                setDriverMsg(data.message || 'Cannot load drivers', true);
+                return;
+            }
+
+            driversCache = data.drivers || [];
+            renderDriversTable();
+            setDriverMsg('Loaded ' + driversCache.length + ' driver(s).');
+        } catch (err) {
+            setDriverMsg('Error loading drivers: ' + (err && err.message ? err.message : 'Unknown error'), true);
+        }
+    }
+
+    function vehicleOptionsHtml(selectedId) {
+        if (!availableVehiclesCache.length) {
+            return '<option value="">No available vehicle</option>';
+        }
+
+        const base = '<option value="">Select vehicle</option>';
+        const rows = availableVehiclesCache.map((v) => {
+            const vid = String(v.id || '');
+            const isSelected = selectedId && vid === selectedId ? ' selected' : '';
+            const label = [v.brand, v.model, v.license_plate].filter(Boolean).join(' - ');
+            return '<option value="' + escapeHtml(vid) + '"' + isSelected + '>' + escapeHtml(label) + '</option>';
+        }).join('');
+
+        return base + rows;
+    }
+
+    function renderDriversTable() {
+        if (!el.driversTable) return;
+
+        if (!driversCache.length) {
+            el.driversTable.innerHTML = '<tr><td colspan="5">No drivers found</td></tr>';
+            return;
+        }
+
+        el.driversTable.innerHTML = driversCache.map((d) => {
+            const id = escapeHtml(d.id || '');
+            const name = escapeHtml(d.full_name || 'Driver');
+            const email = escapeHtml(d.email || '-');
+            const phone = escapeHtml(d.phone || '-');
+            const status = (d.status === 'dispatched') ? 'dispatched' : 'pending';
+            const assignedVehicle = d.assigned_vehicle_id
+                ? escapeHtml([d.brand, d.model, d.license_plate].filter(Boolean).join(' - '))
+                : '-';
+
+            let actionHtml = '';
+            if (status === 'pending') {
+                actionHtml = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+                    '<select class="ctrl-select" data-role="dispatch-vehicle-select" data-driver-id="' + id + '" style="min-width:220px;">' + vehicleOptionsHtml('') + '</select>' +
+                    '<button class="ctrl-btn ctrl-btn-primary" data-role="dispatch-driver" data-id="' + id + '">Dispatch</button>' +
+                    '</div>';
+            } else {
+                actionHtml = '<button class="ctrl-btn ctrl-btn-danger" data-role="unassign-driver" data-id="' + id + '">Unassign</button>';
+            }
+
+            return '<tr>' +
+                '<td>' + name + '</td>' +
+                '<td>' + email + '<br><small>' + phone + '</small></td>' +
+                '<td>' + assignedVehicle + '</td>' +
+                '<td><span class="' + driverStatusBadgeClass(status) + '">' + escapeHtml(status) + '</span></td>' +
+                '<td>' + actionHtml + '</td>' +
+                '</tr>';
+        }).join('');
+
+        bindDriverRowActions();
+    }
+
+    function bindDriverRowActions() {
+        if (!el.driversTable) return;
+
+        Array.from(el.driversTable.querySelectorAll('button[data-role="dispatch-driver"]')).forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const driverId = btn.getAttribute('data-id') || '';
+                if (!driverId) return;
+
+                const select = el.driversTable.querySelector('select[data-role="dispatch-vehicle-select"][data-driver-id="' + driverId + '"]');
+                const vehicleId = select ? String(select.value || '').trim() : '';
+                if (!vehicleId) {
+                    setDriverMsg('Please select an available vehicle before dispatch.', true);
+                    return;
+                }
+
+                btn.disabled = true;
+                const original = btn.textContent;
+                btn.textContent = 'Dispatching...';
+
+                try {
+                    const data = await apiPost({ action: 'dispatch_driver', driver_id: driverId, vehicle_id: vehicleId });
+                    if (!data.success) {
+                        setDriverMsg(data.message || 'Dispatch failed', true);
+                        return;
+                    }
+
+                    setDriverMsg('Driver dispatched successfully.');
+                    await loadDrivers();
+                    await loadVehicles();
+                } catch (err) {
+                    setDriverMsg('Error dispatching driver: ' + (err && err.message ? err.message : 'Unknown error'), true);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = original;
+                }
+            });
+        });
+
+        Array.from(el.driversTable.querySelectorAll('button[data-role="unassign-driver"]')).forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const driverId = btn.getAttribute('data-id') || '';
+                if (!driverId) return;
+
+                if (!confirm('Unassign this driver from the current vehicle?')) {
+                    return;
+                }
+
+                btn.disabled = true;
+                const original = btn.textContent;
+                btn.textContent = 'Unassigning...';
+
+                try {
+                    const data = await apiPost({ action: 'unassign_driver', driver_id: driverId });
+                    if (!data.success) {
+                        setDriverMsg(data.message || 'Unassign failed', true);
+                        return;
+                    }
+
+                    setDriverMsg('Driver unassigned successfully.');
+                    await loadDrivers();
+                    await loadVehicles();
+                } catch (err) {
+                    setDriverMsg('Error unassigning driver: ' + (err && err.message ? err.message : 'Unknown error'), true);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = original;
+                }
+            });
+        });
+    }
+
     async function saveVehicle() {
         if (el.saveVehicleBtn) {
             el.saveVehicleBtn.disabled = true;
@@ -559,6 +741,14 @@
             el.orderFilter.addEventListener('change', loadOrders);
         }
 
+        if (el.reloadDriversBtn) {
+            el.reloadDriversBtn.addEventListener('click', loadDrivers);
+        }
+
+        if (el.driverFilter) {
+            el.driverFilter.addEventListener('change', loadDrivers);
+        }
+
         if (el.saveVehicleBtn) {
             el.saveVehicleBtn.addEventListener('click', saveVehicle);
         }
@@ -583,6 +773,7 @@
         bindEvents();
         await loadOrders();
         await loadVehicles();
+        await loadDrivers();
     }
 
     document.addEventListener('DOMContentLoaded', init);
