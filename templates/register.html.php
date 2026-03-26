@@ -12,14 +12,12 @@
                 <div class="step-dot" data-step="2" aria-disabled="true" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: default;">2</div>
                 <div style="flex: 1; height: 2px; background: #ddd;"></div>
                 <div class="step-dot" data-step="3" aria-disabled="true" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: default;">3</div>
-                <div style="flex: 1; height: 2px; background: #ddd;"></div>
-                <div class="step-dot" data-step="4" aria-disabled="true" style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; color: #999; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: default;">4</div>
             </div>
 
             <!-- ===== STEP 1: PERSONAL INFO ===== -->
             <div id="regStep1" style="display: block;">
                 <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 24px; font-weight: 600;">Create Account</h2>
-                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 1 of 4: Your Information</p>
+                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 1 of 3: Your Information</p>
 
                 <!-- Username -->
                 <div style="margin-bottom: 18px;">
@@ -128,7 +126,7 @@
             <!-- ===== STEP 2: EMAIL OTP ===== -->
             <div id="regStep2" style="display: none;">
                 <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 24px; font-weight: 600;">Verify Email</h2>
-                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 2 of 4: Enter the code sent to your email</p>
+                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 2 of 3: Enter the code sent to your email</p>
 
                 <!-- Email Display -->
                 <div style="padding: 12px; background: #f0fdfa; border-radius: 8px; margin-bottom: 25px; color: #333; font-size: 14px; text-align: center;">
@@ -164,49 +162,8 @@
                 </div>
             </div>
 
-            <!-- ===== STEP 3: ROLE SELECTION ===== -->
-            <div id="regStep3" style="display: none;">
-                <h2 style="margin: 0 0 10px 0; color: #0f766e; font-size: 24px; font-weight: 600;">Choose Role</h2>
-                <p style="margin: 0 0 25px 0; color: #999; font-size: 14px;">Step 3 of 4: What's your primary role?</p>
-
-                <!-- Role Cards -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
-                    <!-- User Card -->
-                    <div class="role-card" data-role="user" onclick="selectRole('user')" 
-                         style="padding: 25px; border: 2px solid #ddd; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: white;">
-                        <div style="font-size: 40px; margin-bottom: 10px;">👤</div>
-                        <div style="font-weight: 600; color: #333; font-size: 16px;">User</div>
-                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Looking to book rides or rentals</div>
-                    </div>
-
-                    <!-- Driver Card -->
-                    <div class="role-card" data-role="driver" onclick="selectRole('driver')" 
-                         style="padding: 25px; border: 2px solid #ddd; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: white;">
-                        <div style="font-size: 40px; margin-bottom: 10px;">🚗</div>
-                        <div style="font-weight: 600; color: #333; font-size: 16px;">Driver</div>
-                        <div style="color: #999; font-size: 12px; margin-top: 8px;">Operate assigned trips and schedules</div>
-                    </div>
-                </div>
-
-                <!-- Status Message -->
-                <div id="regStep3Status" style="display: none; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center;"></div>
-
-                <!-- Buttons -->
-                <div style="display: flex; gap: 15px;">
-                    <button type="button" onclick="regGoToStep(2)" 
-                            style="flex: 1; padding: 12px; border: 2px solid #ddd; background: white; border-radius: 8px; font-size: 16px; font-weight: 600; color: #333; cursor: pointer;">
-                        ← Back
-                    </button>
-                    <button type="button" id="regNextBtn" onclick="regGoToStep4()" 
-                            style="flex: 1; padding: 12px; background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; opacity: 0.5;"
-                            disabled>
-                        Next: Confirm →
-                    </button>
-                </div>
-            </div>
-
-            <!-- ===== STEP 4: SUCCESS ===== -->
-            <div id="regStep4" style="display: none; text-align: center;">
+            <!-- ===== STEP 3: SUCCESS ===== -->
+            <div id="regStep3" style="display: none; text-align: center;">
                 <div style="margin-bottom: 30px;">
                     <div style="width: 80px; height: 80px; background: #dcfce7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; margin-bottom: 20px;">
                         <span style="font-size: 40px;">✓</span>
@@ -253,16 +210,6 @@
         margin: 20px auto;
     }
 
-    .role-card:hover {
-        border-color: #0f766e;
-        box-shadow: 0 4px 12px rgba(15, 118, 110, 0.1);
-    }
-
-    .role-card.selected {
-        border-color: #0f766e;
-        background: #f0fdfa;
-    }
-
     .otp-input {
         width: 50px;
         height: 50px;
@@ -304,10 +251,6 @@
         #registerModalOverlay .modal {
             width: 90%;
             max-width: 100%;
-        }
-
-        .role-card {
-            padding: 20px !important;
         }
 
         .otp-input {

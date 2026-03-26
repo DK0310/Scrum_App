@@ -29,7 +29,6 @@ try {
         $password = $_POST['password'] ?? '';
         $username = trim($_POST['username'] ?? '');
         $dob = trim($_POST['dob'] ?? '');
-        $role = trim($_POST['role'] ?? 'user');
 
         // Validation
         if (empty($email) || empty($phone) || empty($password) || empty($username) || empty($dob)) {
@@ -91,21 +90,6 @@ try {
             exit;
         }
 
-        // Map role
-        $roleMap = [
-            'renter' => 'user',
-            'owner' => 'controlstaff',
-            'user' => 'user',
-            'driver' => 'driver',
-            'staff' => 'controlstaff',
-            'controlstaff' => 'controlstaff',
-            'control_staff' => 'controlstaff',
-            'callcenterstaff' => 'callcenterstaff',
-            'call_center_staff' => 'callcenterstaff',
-            'admin' => 'admin'
-        ];
-        $normalizedRole = $roleMap[strtolower($role)] ?? 'user';
-
         // Save pending registration info
         $_SESSION['pending_registration'] = [
             'username' => $username,
@@ -113,7 +97,8 @@ try {
             'phone' => $phone,
             'password' => $password,
             'dob' => $dob,
-            'role' => $normalizedRole,
+            // Registration always creates a standard user account.
+            'role' => 'user',
             'created_at' => time()
         ];
 
@@ -378,9 +363,8 @@ try {
         }
 
     } elseif ($action === 'set-user-role') {
-        // This handles STEP 3: Update role after user selection
+        // Backward compatibility: role selection is removed and new registrations are always user.
         $email = strtolower(trim($_POST['email'] ?? ''));
-        $role = trim($_POST['role'] ?? 'user');
 
         if (empty($email)) {
             $response['message'] = 'Email is required';
@@ -403,29 +387,14 @@ try {
             exit;
         }
 
-        // Map role
-        $roleMap = [
-            'renter' => 'user',
-            'owner' => 'controlstaff',
-            'user' => 'user',
-            'driver' => 'driver',
-            'staff' => 'controlstaff',
-            'controlstaff' => 'controlstaff',
-            'control_staff' => 'controlstaff',
-            'callcenterstaff' => 'callcenterstaff',
-            'call_center_staff' => 'callcenterstaff',
-            'admin' => 'admin'
-        ];
-        $normalizedRole = $roleMap[strtolower($role)] ?? 'user';
-
-        // Update role in session
-        $_SESSION['role'] = $normalizedRole;
+        // Enforce default role.
+        $_SESSION['role'] = 'user';
         
-        // Update user role in database
+        // Keep database in sync with the enforced role.
         try {
-            $authRepo->updateUserRoleByEmail($email, $normalizedRole);
+            $authRepo->updateUserRoleByEmail($email, 'user');
             $response['success'] = true;
-            $response['message'] = 'Role updated successfully.';
+            $response['message'] = 'Registration role is fixed to user.';
         } catch (Exception $e) {
             $response['message'] = 'Failed to update role: ' . $e->getMessage();
             error_log('Role update error: ' . $e->getMessage());

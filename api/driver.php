@@ -5,270 +5,309 @@
  * - API: /api/driver.php?action=xxx (returns JSON)
  */
 
+declare(strict_types=1);
+
 session_start();
 require_once __DIR__ . '/../config/env.php';
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../sql/UserRepository.php';
+require_once __DIR__ . '/../sql/VehicleRepository.php';
+require_once __DIR__ . '/../sql/BookingRepository.php';
+require_once __DIR__ . '/../sql/TripRepository.php';
+require_once __DIR__ . '/../sql/NotificationRepository.php';
 
-// Check if logged in
 if (!isset($_SESSION['user_id'])) {
     header('Location: /index.php');
     exit;
 }
 
-$userId = $_SESSION['user_id'];
-$title = "Driver Dashboard - Private Hire";
-$currentPage = 'driver';
-
-// Get user
+$userId = (string)$_SESSION['user_id'];
 $userRepo = new UserRepository($pdo);
-$user = $userRepo->findById($userId);
+$vehicleRepo = new VehicleRepository($pdo);
+$bookingRepo = new BookingRepository($pdo);
+$tripRepo = new TripRepository($pdo);
+$notificationRepo = new NotificationRepository($pdo);
 
-// Verify user is a driver
-if (!$user || $user['role'] !== 'driver') {
+$user = $userRepo->findById($userId);
+if (!$user || ($user['role'] ?? '') !== 'driver') {
     header('Location: /index.php');
     exit;
 }
 
+$title = 'Driver Dashboard - Private Hire';
+$currentPage = 'driver';
 $isLoggedIn = true;
 $userRole = 'driver';
-$currentUser = $user['full_name'] ?? $user['username'] ?? 'Driver';
+$currentUser = $user['full_name'] ?? $user['email'] ?? 'Driver';
 
-// Determine action
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
+$rawBody = file_get_contents('php://input');
+$body = json_decode($rawBody ?: '', true);
+if (!is_array($body)) {
+    $body = $_POST;
+}
 
-// ===== JSON API =====
-if (!empty($action)) {
+$action = trim((string)($_GET['action'] ?? $_POST['action'] ?? $body['action'] ?? ''));
+
+function driver_json(array $payload, int $status = 200): void
+{
+    http_response_code($status);
     header('Content-Type: application/json');
-    header('Access-Control-Allow-Origin: *');
-    header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type');
-
-    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-        exit(0);
-    }
-
-    // TODO: Add driver API actions here
-
-    echo json_encode(['success' => false, 'message' => 'Unknown action: ' . $action]);
+    echo json_encode($payload);
     exit;
 }
 
-// ===== PAGE VIEW =====
-include __DIR__ . '/../templates/driver.html.php';
-?>
-}
-
-// ===== GET AVAILABLE TRIPS (nearby drivers can accept) =====
-if ($action === 'get_available_trips') {
-    try {
-        // Get all available trips using TripRepository
-        $trips = $tripRepo->getAvailableTrips($userId, 20);
-
-        echo json_encode(['success' => true, 'trips' => $trips]);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+function driver_canonical_status(array $row): string
+{
+    $tripStatus = strtolower(trim((string)($row['trip_status'] ?? '')));
+    if (in_array($tripStatus, ['on_route', 'driver_accepted', 'driver_arrived', 'driver_arriving'], true)) {
+        return 'on_route';
     }
+    if (in_array($tripStatus, ['on_trip', 'journey_started'], true)) {
+        return 'on_trip';
+    }
+    if ($tripStatus === 'completed') {
+        return 'completed';
+    }
+
+    $bookingStatus = strtolower(trim((string)($row['booking_status'] ?? '')));
+    if ($bookingStatus === 'completed') {
+        return 'completed';
+    }
+
+    if (!empty($row['ride_started_at'])) {
+        return 'on_trip';
+    }
+
+    return 'on_route';
 }
 
-// ===== ACCEPT A TRIP =====
-else if ($action === 'accept_trip') {
-    try {
-        $bookingId = $_POST['booking_id'] ?? null;
-        if (!$bookingId) {
-            echo json_encode(['success' => false, 'message' => 'Missing booking_id']);
-            exit;
-        }
+function driver_next_status(string $current): ?string
+{
+    return match ($current) {
+        'on_route' => 'on_trip',
+        'on_trip' => 'completed',
+        default => null,
+    };
+}
 
-        // Get the active trip
-        $trip = $tripRepo->getByBookingId($bookingId);
+if ($action === '') {
+    require __DIR__ . '/../templates/driver.html.php';
+    exit;
+}
 
-        if (!$trip) {
-            echo json_encode(['success' => false, 'message' => 'Trip not found']);
-            exit;
-        }
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
+    exit;
+}
 
-        // Get assigned vehicle for driver
+try {
+    if ($action === 'get_assigned_vehicle') {
         $vehicle = $vehicleRepo->getAssignedVehicleForDriver($userId);
-        $vehicleId = $vehicle['id'] ?? null;
-
-        // Use TripRepository to accept trip
-        $result = $tripRepo->acceptTrip($trip['id'], $userId, $vehicleId);
-        
-        if ($result) {
-            echo json_encode(['success' => true, 'message' => 'Trip accepted']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Failed to accept trip']);
+        if (!$vehicle) {
+            driver_json(['success' => true, 'vehicle' => null]);
         }
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+
+        driver_json([
+            'success' => true,
+            'vehicle' => [
+                'id' => $vehicle['id'] ?? null,
+                'name' => trim((string)(($vehicle['brand'] ?? '') . ' ' . ($vehicle['model'] ?? '') . ' ' . ($vehicle['year'] ?? ''))),
+                'license_plate' => $vehicle['license_plate'] ?? '',
+                'brand' => $vehicle['brand'] ?? '',
+                'model' => $vehicle['model'] ?? '',
+                'year' => $vehicle['year'] ?? '',
+                'assigned_date' => $vehicle['assigned_date'] ?? null,
+            ]
+        ]);
     }
-}
 
-// ===== GET DRIVER'S ACTIVE TRIPS =====
-else if ($action === 'get_my_trips') {
-    try {
-        $status = $_GET['status'] ?? null; // 'all', 'current', 'completed'
+    if ($action === 'get_current_orders' || $action === 'get_past_orders') {
+        $assignedVehicle = $vehicleRepo->getAssignedVehicleForDriver($userId);
+        $assignedVehicleId = (string)($assignedVehicle['id'] ?? '');
 
-        // Use TripRepository to get driver's trips
-        $trips = $tripRepo->getDriverTrips($userId, $status, 50);
+        $params = [':driver_id' => $userId];
+        $vehicleScope = '';
+        if ($assignedVehicleId !== '') {
+            $vehicleScope = ' OR (b.driver_id IS NULL AND b.vehicle_id = :assigned_vehicle_id)';
+            $params[':assigned_vehicle_id'] = $assignedVehicleId;
+        }
 
-        echo json_encode(['success' => true, 'trips' => $trips]);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        $where = $action === 'get_current_orders'
+            ? "(COALESCE(at.status, '') <> 'completed' AND b.status <> 'completed')"
+            : "(COALESCE(at.status, '') = 'completed' OR b.status = 'completed')";
+
+        $sql = "
+            SELECT
+                b.id AS booking_id,
+                b.status AS booking_status,
+                b.pickup_location,
+                b.return_location,
+                b.pickup_date,
+                b.total_amount,
+                b.ride_started_at,
+                b.ride_completed_at,
+                u.full_name AS passenger_name,
+                at.id AS trip_id,
+                at.status AS trip_status
+            FROM bookings b
+            JOIN users u ON u.id = b.renter_id
+            LEFT JOIN active_trips at ON at.booking_id = b.id
+            WHERE (b.driver_id = :driver_id {$vehicleScope})
+              AND {$where}
+            ORDER BY
+                CASE WHEN :action = 'get_current_orders' THEN b.pickup_date END ASC,
+                CASE WHEN :action = 'get_past_orders' THEN COALESCE(b.ride_completed_at, b.pickup_date) END DESC,
+                b.created_at DESC
+            LIMIT 100
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':driver_id', $params[':driver_id']);
+        if (isset($params[':assigned_vehicle_id'])) {
+            $stmt->bindValue(':assigned_vehicle_id', $params[':assigned_vehicle_id']);
+        }
+        $stmt->bindValue(':action', $action);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $orders = [];
+        foreach ($rows as $row) {
+            $canonicalStatus = driver_canonical_status($row);
+            if ($action === 'get_current_orders' && $canonicalStatus === 'completed') {
+                continue;
+            }
+            if ($action === 'get_past_orders' && $canonicalStatus !== 'completed') {
+                continue;
+            }
+
+            $orders[] = [
+                'booking_id' => $row['booking_id'],
+                'trip_id' => $row['trip_id'] ?? null,
+                'passenger_name' => $row['passenger_name'] ?? 'Passenger',
+                'pickup_location' => $row['pickup_location'] ?? '',
+                'destination' => $row['return_location'] ?? '',
+                'pickup_time' => $row['pickup_date'] ?? null,
+                'price' => (float)($row['total_amount'] ?? 0),
+                'status' => $canonicalStatus,
+                'next_status' => driver_next_status($canonicalStatus),
+            ];
+        }
+
+        driver_json(['success' => true, 'orders' => $orders]);
     }
-}
 
-// ===== UPDATE DRIVER LOCATION (GPS simulation) =====
-else if ($action === 'update_location') {
-    try {
-        $tripId = $_POST['trip_id'] ?? null;
-        $lat = $_POST['lat'] ?? null;
-        $lng = $_POST['lng'] ?? null;
-
-        if (!$tripId || $lat === null || $lng === null) {
-            echo json_encode(['success' => false, 'message' => 'Missing required fields']);
-            exit;
+    if ($action === 'advance_order_status') {
+        $bookingId = trim((string)($body['booking_id'] ?? $_POST['booking_id'] ?? ''));
+        $targetStatus = strtolower(trim((string)($body['target_status'] ?? $_POST['target_status'] ?? '')));
+        if ($bookingId === '') {
+            driver_json(['success' => false, 'message' => 'Missing booking_id'], 400);
         }
 
-        // Use TripRepository to update location
-        $result = $tripRepo->updateDriverLocation($tripId, (float)$lat, (float)$lng);
-        
-        echo json_encode(['success' => true, 'message' => 'Location updated']);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        $assignedVehicle = $vehicleRepo->getAssignedVehicleForDriver($userId);
+        $assignedVehicleId = (string)($assignedVehicle['id'] ?? '');
+
+        $params = [':booking_id' => $bookingId, ':driver_id' => $userId];
+        $vehicleScope = '';
+        if ($assignedVehicleId !== '') {
+            $vehicleScope = ' OR (b.driver_id IS NULL AND b.vehicle_id = :assigned_vehicle_id)';
+            $params[':assigned_vehicle_id'] = $assignedVehicleId;
+        }
+
+        $sql = "
+            SELECT b.id AS booking_id, b.status AS booking_status, b.vehicle_id, b.driver_id,
+                   b.ride_started_at, b.ride_completed_at, at.id AS trip_id, at.status AS trip_status
+            FROM bookings b
+            LEFT JOIN active_trips at ON at.booking_id = b.id
+            WHERE b.id = :booking_id AND (b.driver_id = :driver_id {$vehicleScope})
+            LIMIT 1
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':booking_id', $bookingId);
+        $stmt->bindValue(':driver_id', $userId);
+        if (isset($params[':assigned_vehicle_id'])) {
+            $stmt->bindValue(':assigned_vehicle_id', $params[':assigned_vehicle_id']);
+        }
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            driver_json(['success' => false, 'message' => 'Order not found or not assigned to this driver'], 404);
+        }
+
+        $currentStatus = driver_canonical_status($row);
+        $nextStatus = driver_next_status($currentStatus);
+        if ($nextStatus === null) {
+            driver_json(['success' => false, 'message' => 'Order is already completed'], 409);
+        }
+
+        if ($targetStatus !== '' && $targetStatus !== $nextStatus) {
+            if ($targetStatus === $currentStatus) {
+                driver_json(['success' => false, 'message' => 'Duplicate action is not allowed'], 409);
+            }
+            driver_json(['success' => false, 'message' => 'Invalid status transition'], 409);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            if ($nextStatus === 'on_trip') {
+                $bookingStmt = $pdo->prepare("UPDATE bookings SET status = 'in_progress', driver_id = :driver_id, ride_started_at = COALESCE(ride_started_at, NOW()) WHERE id = :booking_id");
+                $bookingStmt->execute([':driver_id' => $userId, ':booking_id' => $bookingId]);
+
+                if (!empty($row['trip_id'])) {
+                    $tripStmt = $pdo->prepare("UPDATE active_trips SET status = 'on_trip', driver_id = :driver_id, journey_started_at = COALESCE(journey_started_at, NOW()), updated_at = NOW() WHERE id = :trip_id");
+                    $tripStmt->execute([':driver_id' => $userId, ':trip_id' => $row['trip_id']]);
+                }
+            }
+
+            if ($nextStatus === 'completed') {
+                $bookingStmt = $pdo->prepare("UPDATE bookings SET status = 'completed', driver_id = :driver_id, ride_completed_at = COALESCE(ride_completed_at, NOW()) WHERE id = :booking_id");
+                $bookingStmt->execute([':driver_id' => $userId, ':booking_id' => $bookingId]);
+
+                if (!empty($row['trip_id'])) {
+                    $tripStmt = $pdo->prepare("UPDATE active_trips SET status = 'completed', driver_id = :driver_id, completed_at = COALESCE(completed_at, NOW()), updated_at = NOW() WHERE id = :trip_id");
+                    $tripStmt->execute([':driver_id' => $userId, ':trip_id' => $row['trip_id']]);
+                }
+
+                $vehicleId = (string)($row['vehicle_id'] ?? '');
+                if ($vehicleId !== '') {
+                    $bookingRepo->markVehicleAvailable($vehicleId);
+                }
+            }
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        driver_json([
+            'success' => true,
+            'message' => 'Order status updated',
+            'status' => $nextStatus,
+        ]);
     }
-}
 
-// ===== DRIVER ARRIVED AT PICKUP =====
-else if ($action === 'driver_arrived') {
-    try {
-        $tripId = $_POST['trip_id'] ?? null;
-
-        if (!$tripId) {
-            echo json_encode(['success' => false, 'message' => 'Missing trip_id']);
-            exit;
-        }
-
-        // Use TripRepository to mark driver as arrived
-        $result = $tripRepo->markDriverArrived($tripId, $userId);
-        
-        if ($result) {
-            echo json_encode(['success' => true, 'message' => 'Driver arrived status updated']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Failed to update arrival status']);
-        }
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-    }
-}
-
-// ===== START JOURNEY =====
-else if ($action === 'start_journey') {
-    try {
-        $tripId = $_POST['trip_id'] ?? null;
-
-        if (!$tripId) {
-            echo json_encode(['success' => false, 'message' => 'Missing trip_id']);
-            exit;
-        }
-
-        // Use TripRepository to start journey
-        $result = $tripRepo->startJourney($tripId, $userId);
-        
-        if ($result) {
-            echo json_encode(['success' => true, 'message' => 'Journey started']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Failed to start journey']);
-        }
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-    }
-}
-
-// ===== FINISH JOURNEY =====
-else if ($action === 'finish_journey') {
-    try {
-        $tripId = $_POST['trip_id'] ?? null;
-
-        if (!$tripId) {
-            echo json_encode(['success' => false, 'message' => 'Missing trip_id']);
-            exit;
-        }
-
-        // Use TripRepository to complete trip with notifications
-        $result = $tripRepo->completeTripWithNotification($tripId, $userId);
-        
-        if ($result) {
-            echo json_encode(['success' => true, 'message' => 'Journey completed']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Failed to complete journey']);
-        }
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-    }
-}
-
-// ===== GET ASSIGNED VEHICLE =====
-else if ($action === 'get_assigned_vehicle') {
-    try {
-        // Get vehicle assigned to this driver using VehicleRepository
-        $vehicle = $vehicleRepo->getAssignedVehicleForDriver($userId);
-
-        if ($vehicle) {
-            echo json_encode(['success' => true, 'vehicle' => $vehicle]);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'No vehicle assigned for today']);
-        }
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-    }
-}
-
-// ===== GET DRIVER NOTIFICATIONS =====
-else if ($action === 'get_notifications') {
-    try {
-        $unreadOnly = $_GET['unread_only'] ?? false;
-
-        // Use NotificationRepository to get notifications
+    if ($action === 'get_notifications') {
+        $unreadOnly = filter_var($_GET['unread_only'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $notifications = $notificationRepo->getForDriver($userId, $unreadOnly, 50);
-
-        echo json_encode(['success' => true, 'notifications' => $notifications]);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        driver_json(['success' => true, 'notifications' => $notifications]);
     }
-}
 
-// ===== MARK NOTIFICATION AS READ =====
-else if ($action === 'mark_notification_read') {
-    try {
-        $notificationId = $_POST['notification_id'] ?? null;
-
-        if (!$notificationId) {
-            echo json_encode(['success' => false, 'message' => 'Missing notification_id']);
-            exit;
+    if ($action === 'mark_notification_read') {
+        $notificationId = trim((string)($body['notification_id'] ?? $_POST['notification_id'] ?? ''));
+        if ($notificationId === '') {
+            driver_json(['success' => false, 'message' => 'Missing notification_id'], 400);
         }
-
-        // Use NotificationRepository to mark as read
-        $result = $notificationRepo->markAsRead($notificationId, $userId);
-
-        echo json_encode(['success' => true, 'message' => 'Notification marked as read']);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        $notificationRepo->markAsRead($notificationId, $userId);
+        driver_json(['success' => true, 'message' => 'Notification marked as read']);
     }
-}
 
-else {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Unknown action']);
+    driver_json(['success' => false, 'message' => 'Unknown action: ' . $action], 400);
+} catch (Throwable $e) {
+    driver_json(['success' => false, 'message' => $e->getMessage()], 500);
 }

@@ -154,6 +154,25 @@ function control_get_available_vehicles(PDO $pdo): array
     return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 }
 
+function control_vehicle_column_exists(PDO $pdo, string $columnName): bool
+{
+    $stmt = $pdo->prepare("\n        SELECT 1\n        FROM information_schema.columns\n        WHERE table_schema = current_schema()\n          AND table_name = 'vehicles'\n          AND column_name = ?\n        LIMIT 1\n    ");
+    $stmt->execute([$columnName]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function control_pick_random_driver_vehicle(PDO $pdo): ?array
+{
+    $priceExpr = control_vehicle_column_exists($pdo, 'price_per_day')
+        ? 'v.price_per_day AS price_per_day'
+        : 'NULL::numeric AS price_per_day';
+
+    $stmt = $pdo->query("\n        SELECT\n            u.id AS driver_id,\n            u.full_name AS driver_name,\n            u.assigned_vehicle_id AS vehicle_id,\n            v.owner_id AS vehicle_owner_id,\n            v.brand,\n            v.model,\n            v.license_plate,\n            v.service_tier,\n            {$priceExpr}\n        FROM users u\n        JOIN vehicles v ON v.id = u.assigned_vehicle_id\n        LEFT JOIN bookings b ON b.driver_id = u.id AND b.status IN ('pending', 'confirmed', 'in_progress')\n        WHERE u.role = 'driver'\n          AND u.is_active = true\n          AND u.assigned_vehicle_id IS NOT NULL\n          AND v.status = 'available'\n          AND b.id IS NULL\n        ORDER BY RANDOM()\n        LIMIT 1\n    ");
+
+    $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : false;
+    return $row ?: null;
+}
+
 if (!isset($_SESSION['user_id'])) {
     header('Location: /index.php');
     exit;
@@ -248,9 +267,10 @@ try {
 
         $requestedStatus = control_normalize_booking_status($newStatus);
 
-        $allowed = ['pending', 'in_progress', 'completed'];
-        if (!in_array($requestedStatus, $allowed, true)) {
-            throw new Exception('Invalid status. Use: pending, in_progress, completed');
+        // Control Staff only confirms orders (pending -> in_progress).
+        // Driver handles completion via advance_order_status.
+        if ($requestedStatus !== 'in_progress') {
+            throw new Exception('Control Staff can only confirm orders (pending → in_progress). Driver completes orders.');
         }
 
         $booking = $bookingRepo->getById($bookingId);
@@ -273,42 +293,77 @@ try {
 
         $dbStatus = control_resolve_db_booking_status($pdo, $requestedStatus);
 
-        // Assign a random vehicle by tier only when order starts (in_progress)
+        // Assign a random dispatched driver+vehicle when order starts (in_progress)
         $effectiveVehicleId = (string)($booking['vehicle_id'] ?? '');
+        $effectiveDriverId = (string)($booking['driver_id'] ?? '');
 
         if ($requestedStatus === 'in_progress') {
-            $rideTier = strtolower(trim((string)($booking['ride_tier'] ?? 'standard')));
-            if (!in_array($rideTier, ['eco', 'standard', 'premium'], true)) {
-                $rideTier = 'standard';
-            }
-
             $renterId = (string)($booking['renter_id'] ?? '');
             if ($renterId === '') {
                 throw new Exception('Booking is missing renter information');
             }
 
-            $assignedVehicle = $bookingRepo->findVehicleForTier($rideTier, $renterId);
-            if (!$assignedVehicle) {
-                throw new Exception('No available vehicle found for the selected ride tier');
+            $dispatch = control_pick_random_driver_vehicle($pdo);
+            if (!$dispatch) {
+                throw new Exception('No dispatched driver with available vehicle can be assigned right now');
             }
 
-            $assignedVehicleId = (string)($assignedVehicle['id'] ?? '');
-            $assignedOwnerId = (string)($assignedVehicle['owner_id'] ?? '');
-            if ($assignedVehicleId === '' || $assignedOwnerId === '') {
-                throw new Exception('Unable to assign vehicle for this order');
+            $assignedVehicleId = (string)($dispatch['vehicle_id'] ?? '');
+            $assignedOwnerId = (string)($dispatch['vehicle_owner_id'] ?? '');
+            $assignedDriverId = (string)($dispatch['driver_id'] ?? '');
+            $assignedPricePerDay = (float)($dispatch['price_per_day'] ?? 0);
+            if ($assignedPricePerDay <= 0) {
+                $tier = strtolower(trim((string)($dispatch['service_tier'] ?? 'standard')));
+                $tierPriceMap = [
+                    'eco' => 40.0,
+                    'standard' => 80.0,
+                    'luxury' => 150.0,
+                ];
+                $assignedPricePerDay = $tierPriceMap[$tier] ?? 80.0;
+            }
+
+            if ($assignedVehicleId === '' || $assignedOwnerId === '' || $assignedDriverId === '') {
+                throw new Exception('Unable to assign driver and vehicle for this order');
             }
 
             $assigned = $bookingRepo->assignVehicleToBooking(
                 $bookingId,
                 $assignedVehicleId,
                 $assignedOwnerId,
-                (float)($assignedVehicle['price_per_day'] ?? 0)
+                $assignedPricePerDay
             );
             if (!$assigned) {
                 throw new Exception('Unable to assign vehicle to order');
             }
 
+            $driverStmt = $pdo->prepare("UPDATE bookings SET driver_id = ? WHERE id = ?");
+            $driverStmt->execute([$assignedDriverId, $bookingId]);
+
+            $tripIdStmt = $pdo->prepare("SELECT id FROM active_trips WHERE booking_id = ? LIMIT 1");
+            $tripIdStmt->execute([$bookingId]);
+            $activeTrip = $tripIdStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($activeTrip && !empty($activeTrip['id'])) {
+                $updateTripStmt = $pdo->prepare("\n                    UPDATE active_trips\n                    SET driver_id = ?,\n                        vehicle_id = ?,\n                        status = 'on_route',\n                        driver_accepted_at = COALESCE(driver_accepted_at, NOW()),\n                        updated_at = NOW()\n                    WHERE id = ?\n                ");
+                $updateTripStmt->execute([$assignedDriverId, $assignedVehicleId, $activeTrip['id']]);
+            } else {
+                $insertTripStmt = $pdo->prepare("\n                    INSERT INTO active_trips (\n                        booking_id, user_id, driver_id, vehicle_id, status, created_at, updated_at, driver_accepted_at\n                    ) VALUES (?, ?, ?, ?, 'on_route', NOW(), NOW(), NOW())\n                ");
+                $insertTripStmt->execute([$bookingId, $renterId, $assignedDriverId, $assignedVehicleId]);
+            }
+
+            $driverMessage = 'New order assigned. Pickup: ' . (string)($booking['pickup_location'] ?? '-')
+                . ' | Destination: ' . (string)($booking['return_location'] ?? '-')
+                . ' | Passenger count: ' . (string)($booking['number_of_passengers'] ?? '1');
+            $bookingRepo->createDriverNotification(
+                $assignedDriverId,
+                $bookingId,
+                'New Assigned Order',
+                $driverMessage,
+                'dispatch_assignment'
+            );
+
             $effectiveVehicleId = $assignedVehicleId;
+            $effectiveDriverId = $assignedDriverId;
         }
 
         $ok = $bookingRepo->updateStatus($bookingId, $dbStatus);
@@ -320,9 +375,6 @@ try {
         if ($vehicleId !== '') {
             if ($requestedStatus === 'in_progress') {
                 $bookingRepo->markVehicleRented($vehicleId);
-            }
-            if ($requestedStatus === 'completed') {
-                $bookingRepo->markVehicleAvailable($vehicleId);
             }
         }
 

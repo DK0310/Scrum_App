@@ -79,7 +79,6 @@ function showFaceIdLogin() {
 // REGISTER MODAL FUNCTIONS
 // ============================================
 
-let regSelectedRole = null;
 let regOtpResendTimer = 0;
 let regUsernameCheckTimer = null;
 let regUsernameRequestSeq = 0;
@@ -110,7 +109,6 @@ function resetRegisterForm() {
     const confirmError = document.getElementById('regConfirmPasswordError');
     if (passError) passError.style.display = 'none';
     if (confirmError) confirmError.style.display = 'none';
-    regSelectedRole = null;
     setDOBDateRange();
 }
 
@@ -126,7 +124,7 @@ function switchAuthModal(mode) {
 
 function regGoToStep(stepNum) {
     // Hide all steps
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 3; i++) {
         document.getElementById('regStep' + i).style.display = 'none';
     }
 
@@ -149,16 +147,6 @@ function regGoToStep(stepNum) {
     if (stepNum === 2) {
         document.getElementById('regOtpEmail').textContent = document.getElementById('regEmail').value;
         createOtpInputs();
-    }
-
-    // Step 3 specific: reset role selection
-    if (stepNum === 3) {
-        regSelectedRole = null;
-        document.querySelectorAll('.role-card').forEach(card => {
-            card.classList.remove('selected');
-        });
-        document.getElementById('regNextBtn').style.opacity = '0.5';
-        document.getElementById('regNextBtn').disabled = true;
     }
 }
 
@@ -565,6 +553,11 @@ async function regVerifyOtp() {
         if (result.success) {
             document.getElementById('regStep2Status').style.display = 'none';
             regGoToStep(3);
+
+            // Auto-redirect after successful account creation.
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
         } else {
             showRegStatus('✗ ' + (result.message || 'Invalid code'), 'error', 2);
         }
@@ -615,69 +608,6 @@ function startOtpCountdown() {
             btn.style.opacity = '1';
         }
     }, 1000);
-}
-
-function selectRole(role) {
-    regSelectedRole = role;
-
-    // Update card styling
-    document.querySelectorAll('.role-card').forEach(card => {
-        if (card.getAttribute('data-role') === role) {
-            card.classList.add('selected');
-            card.style.borderColor = '#0f766e';
-            card.style.background = '#f0fdfa';
-        } else {
-            card.classList.remove('selected');
-            card.style.borderColor = '#ddd';
-            card.style.background = 'white';
-        }
-    });
-
-    // Enable next button
-    document.getElementById('regNextBtn').style.opacity = '1';
-    document.getElementById('regNextBtn').disabled = false;
-}
-
-async function regGoToStep4() {
-    if (!regSelectedRole) {
-        showRegStatus('Please select a role', 'error', 3);
-        return;
-    }
-
-    const email = document.getElementById('regEmail').value.trim();
-    const statusDiv = document.getElementById('regStep3Status');
-
-    showRegStatus('Confirming your role...', 'loading', 3);
-
-    try {
-        const formData = new FormData();
-        formData.append('action', 'set-user-role');
-        formData.append('email', email);
-        formData.append('role', regSelectedRole);
-
-        const response = await fetch('/api/register.php', {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (!result.success) {
-            showRegStatus('✗ ' + (result.message || 'Failed to set role'), 'error', 3);
-            return;
-        }
-
-        statusDiv.style.display = 'none';
-        regGoToStep(4);
-
-        // Auto-redirect after success so navbar/session can refresh
-        setTimeout(() => {
-            window.location.reload();
-        }, 1500);
-    } catch (error) {
-        console.error('Role update error:', error);
-        showRegStatus('✗ Network error. Please try again.', 'error', 3);
-    }
 }
 
 function toggleRegPassword(fieldId) {

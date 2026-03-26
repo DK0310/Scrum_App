@@ -129,10 +129,7 @@
 
     function getNextStatusAction(status) {
         if (status === 'pending') {
-            return { nextStatus: 'in_progress', label: 'Start Trip' };
-        }
-        if (status === 'in_progress') {
-            return { nextStatus: 'completed', label: 'Mark Completed' };
+            return { nextStatus: 'in_progress', label: 'Confirm' };
         }
         return null;
     }
