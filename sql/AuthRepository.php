@@ -268,5 +268,148 @@ class AuthRepository {
         $stmt = $this->pdo->prepare($query);
         return $stmt->execute([':role' => $role, ':id' => $userId]);
     }
+
+    /**
+     * Find user by email only.
+     */
+    public function findUserByEmail($email) {
+        $email = strtolower(trim((string) $email));
+        if ($email === '') {
+            return null;
+        }
+
+        $query = "SELECT id, email, full_name, password_hash, is_active
+                  FROM users
+                  WHERE LOWER(email) = LOWER(:email)
+                  LIMIT 1";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([':email' => $email]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Ensure reset token table exists for password reset workflow.
+     */
+    public function ensurePasswordResetTableExists() {
+        $this->pdo->exec("CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash VARCHAR(255) NOT NULL UNIQUE,
+            expires_at TIMESTAMPTZ NOT NULL,
+            is_used BOOLEAN NOT NULL DEFAULT FALSE,
+            used_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )");
+
+        $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id)");
+        $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires ON password_reset_tokens(expires_at)");
+    }
+
+    /**
+     * Create a 5-minute reset token and return plaintext token for email link.
+     */
+    public function createPasswordResetToken($userId, $expiryMinutes = 5) {
+        $this->ensurePasswordResetTableExists();
+
+        // Keep only one active token per user to reduce replay risk.
+        $this->revokeActivePasswordResetTokens($userId);
+
+        $rawToken = bin2hex(random_bytes(32));
+        $tokenHash = hash('sha256', $rawToken);
+
+        $query = "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+                  VALUES (:user_id, :token_hash, NOW() + (:expiry_minutes || ' minutes')::INTERVAL)";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':token_hash' => $tokenHash,
+            ':expiry_minutes' => (int)$expiryMinutes,
+        ]);
+
+        return $rawToken;
+    }
+
+    /**
+     * Validate token and return token row with user data if valid.
+     */
+    public function findValidPasswordResetToken($rawToken) {
+        $this->ensurePasswordResetTableExists();
+
+        $rawToken = trim((string)$rawToken);
+        if ($rawToken === '') {
+            return null;
+        }
+
+        $tokenHash = hash('sha256', $rawToken);
+
+        $query = "SELECT prt.id, prt.user_id, prt.expires_at, prt.is_used,
+                         u.email, u.full_name, u.password_hash
+                  FROM password_reset_tokens prt
+                  JOIN users u ON u.id = prt.user_id
+                  WHERE prt.token_hash = :token_hash
+                    AND prt.is_used = FALSE
+                    AND prt.expires_at >= NOW()
+                    AND u.is_active = TRUE
+                  LIMIT 1";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([':token_hash' => $tokenHash]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Mark a reset token as used.
+     */
+    public function consumePasswordResetToken($rawToken) {
+        $this->ensurePasswordResetTableExists();
+
+        $tokenHash = hash('sha256', trim((string)$rawToken));
+        $query = "UPDATE password_reset_tokens
+                  SET is_used = TRUE,
+                      used_at = NOW()
+                  WHERE token_hash = :token_hash
+                    AND is_used = FALSE";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([':token_hash' => $tokenHash]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Revoke all active tokens for a user (used after successful reset).
+     */
+    public function revokeActivePasswordResetTokens($userId) {
+        $this->ensurePasswordResetTableExists();
+
+        $query = "UPDATE password_reset_tokens
+                  SET is_used = TRUE,
+                      used_at = NOW()
+                  WHERE user_id = :user_id
+                    AND is_used = FALSE";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([':user_id' => $userId]);
+
+        return true;
+    }
+
+    /**
+     * Update user's password hash.
+     */
+    public function updatePasswordHash($userId, $plainPassword) {
+        $hashedPassword = password_hash((string)$plainPassword, PASSWORD_BCRYPT);
+        $query = "UPDATE users
+                  SET password_hash = :password_hash,
+                      auth_provider = 'email',
+                      updated_at = NOW()
+                  WHERE id = :id";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([
+            ':password_hash' => $hashedPassword,
+            ':id' => $userId,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
 }
 ?>

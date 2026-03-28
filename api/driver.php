@@ -15,6 +15,7 @@ require_once __DIR__ . '/../sql/VehicleRepository.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
 require_once __DIR__ . '/../sql/TripRepository.php';
 require_once __DIR__ . '/../sql/NotificationRepository.php';
+require_once __DIR__ . '/../Invoice/mailer.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: /index.php');
@@ -88,6 +89,71 @@ function driver_next_status(string $current): ?string
         'on_trip' => 'completed',
         default => null,
     };
+}
+
+function driver_build_vehicle_name(array $booking): string
+{
+    $parts = [];
+    if (!empty($booking['brand'])) {
+        $parts[] = (string)$booking['brand'];
+    }
+    if (!empty($booking['model'])) {
+        $parts[] = (string)$booking['model'];
+    }
+    if (!empty($booking['year'])) {
+        $parts[] = (string)$booking['year'];
+    }
+
+    $name = trim(implode(' ', $parts));
+    return $name !== '' ? $name : 'Assigned vehicle';
+}
+
+function driver_send_dispatch_email(array $booking, string $driverNameFallback = '', string $driverPhoneFallback = ''): void
+{
+    $toEmail = trim((string)($booking['email'] ?? ''));
+    if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('Customer email is missing or invalid.');
+    }
+
+    $customerName = trim((string)($booking['user_name'] ?? 'Customer'));
+    $driverName = trim((string)($booking['driver_name'] ?? $driverNameFallback));
+    $driverPhone = trim((string)($booking['driver_phone'] ?? $driverPhoneFallback));
+    $pickup = trim((string)($booking['pickup_location'] ?? 'your pickup point'));
+    $vehicleName = driver_build_vehicle_name($booking);
+    $licensePlate = trim((string)($booking['license_plate'] ?? 'N/A'));
+
+    if ($driverName === '') {
+        $driverName = 'Your driver';
+    }
+    if ($driverPhone === '') {
+        $driverPhone = 'Not provided';
+    }
+
+    $safeCustomerName = htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8');
+    $safeDriverName = htmlspecialchars($driverName, ENT_QUOTES, 'UTF-8');
+    $safeDriverPhone = htmlspecialchars($driverPhone, ENT_QUOTES, 'UTF-8');
+    $safeVehicleName = htmlspecialchars($vehicleName, ENT_QUOTES, 'UTF-8');
+    $safeLicensePlate = htmlspecialchars($licensePlate, ENT_QUOTES, 'UTF-8');
+    $safePickup = htmlspecialchars($pickup, ENT_QUOTES, 'UTF-8');
+
+    $subject = 'PrivateHire - Driver is on the way to pickup';
+    $htmlBody = "
+        <div style='font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;'>
+            <h2 style='color:#0f766e;margin-bottom:8px;'>Your trip has started</h2>
+            <p style='color:#374151;'>Hi {$safeCustomerName},</p>
+            <p style='color:#374151;'>Your driver has started the trip and is moving quickly to your pickup location. Please wait a few minutes.</p>
+            <div style='margin:18px 0;padding:16px;background:#f8fafc;border:1px solid #d1fae5;border-radius:10px;'>
+                <p style='margin:0 0 8px 0;color:#111827;'><strong>Driver:</strong> {$safeDriverName}</p>
+                <p style='margin:0 0 8px 0;color:#111827;'><strong>Phone:</strong> {$safeDriverPhone}</p>
+                <p style='margin:0 0 8px 0;color:#111827;'><strong>Vehicle:</strong> {$safeVehicleName}</p>
+                <p style='margin:0 0 8px 0;color:#111827;'><strong>License Plate:</strong> {$safeLicensePlate}</p>
+                <p style='margin:0;color:#111827;'><strong>Pickup:</strong> {$safePickup}</p>
+            </div>
+            <p style='color:#6b7280;font-size:13px;'>Thank you for choosing PrivateHire.</p>
+        </div>
+    ";
+
+    privatehire_send_email($toEmail, $subject, $htmlBody);
 }
 
 if ($action === '') {
@@ -250,9 +316,11 @@ try {
             driver_json(['success' => false, 'message' => 'Invalid status transition'], 409);
         }
 
+        $shouldSendDispatchEmail = false;
         $pdo->beginTransaction();
         try {
             if ($nextStatus === 'on_trip') {
+            $shouldSendDispatchEmail = empty($row['ride_started_at']);
                 $bookingStmt = $pdo->prepare("UPDATE bookings SET status = 'in_progress', driver_id = :driver_id, ride_started_at = COALESCE(ride_started_at, NOW()) WHERE id = :booking_id");
                 $bookingStmt->execute([':driver_id' => $userId, ':booking_id' => $bookingId]);
 
@@ -283,6 +351,35 @@ try {
                 $pdo->rollBack();
             }
             throw $e;
+        }
+
+        if ($nextStatus === 'on_trip' && $shouldSendDispatchEmail) {
+            try {
+                $bookingDetails = $bookingRepo->getBookingWithUserAndDriver($bookingId);
+                if ($bookingDetails) {
+                    driver_send_dispatch_email(
+                        $bookingDetails,
+                        (string)($user['full_name'] ?? ''),
+                        (string)($user['phone'] ?? '')
+                    );
+
+                    $notificationRepo->create([
+                        'user_id' => (string)($bookingDetails['renter_id'] ?? ''),
+                        'type' => 'dispatch',
+                        'title' => '🚗 Driver On Route',
+                        'message' => 'Your driver is heading to pickup. Please be ready.',
+                        'booking_id' => $bookingId,
+                        'data' => [
+                            'driver_name' => $bookingDetails['driver_name'] ?? ($user['full_name'] ?? ''),
+                            'driver_phone' => $bookingDetails['driver_phone'] ?? ($user['phone'] ?? ''),
+                            'vehicle' => driver_build_vehicle_name($bookingDetails),
+                            'license_plate' => $bookingDetails['license_plate'] ?? '',
+                        ],
+                    ]);
+                }
+            } catch (Throwable $mailError) {
+                error_log('US17 dispatch email error [booking_id=' . $bookingId . ']: ' . $mailError->getMessage());
+            }
         }
 
         driver_json([

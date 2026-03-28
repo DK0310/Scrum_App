@@ -75,6 +75,10 @@ function showFaceIdLogin() {
     alert('👤 Face ID login coming soon!');
 }
 
+function openForgotPassword() {
+    window.location.href = '/api/password-change.php';
+}
+
 // ============================================
 // REGISTER MODAL FUNCTIONS
 // ============================================

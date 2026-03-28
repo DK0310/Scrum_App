@@ -103,7 +103,7 @@ $loginReturnTo = $_SERVER['REQUEST_URI'] ?? '/';
 
             <!-- Forgot Password -->
             <div style="text-align: center; margin-top: 15px; font-size: 13px;">
-                <button type="button" onclick="alert('Password reset coming soon')" 
+                <button type="button" onclick="openForgotPassword()" 
                         style="background: none; border: none; color: #999; cursor: pointer; text-decoration: none; padding: 0;">
                     Forgot password?
                 </button>

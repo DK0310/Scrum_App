@@ -185,6 +185,15 @@
                                 <small id="memberSinceText" style="color:var(--gray-500);">—</small>
                             </div>
                         </div>
+
+                        <!-- Password Reset -->
+                        <div class="security-item" style="border-bottom:none;padding-top:12px;">
+                            <div>
+                                <div style="font-weight:600;">🔁 Reset Password</div>
+                                <small style="color:var(--gray-500);">Send secure reset link directly to your account email (valid 5 minutes)</small>
+                            </div>
+                            <button type="button" id="sendResetEmailBtn" class="btn btn-outline" onclick="sendMyPasswordResetLink(this)" style="padding:8px 14px;font-size:0.82rem;">Send Reset Email</button>
+                        </div>
                     </div>
                 </div>
 
@@ -416,7 +425,7 @@
         const SESSION_API = '/api/session.php';
         const PROFILE_API = '/api/profile.php';
         const FACEID_API = '/api/faceid.php';
-        const EMAIL_SECURITY_API = '/api/email-security.php';
+        const EMAIL_SECURITY_API = '/api/profile.php';
         const FACE_API_CDN = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.min.js';
         const FACE_MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
     </script>

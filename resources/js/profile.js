@@ -7,7 +7,7 @@
 const SESSION_API = '/api/session.php';
 const PROFILE_API = '/api/profile.php';
 const FACEID_API = '/api/faceid.php';
-const EMAIL_SECURITY_API = '/api/email-security.php';
+const EMAIL_SECURITY_API = PROFILE_API;
 const FACE_API_CDN = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.min.js';
 const FACE_MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
 const REQUIRED_SCANS = 5;
@@ -272,6 +272,36 @@ async function doSaveProfile() {
     btn.disabled = false;
     btn.textContent = '💾 Save Changes';
     return false;
+}
+
+async function sendMyPasswordResetLink(buttonEl) {
+    const btn = buttonEl || document.getElementById('sendResetEmailBtn');
+    if (!btn) return;
+
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = '⏳ Sending...';
+
+    try {
+        const res = await fetch('/api/password-change.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'send-reset-link-current-user' })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message || 'Reset link sent to your account email.', 'success');
+        } else {
+            showToast(data.message || 'Unable to send reset link.', 'error');
+        }
+    } catch (e) {
+        showToast('Network error while sending reset link.', 'error');
+        console.error(e);
+    }
+
+    btn.disabled = false;
+    btn.textContent = oldText;
 }
 
 // ===== EMAIL CHANGE WITH DOUBLE OTP =====
