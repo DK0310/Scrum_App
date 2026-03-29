@@ -14,11 +14,17 @@ require_once __DIR__ . '/../sql/UserRepository.php';
 require_once __DIR__ . '/../sql/VehicleRepository.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
 require_once __DIR__ . '/../sql/StaffBookingRepository.php';
+require_once __DIR__ . '/../sql/AuthRepository.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception as MailException;
 
 $userRepo = new UserRepository($pdo);
 $vehicleRepo = new VehicleRepository($pdo);
 $bookingRepo = new BookingRepository($pdo);
 $staffBookingRepo = new StaffBookingRepository($pdo);
+$authRepo = new AuthRepository($pdo);
 
 function cc_normalize_role(string $role): string
 {
@@ -40,6 +46,11 @@ function cc_is_authorized(string $role): bool
 {
     $normalized = cc_normalize_role($role);
     return in_array($normalized, ['admin', 'callcenterstaff'], true);
+}
+
+function cc_is_callcenterstaff_only(string $role): bool
+{
+    return cc_normalize_role($role) === 'callcenterstaff';
 }
 
 if (!isset($_SESSION['user_id'])) {
@@ -72,6 +83,7 @@ if ($action === '') {
     $currentPage = 'call-center-staff';
     $isLoggedIn = true;
     $currentUser = $_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['email'] ?? 'Call Center Staff';
+    $canCreateAccount = cc_is_callcenterstaff_only($userRole);
 
     require __DIR__ . '/../templates/CallCenterStaff.html.php';
     exit;
@@ -108,6 +120,117 @@ try {
 
         $requests = $staffBookingRepo->getStaffBookings($userId, $limit, 0);
         echo json_encode(['success' => true, 'requests' => $requests]);
+        exit;
+    }
+
+    if ($action === 'create_customer_account') {
+        if (!cc_is_callcenterstaff_only($userRole)) {
+            throw new Exception('Only Call Center Staff can create customer accounts.');
+        }
+
+        $payload = is_array($bodyJson) ? $bodyJson : $_POST;
+        $username = trim((string)($payload['username'] ?? ''));
+        $email = strtolower(trim((string)($payload['email'] ?? '')));
+        $phone = trim((string)($payload['phone'] ?? ''));
+        $dob = trim((string)($payload['dob'] ?? ''));
+        $defaultPassword = '123456';
+
+        if ($username === '' || $email === '' || $phone === '' || $dob === '') {
+            throw new Exception('Username, email, phone number, and DOB are required.');
+        }
+
+        if (!$authRepo->isValidEmail($email)) {
+            throw new Exception('Invalid email format.');
+        }
+
+        $phoneDigits = preg_replace('/\D+/', '', $phone);
+        if ($phoneDigits === null || strlen($phoneDigits) < 10) {
+            throw new Exception('Phone number must contain at least 10 digits.');
+        }
+
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
+            throw new Exception('DOB must be in YYYY-MM-DD format.');
+        }
+
+        if (!$authRepo->isAdult($dob)) {
+            throw new Exception('Customer must be at least 18 years old.');
+        }
+
+        if ($userRepo->usernameExists($username)) {
+            throw new Exception('Username already exists.');
+        }
+
+        if ($authRepo->emailExists($email)) {
+            throw new Exception('Email already registered.');
+        }
+
+        if ($authRepo->phoneExists($phone)) {
+            throw new Exception('Phone number already registered.');
+        }
+
+        $userRepo->ensureCreatedByStaffColumnExists();
+
+        $passwordHash = password_hash($defaultPassword, PASSWORD_BCRYPT);
+        $newUser = $userRepo->createCustomerByStaff($username, $email, $phone, $dob, $passwordHash, $userId);
+        if (!$newUser) {
+            throw new Exception('Unable to create customer account.');
+        }
+
+        $emailSent = false;
+        $emailWarning = '';
+        try {
+            $mail = new PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = \EnvLoader::get('SMTP_HOST', 'smtp.gmail.com');
+            $mail->SMTPAuth = true;
+            $mail->Username = \EnvLoader::get('SMTP_USERNAME');
+            $mail->Password = \EnvLoader::get('SMTP_PASSWORD');
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
+
+            $fromEmail = \EnvLoader::get('SMTP_FROM_EMAIL');
+            $fromName = \EnvLoader::get('SMTP_FROM_NAME', 'PrivateHire');
+            if (!$fromEmail) {
+                throw new Exception('SMTP_FROM_EMAIL is missing.');
+            }
+
+            $mail->setFrom($fromEmail, $fromName);
+            $mail->addAddress($email, $username);
+            $mail->Subject = 'PrivateHire - Your Customer Account Credentials';
+            $mail->isHTML(true);
+            $mail->Body = "
+                <h2>Welcome to PrivateHire</h2>
+                <p>Your customer account has been created by our call center staff.</p>
+                <p><strong>Username:</strong> " . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . "</p>
+                <p><strong>Email:</strong> " . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . "</p>
+                <p><strong>Temporary Password:</strong> <span style='font-family:monospace;letter-spacing:1px;'>123456</span></p>
+                <p>Please sign in and verify your email before booking minicab services.</p>
+            ";
+
+            $mail->send();
+            $emailSent = true;
+        } catch (MailException $e) {
+            $emailWarning = 'Account created, but credential email could not be sent.';
+            error_log('CallCenterStaff create_customer_account mail error: ' . $e->getMessage());
+        } catch (Exception $e) {
+            $emailWarning = 'Account created, but credential email could not be sent.';
+            error_log('CallCenterStaff create_customer_account mail config error: ' . $e->getMessage());
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => $emailSent ? 'Customer account created successfully.' : 'Customer account created successfully (email pending).',
+            'email_sent' => $emailSent,
+            'warning' => $emailWarning,
+            'account' => [
+                'id' => $newUser['id'] ?? null,
+                'username' => $newUser['full_name'] ?? $username,
+                'email' => $newUser['email'] ?? $email,
+                'phone' => $newUser['phone'] ?? $phone,
+                'dob' => $newUser['date_of_birth'] ?? $dob,
+                'default_password' => $defaultPassword,
+            ],
+        ]);
         exit;
     }
 

@@ -125,6 +125,48 @@ final class UserRepository
     }
 
     /**
+     * Ensure users.createdbystaff exists in environments that have not run latest schema.
+     */
+    public function ensureCreatedByStaffColumnExists(): void
+    {
+        try {
+            $this->pdo->exec('ALTER TABLE users ADD COLUMN IF NOT EXISTS createdbystaff UUID');
+            $this->pdo->exec('CREATE INDEX IF NOT EXISTS idx_users_createdbystaff ON users(createdbystaff)');
+            $this->pdo->exec("DO $$ BEGIN
+                ALTER TABLE users
+                    ADD CONSTRAINT fk_users_createdbystaff
+                    FOREIGN KEY (createdbystaff) REFERENCES users(id) ON DELETE SET NULL;
+            EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$;");
+        } catch (PDOException $e) {
+            // Keep runtime resilient if DB role has limited DDL privileges.
+        }
+    }
+
+    /**
+     * Create a customer account by call center staff with default credential flow.
+     * Username is mapped to full_name in current schema.
+     * @return array<string,mixed>|null
+     */
+    public function createCustomerByStaff(
+        string $username,
+        string $email,
+        string $phone,
+        string $dateOfBirth,
+        string $passwordHash,
+        string $staffId
+    ): ?array {
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO users (full_name, email, phone, date_of_birth, role, auth_provider, password_hash, email_verified, profile_completed, is_active, createdbystaff, created_at, updated_at)
+             VALUES (?, ?, ?, ?::DATE, 'user'::user_role_v2, 'email', ?, FALSE, FALSE, TRUE, ?, NOW(), NOW())
+             RETURNING *"
+        );
+        $stmt->execute([$username, strtolower($email), $phone, $dateOfBirth, $passwordHash, $staffId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
      * @return array<string,mixed>|null
      */
     public function createLocalUser(

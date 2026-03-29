@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Role
     role            user_role_v2 NOT NULL DEFAULT 'user',
+    createdbystaff  UUID,
     
     -- Profile (required fields filled after first login)
     full_name       VARCHAR(255),
@@ -104,6 +105,15 @@ CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_assigned_vehicle ON users(assigned_vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_users_createdbystaff ON users(createdbystaff);
+
+-- FK for created-by-staff lineage
+DO $$ BEGIN
+    ALTER TABLE users
+        ADD CONSTRAINT fk_users_createdbystaff
+        FOREIGN KEY (createdbystaff) REFERENCES users(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================
 -- 3. AUTH SESSIONS TABLE

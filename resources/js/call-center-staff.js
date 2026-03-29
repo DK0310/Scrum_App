@@ -43,13 +43,28 @@
         replyContent: document.getElementById('ccReplyContent'),
         replyImage: document.getElementById('ccReplyImage'),
         replyMeta: document.getElementById('ccReplyMeta'),
-        replySubmitBtn: document.getElementById('ccReplySubmitBtn')
+        replySubmitBtn: document.getElementById('ccReplySubmitBtn'),
+        createAccountForm: document.getElementById('ccCreateAccountForm'),
+        accountUsername: document.getElementById('ccAccountUsername'),
+        accountEmail: document.getElementById('ccAccountEmail'),
+        accountPhone: document.getElementById('ccAccountPhone'),
+        accountDob: document.getElementById('ccAccountDob'),
+        createAccountStatus: document.getElementById('ccCreateAccountStatus'),
+        createAccountSubmitBtn: document.getElementById('ccCreateAccountSubmitBtn'),
+        createAccountResetBtn: document.getElementById('ccCreateAccountResetBtn'),
+        createAccountSummary: document.getElementById('ccCreateAccountSummary')
     };
 
     function setFormStatus(text, isError) {
         if (!el.formStatus) return;
         el.formStatus.textContent = text || '';
         el.formStatus.style.color = isError ? '#b91c1c' : '#334155';
+    }
+
+    function setCreateAccountStatus(text, isError) {
+        if (!el.createAccountStatus) return;
+        el.createAccountStatus.textContent = text || '';
+        el.createAccountStatus.style.color = isError ? '#b91c1c' : '#334155';
     }
 
     async function apiGet(params) {
@@ -98,6 +113,104 @@
         selectedAddresses = { pickup: null, return: null };
         applyAvailabilityToOptions();
         validatePickupDateTimeRealtime();
+    }
+
+    function resetCreateAccountForm() {
+        if (!el.createAccountForm) return;
+        el.createAccountForm.reset();
+        setCreateAccountStatus('');
+        if (el.createAccountSummary) {
+            el.createAccountSummary.style.display = 'none';
+            el.createAccountSummary.innerHTML = '';
+        }
+    }
+
+    function calculateAgeFromDob(dobValue) {
+        const dob = new Date(dobValue);
+        if (Number.isNaN(dob.getTime())) return -1;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+            age -= 1;
+        }
+        return age;
+    }
+
+    async function submitCreateAccount(event) {
+        event.preventDefault();
+        if (!el.createAccountForm) return;
+
+        const username = (el.accountUsername && el.accountUsername.value ? el.accountUsername.value : '').trim();
+        const email = (el.accountEmail && el.accountEmail.value ? el.accountEmail.value : '').trim();
+        const phone = (el.accountPhone && el.accountPhone.value ? el.accountPhone.value : '').trim();
+        const dob = (el.accountDob && el.accountDob.value ? el.accountDob.value : '').trim();
+
+        if (!username || !email || !phone || !dob) {
+            setCreateAccountStatus('Please complete all required fields.', true);
+            return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            setCreateAccountStatus('Invalid email format.', true);
+            return;
+        }
+
+        const phoneDigits = phone.replace(/\D+/g, '');
+        if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+            setCreateAccountStatus('Phone number must contain 10 to 15 digits.', true);
+            return;
+        }
+
+        const age = calculateAgeFromDob(dob);
+        if (age < 18) {
+            setCreateAccountStatus('Customer must be at least 18 years old.', true);
+            return;
+        }
+
+        setCreateAccountStatus('Creating account...');
+        if (el.createAccountSubmitBtn) {
+            el.createAccountSubmitBtn.disabled = true;
+            el.createAccountSubmitBtn.textContent = 'Creating...';
+        }
+
+        try {
+            const data = await apiPost({
+                action: 'create_customer_account',
+                username: username,
+                email: email,
+                phone: phone,
+                dob: dob
+            });
+
+            if (!data.success) {
+                setCreateAccountStatus(data.message || 'Failed to create account.', true);
+                return;
+            }
+
+            setCreateAccountStatus('Customer account created successfully.', false);
+            if (el.createAccountSummary) {
+                const account = data.account || {};
+                const warning = data.warning ? '<div style="color:#92400e;margin-top:6px;">' + escapeHtml(data.warning) + '</div>' : '';
+                el.createAccountSummary.innerHTML = ''
+                    + '<div><strong>Username:</strong> ' + escapeHtml(account.username || username) + '</div>'
+                    + '<div><strong>Email:</strong> ' + escapeHtml(account.email || email) + '</div>'
+                    + '<div><strong>Phone:</strong> ' + escapeHtml(account.phone || phone) + '</div>'
+                    + '<div><strong>Temporary Password:</strong> 123456</div>'
+                    + '<div><strong>Email Sent:</strong> ' + (data.email_sent ? 'Yes' : 'No') + '</div>'
+                    + warning;
+                el.createAccountSummary.style.display = 'block';
+            }
+            el.createAccountForm.reset();
+        } catch (err) {
+            setCreateAccountStatus('Network error. Please try again.', true);
+        } finally {
+            if (el.createAccountSubmitBtn) {
+                el.createAccountSubmitBtn.disabled = false;
+                el.createAccountSubmitBtn.textContent = 'Create Account';
+            }
+        }
     }
 
     function normalizeTier(tier) {
@@ -786,6 +899,14 @@
             el.pickupDate.addEventListener('input', validatePickupDateTimeRealtime);
             el.pickupDate.addEventListener('change', validatePickupDateTimeRealtime);
             el.pickupDate.addEventListener('blur', validatePickupDateTimeRealtime);
+        }
+
+        if (el.createAccountForm) {
+            el.createAccountForm.addEventListener('submit', submitCreateAccount);
+        }
+
+        if (el.createAccountResetBtn) {
+            el.createAccountResetBtn.addEventListener('click', resetCreateAccountForm);
         }
 
         document.addEventListener('click', function (e) {

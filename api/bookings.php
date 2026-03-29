@@ -172,6 +172,17 @@ if ($action === 'create') {
     requireAuth();
 
     $renterId = $_SESSION['user_id'];
+    $renter = $userRepo->findById((string)$renterId);
+    $emailVerifiedRaw = $renter['email_verified'] ?? false;
+    $emailVerified = in_array(strtolower((string)$emailVerifiedRaw), ['1', 'true', 't', 'yes', 'y'], true);
+    if (!$emailVerified) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Please verify your email before booking a minicab.'
+        ]);
+        exit;
+    }
+
     $vehicleId = $input['vehicle_id'] ?? '';
     $bookingType = $input['booking_type'] ?? 'with-driver';
     $pickupDate = $input['pickup_date'] ?? '';

@@ -263,6 +263,9 @@
     <div class="cc-tabbar" role="tablist" aria-label="Call center tabs">
         <button type="button" class="cc-tab-btn active" data-tab="booking" role="tab" aria-selected="true">Customer Booking</button>
         <button type="button" class="cc-tab-btn" data-tab="enquiry" role="tab" aria-selected="false">Customer Enquiry</button>
+        <?php if (!empty($canCreateAccount)): ?>
+        <button type="button" class="cc-tab-btn" data-tab="create-account" role="tab" aria-selected="false">Create Account</button>
+        <?php endif; ?>
     </div>
 
     <section class="cc-tab-panel active" id="ccTabBooking" role="tabpanel" aria-label="Customer Booking">
@@ -418,6 +421,48 @@
             </div>
         </section>
     </section>
+
+    <?php if (!empty($canCreateAccount)): ?>
+    <section class="cc-tab-panel" id="ccTabCreateAccount" role="tabpanel" aria-label="Create Account">
+        <p class="cc-tab-note">Create customer accounts with temporary password <strong>123456</strong>.</p>
+        <section class="cc-card" style="max-width:760px;">
+            <h2>Create Customer Account</h2>
+            <form id="ccCreateAccountForm">
+                <div class="cc-form-grid">
+                    <div>
+                        <label>Username *</label>
+                        <input class="cc-input" id="ccAccountUsername" required>
+                    </div>
+                    <div>
+                        <label>Email *</label>
+                        <input class="cc-input" id="ccAccountEmail" type="email" required>
+                    </div>
+                    <div>
+                        <label>Phone Number *</label>
+                        <input class="cc-input" id="ccAccountPhone" required>
+                    </div>
+                    <div>
+                        <label>Date of Birth *</label>
+                        <input class="cc-input" id="ccAccountDob" type="date" required>
+                    </div>
+                    <div class="full">
+                        <label>Default Password</label>
+                        <input class="cc-input" value="123456" readonly>
+                        <small class="cc-help">Temporary credential will be emailed to the customer.</small>
+                    </div>
+                </div>
+
+                <div class="cc-actions">
+                    <button type="button" class="cc-btn cc-btn-secondary" id="ccCreateAccountResetBtn">Reset</button>
+                    <button type="submit" class="cc-btn cc-btn-primary" id="ccCreateAccountSubmitBtn">Create Account</button>
+                </div>
+                <div class="cc-status" id="ccCreateAccountStatus"></div>
+            </form>
+
+            <div id="ccCreateAccountSummary" style="display:none;margin-top:12px;padding:10px 12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;color:#1e3a8a;font-size:0.88rem;"></div>
+        </section>
+    </section>
+    <?php endif; ?>
 </div>
 
 <div class="modal-overlay" id="ccReplyModal">
@@ -452,6 +497,7 @@
         function activateTab(tab) {
             const bookingPanel = document.getElementById('ccTabBooking');
             const enquiryPanel = document.getElementById('ccTabEnquiry');
+            const createAccountPanel = document.getElementById('ccTabCreateAccount');
             const buttons = document.querySelectorAll('.cc-tab-btn');
 
             buttons.forEach(function (btn) {
@@ -462,6 +508,7 @@
 
             if (bookingPanel) bookingPanel.classList.toggle('active', tab === 'booking');
             if (enquiryPanel) enquiryPanel.classList.toggle('active', tab === 'enquiry');
+            if (createAccountPanel) createAccountPanel.classList.toggle('active', tab === 'create-account');
         }
 
         document.addEventListener('DOMContentLoaded', function () {
