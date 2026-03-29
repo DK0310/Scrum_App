@@ -34,7 +34,7 @@
 
             showToast('🎟️ Promo "' + code + '" saved to your wallet! Redirecting to booking...', 'success');
             setTimeout(() => {
-                window.location.href = '/api/bookings.php?promo=' + encodeURIComponent(code);
+                window.location.href = '/booking.php?promo=' + encodeURIComponent(code);
             }, 1000);
         }
     </script>

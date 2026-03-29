@@ -177,6 +177,66 @@ if ($action === 'check-available-tiers') {
 }
 
 // ==========================================================
+// TIER/SEAT AVAILABILITY MATRIX (public)
+// Returns available vehicle counts for each tier by passenger count 1..7
+// ==========================================================
+if ($action === 'tier-seat-availability') {
+    try {
+        $stmt = $pdo->query(
+            "SELECT service_tier, seats, COUNT(*) AS total
+             FROM vehicles
+             WHERE status = 'available'
+               AND service_tier IN ('eco', 'standard', 'luxury', 'premium')
+             GROUP BY service_tier, seats"
+        );
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $tiers = ['eco', 'standard', 'luxury'];
+        $availability = [];
+        foreach ($tiers as $tier) {
+            $availability[$tier] = [];
+            for ($p = 1; $p <= 7; $p++) {
+                $availability[$tier][(string)$p] = 0;
+            }
+        }
+
+        foreach ($rows as $row) {
+            $tier = strtolower((string)($row['service_tier'] ?? ''));
+            if ($tier === 'premium') {
+                $tier = 'luxury';
+            }
+            if (!isset($availability[$tier])) {
+                continue;
+            }
+
+            $vehicleSeats = (int)($row['seats'] ?? 0);
+            $count = (int)($row['total'] ?? 0);
+            if ($vehicleSeats <= 0 || $count <= 0) {
+                continue;
+            }
+
+            for ($p = 1; $p <= 7; $p++) {
+                if ($vehicleSeats >= $p) {
+                    $availability[$tier][(string)$p] += $count;
+                }
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'availability' => $availability,
+        ]);
+    } catch (PDOException $e) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to get availability.',
+        ]);
+    }
+    exit;
+}
+
+// ==========================================================
 // SEARCH SUGGESTIONS (public - brand-only autocomplete)
 // ==========================================================
 if ($action === 'search-suggestions') {

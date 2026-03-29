@@ -30,7 +30,7 @@
                 <p style="color:var(--gray-500);margin-bottom:24px;">Select a car for hire with driver, or book a minicab instantly.</p>
                 <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
                     <a href="/api/cars.php" class="btn btn-primary">🔍 Browse Cars</a>
-                    <a href="/api/bookings.php?mode=minicab" class="btn btn-outline">🚕 Book a Minicab</a>
+                    <a href="/booking.php?mode=minicab" class="btn btn-outline">🚕 Book a Minicab</a>
                 </div>
             </div>
 
@@ -115,7 +115,7 @@
                                 <label class="form-label">📅 Scheduled Pick-up Date & Time</label>
                                 <input type="datetime-local" class="form-input" id="scheduledDateTime" min="">
                                 <div id="pickupDateTimeError" style="display:none;margin-top:8px;padding:10px 12px;background:#fee;border-radius:6px;border-left:3px solid #d32f2f;color:#d32f2f;font-size:0.85rem;"></div>
-                                <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">📌 <strong>Cancellation Policy:</strong> Free cancellation available if pickup is more than 48 hours away. Same-day and rush bookings are non-refundable.</small>
+                                <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">📌 <strong>Cancellation Policy:</strong> Free cancellation and booking modifications are available only if pickup is at least 24 hours away.</small>
                             </div>
                         </div>
 

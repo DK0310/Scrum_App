@@ -85,7 +85,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                 <span class="side-menu-icon">🚗</span> Cars
             </a>
             <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
-            <a href="/api/bookings.php?mode=minicab" class="side-menu-item <?= ($currentPage ?? '') === 'booking' ? 'active' : '' ?>">
+            <a href="/booking.php?mode=minicab" class="side-menu-item <?= ($currentPage ?? '') === 'booking' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚕</span> Book a Minicab
             </a>
             <?php endif; ?>
@@ -95,8 +95,8 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             <a href="/api/promotions.php" class="side-menu-item <?= ($currentPage ?? '') === 'promotions' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🏷️</span> Promotions
             </a>
-            <a href="/api/community.php" class="side-menu-item <?= ($currentPage ?? '') === 'community' ? 'active' : '' ?>">
-                <span class="side-menu-icon">👥</span> Community
+            <a href="/api/customer-enquiry.php" class="side-menu-item <?= ($currentPage ?? '') === 'customer-enquiry' ? 'active' : '' ?>">
+                <span class="side-menu-icon">✉️</span> Customer Enquiry
             </a>
             <a href="/api/membership.php" class="side-menu-item <?= ($currentPage ?? '') === 'membership' ? 'active' : '' ?>">
                 <span class="side-menu-icon">⭐</span> Membership

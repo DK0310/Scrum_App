@@ -13,7 +13,7 @@
                 </p>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
                     <a href="/api/cars.php" class="btn btn-primary btn-lg">🔍 Browse Cars</a>
-                    <a href="/api/bookings.php?mode=minicab" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(4px);">🚕 Book a Minicab</a>
+                    <a href="/booking.php?mode=minicab" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(4px);">🚕 Book a Minicab</a>
                     <a href="#how-it-works" class="btn btn-outline btn-lg" style="border-color:rgba(255,255,255,0.3);color:white;">Learn More →</a>
                 </div>
                 <div class="hero-stats">

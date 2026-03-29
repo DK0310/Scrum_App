@@ -4,7 +4,7 @@
  */
 
 // ===== CONSTANTS & CONFIGURATION =====
-const BOOKINGS_API = '/api/bookings.php';
+const BOOKINGS_API = '/api/orders.php';
 const VEHICLES_API = '/api/vehicles.php';
 const ORDER_STATUS_LABELS = {
     pending: 'Pending',
@@ -33,10 +33,20 @@ let USER_ROLE = ''; // Will be set from PHP
 // ===== REVIEW MODAL STATE =====
 let reviewBookingId = null;
 let reviewRating = 0;
+let modifyBookingId = null;
+let modifyAvailabilityMatrix = null;
+let modifyPickupMapObj = null;
+let modifyReturnMapObj = null;
+let modifyPickupMarker = null;
+let modifyReturnMarker = null;
+let modifyAutocompleteTimers = {};
+let modifySelectedAddresses = { pickup: null, return: null };
 
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', () => {
     initTripDetailModalEvents();
+    initModifyLocationAutocomplete();
+    initModifyAvailabilityHandlers();
     loadOrders();
 });
 
@@ -140,10 +150,13 @@ function renderOrders(orders) {
             }
         }
 
-        // Renter: can cancel only while order is still pending
+        // Renter: can modify and cancel only while order is pending and outside cutoff window
         if (order.is_renter && order.status === 'pending') {
+            if (canCustomerModifyOrder(order)) {
+                actionsHtml += '<button class="btn btn-outline btn-sm" onclick="openModifyBookingModal(\'' + order.id + '\')">✏️ Modify</button>';
+            }
             if (canCustomerCancelOrder(order)) {
-                actionsHtml = '<button class="btn btn-danger btn-sm" onclick="updateOrderStatus(\'' + order.id + '\', \'cancelled\')">❌ Cancel</button>';
+                actionsHtml += '<button class="btn btn-danger btn-sm" onclick="updateOrderStatus(\'' + order.id + '\', \'cancelled\')">❌ Cancel</button>';
             }
         }
 
@@ -217,8 +230,18 @@ function initTripDetailModalEvents() {
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') {
             closeTripDetailModal();
+            closeModifyBookingModal();
         }
     });
+
+    const modifyOverlay = document.getElementById('modifyBookingModalOverlay');
+    if (modifyOverlay) {
+        modifyOverlay.addEventListener('click', event => {
+            if (event.target === modifyOverlay) {
+                closeModifyBookingModal();
+            }
+        });
+    }
 }
 
 function openTripDetailModal(bookingId) {
@@ -400,14 +423,545 @@ function formatPickupDate(order) {
 }
 
 function canCustomerCancelOrder(order) {
+    return canCustomerModifyOrder(order);
+}
+
+function canCustomerModifyOrder(order) {
     if (!order || !order.is_renter || order.status !== 'pending') return false;
-    if (order.booking_type !== 'minicab') return false;
-    return true;
+    return hasAtLeast24HoursBeforePickup(order);
+}
+
+function hasAtLeast24HoursBeforePickup(order) {
+    const pickupAt = parseOrderPickupDateTime(order);
+    if (!pickupAt) return false;
+    const diffMs = pickupAt.getTime() - Date.now();
+    return diffMs >= 24 * 60 * 60 * 1000;
+}
+
+function parseOrderPickupDateTime(order) {
+    if (!order || !order.pickup_date) return null;
+
+    const pickupDate = String(order.pickup_date).trim();
+    const pickupTime = String(order.pickup_time || '').trim();
+
+    const direct = new Date(pickupDate);
+    if (!Number.isNaN(direct.getTime()) && pickupDate.includes('T')) {
+        return direct;
+    }
+
+    if (pickupTime) {
+        const m = pickupTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+        if (m) {
+            let hour = parseInt(m[1], 10);
+            const minute = parseInt(m[2], 10);
+            const meridiem = (m[3] || '').toUpperCase();
+
+            if (meridiem === 'PM' && hour < 12) hour += 12;
+            if (meridiem === 'AM' && hour === 12) hour = 0;
+
+            const dt = new Date(pickupDate + 'T00:00:00');
+            if (!Number.isNaN(dt.getTime())) {
+                dt.setHours(hour, minute, 0, 0);
+                return dt;
+            }
+        }
+    }
+
+    const dateOnly = new Date(pickupDate + 'T00:00:00');
+    if (Number.isNaN(dateOnly.getTime())) return null;
+    return dateOnly;
+}
+
+function getAvailabilityCountFor(tier, seats) {
+    const safeTier = String(tier || '').toLowerCase();
+    const safeSeats = String(parseInt(seats, 10) || 0);
+    if (!modifyAvailabilityMatrix || !modifyAvailabilityMatrix[safeTier]) return 0;
+    return parseInt(modifyAvailabilityMatrix[safeTier][safeSeats] || 0, 10);
+}
+
+async function loadModifyAvailabilityMatrix() {
+    try {
+        const res = await fetch(VEHICLES_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'tier-seat-availability' })
+        });
+        const data = await res.json();
+        if (data && data.success && data.availability) {
+            modifyAvailabilityMatrix = data.availability;
+        } else {
+            modifyAvailabilityMatrix = null;
+        }
+    } catch (err) {
+        console.error('Failed to load modify availability matrix:', err);
+        modifyAvailabilityMatrix = null;
+    }
+
+    updateModifyTierAvailabilityUI();
+    updateModifySeatsAvailabilityUI();
+}
+
+function initModifyAvailabilityHandlers() {
+    const tierSelect = document.getElementById('modifyRideTier');
+    const seatsSelect = document.getElementById('modifySeats');
+    if (tierSelect) {
+        tierSelect.addEventListener('change', () => {
+            updateModifySeatsAvailabilityUI();
+            updateModifyTierAvailabilityUI();
+        });
+    }
+    if (seatsSelect) {
+        seatsSelect.addEventListener('change', () => {
+            updateModifyTierAvailabilityUI();
+            updateModifySeatsAvailabilityUI();
+        });
+    }
+}
+
+function updateModifyTierAvailabilityUI() {
+    const tierSelect = document.getElementById('modifyRideTier');
+    const seatsSelect = document.getElementById('modifySeats');
+    const hint = document.getElementById('modifyTierAvailabilityHint');
+    if (!tierSelect || !seatsSelect) return;
+
+    const seats = parseInt(seatsSelect.value, 10) || 1;
+    const labels = { eco: 'Eco', standard: 'Standard', luxury: 'Luxury' };
+    const options = Array.from(tierSelect.options);
+
+    let enabledCount = 0;
+    options.forEach(opt => {
+        const tier = String(opt.value || '').toLowerCase();
+        const availableCount = getAvailabilityCountFor(tier, seats);
+        opt.textContent = (labels[tier] || opt.value) + ' (' + availableCount + ' available)';
+        opt.disabled = availableCount <= 0;
+        if (!opt.disabled) enabledCount += 1;
+    });
+
+    if (tierSelect.selectedOptions.length === 0 || tierSelect.selectedOptions[0].disabled) {
+        const firstEnabled = options.find(o => !o.disabled);
+        if (firstEnabled) {
+            tierSelect.value = firstEnabled.value;
+        }
+    }
+
+    const selectedTier = String(tierSelect.value || '').toLowerCase();
+    const selectedCount = getAvailabilityCountFor(selectedTier, seats);
+    if (hint) {
+        if (!modifyAvailabilityMatrix) {
+            hint.textContent = 'Unable to load availability right now.';
+        } else if (enabledCount === 0) {
+            hint.textContent = 'No service tiers available for selected seats.';
+        } else {
+            hint.textContent = labels[selectedTier] + ': ' + selectedCount + ' vehicle(s) available for ' + seats + ' seat(s).';
+        }
+    }
+}
+
+function updateModifySeatsAvailabilityUI() {
+    const tierSelect = document.getElementById('modifyRideTier');
+    const seatsSelect = document.getElementById('modifySeats');
+    const hint = document.getElementById('modifySeatsAvailabilityHint');
+    if (!tierSelect || !seatsSelect) return;
+
+    const tier = String(tierSelect.value || '').toLowerCase();
+    const options = Array.from(seatsSelect.options);
+    let enabledCount = 0;
+
+    options.forEach(opt => {
+        const seatCount = parseInt(opt.value, 10);
+        const availableCount = getAvailabilityCountFor(tier, seatCount);
+        opt.textContent = String(seatCount) + ' (' + availableCount + ' available)';
+        opt.disabled = availableCount <= 0;
+        if (!opt.disabled) enabledCount += 1;
+    });
+
+    if (seatsSelect.selectedOptions.length === 0 || seatsSelect.selectedOptions[0].disabled) {
+        const firstEnabled = options.find(o => !o.disabled);
+        if (firstEnabled) {
+            seatsSelect.value = firstEnabled.value;
+        }
+    }
+
+    const selectedSeats = parseInt(seatsSelect.value, 10) || 1;
+    const selectedCount = getAvailabilityCountFor(tier, selectedSeats);
+    if (hint) {
+        if (!modifyAvailabilityMatrix) {
+            hint.textContent = 'Unable to load availability right now.';
+        } else if (enabledCount === 0) {
+            hint.textContent = 'No seat options available for selected service tier.';
+        } else {
+            hint.textContent = selectedSeats + ' seat(s): ' + selectedCount + ' vehicle(s) available for this tier.';
+        }
+    }
+}
+
+function truncateText(text, maxLen) {
+    const t = String(text || '');
+    return t.length > maxLen ? t.substring(0, maxLen) + '...' : t;
+}
+
+function updateModifyMapCoords(type, lat, lon, name) {
+    const el = document.getElementById(type === 'pickup' ? 'modifyPickupMapCoords' : 'modifyReturnMapCoords');
+    if (!el) return;
+    const short = name ? truncateText(name, 65) : (Number(lat).toFixed(5) + ', ' + Number(lon).toFixed(5));
+    el.textContent = '📍 ' + short;
+}
+
+function moveModifyMapToLocation(type, lat, lon) {
+    const map = type === 'pickup' ? modifyPickupMapObj : modifyReturnMapObj;
+    const marker = type === 'pickup' ? modifyPickupMarker : modifyReturnMarker;
+    if (!map || !marker || !window.L) return;
+    const latlng = L.latLng(lat, lon);
+    marker.setLatLng(latlng);
+    map.setView(latlng, 16, { animate: true });
+}
+
+function initModifyLocationAutocomplete() {
+    const setup = [
+        { id: 'modifyPickupLocation', type: 'pickup' },
+        { id: 'modifyDestination', type: 'return' }
+    ];
+
+    setup.forEach(({ id, type }) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+
+        let dropdown = input.parentElement.querySelector('.leaflet-autocomplete-list');
+        if (!dropdown) {
+            dropdown = document.createElement('div');
+            dropdown.className = 'leaflet-autocomplete-list';
+            dropdown.style.display = 'none';
+            input.parentElement.appendChild(dropdown);
+        }
+
+        input.addEventListener('input', function() {
+            modifySelectedAddresses[type] = null;
+            const query = this.value.trim();
+            if (query.length < 3) {
+                dropdown.style.display = 'none';
+                return;
+            }
+
+            clearTimeout(modifyAutocompleteTimers[id]);
+            modifyAutocompleteTimers[id] = setTimeout(async () => {
+                try {
+                    const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&addressdetails=1&countrycodes=gb', {
+                        headers: { 'Accept-Language': 'en' }
+                    });
+                    const results = await res.json();
+                    if (!Array.isArray(results) || results.length === 0) {
+                        dropdown.style.display = 'none';
+                        return;
+                    }
+
+                    dropdown.innerHTML = results.map(r => {
+                        const display = String(r.display_name || '');
+                        const parts = display.split(',');
+                        const main = parts.slice(0, 2).join(',').trim();
+                        const sub = parts.slice(2).join(',').trim();
+                        const safeName = display.replace(/"/g, '&quot;');
+                        return '<div class="autocomplete-item" data-lat="' + r.lat + '" data-lon="' + r.lon + '" data-name="' + safeName + '">' +
+                            '<div class="ac-main">' + escapeHtml(main) + '</div>' +
+                            (sub ? '<div class="ac-sub">' + escapeHtml(sub) + '</div>' : '') +
+                        '</div>';
+                    }).join('');
+
+                    dropdown.style.display = 'block';
+                    dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
+                        item.addEventListener('mousedown', event => {
+                            event.preventDefault();
+                            const lat = parseFloat(item.getAttribute('data-lat') || '0');
+                            const lon = parseFloat(item.getAttribute('data-lon') || '0');
+                            const name = item.getAttribute('data-name') || '';
+                            input.value = name;
+                            dropdown.style.display = 'none';
+                            modifySelectedAddresses[type] = { lat, lon, name };
+                            moveModifyMapToLocation(type, lat, lon);
+                            updateModifyMapCoords(type, lat, lon, name);
+                        });
+                    });
+                } catch (err) {
+                    console.error('Modify address search error:', err);
+                    dropdown.style.display = 'none';
+                }
+            }, 320);
+        });
+
+        input.addEventListener('blur', () => setTimeout(() => { dropdown.style.display = 'none'; }, 200));
+        input.addEventListener('focus', function() {
+            if (this.value.trim().length >= 3 && dropdown.innerHTML) {
+                dropdown.style.display = 'block';
+            }
+        });
+    });
+}
+
+function closeModifyMapPicker(type) {
+    const containerId = type === 'pickup' ? 'modifyPickupMapContainer' : 'modifyReturnMapContainer';
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.style.display = 'none';
+        container.classList.remove('expanded');
+    }
+}
+
+function openModifyMapPicker(type) {
+    if (!window.L) {
+        showToast('Map is not available right now.', 'warning');
+        return;
+    }
+
+    const isPickup = type === 'pickup';
+    const container = document.getElementById(isPickup ? 'modifyPickupMapContainer' : 'modifyReturnMapContainer');
+    const mapEl = document.getElementById(isPickup ? 'modifyPickupMap' : 'modifyReturnMap');
+    if (!container || !mapEl) return;
+
+    if (container.style.display !== 'none') {
+        closeModifyMapPicker(type);
+        return;
+    }
+
+    container.style.display = 'block';
+
+    if (isPickup && modifyPickupMapObj) {
+        modifyPickupMapObj.remove();
+        modifyPickupMapObj = null;
+    }
+    if (!isPickup && modifyReturnMapObj) {
+        modifyReturnMapObj.remove();
+        modifyReturnMapObj = null;
+    }
+
+    const saved = modifySelectedAddresses[type];
+    const center = saved ? [saved.lat, saved.lon] : [51.5074, -0.1278];
+    const zoom = saved ? 16 : 13;
+    const map = L.map(mapEl).setView(center, zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+    }).addTo(map);
+
+    const marker = L.marker(center, { draggable: true }).addTo(map);
+
+    map.on('click', e => {
+        marker.setLatLng(e.latlng);
+        modifySelectedAddresses[type] = null;
+        updateModifyMapCoords(type, e.latlng.lat, e.latlng.lng, null);
+    });
+
+    marker.on('dragend', () => {
+        const pos = marker.getLatLng();
+        modifySelectedAddresses[type] = null;
+        updateModifyMapCoords(type, pos.lat, pos.lng, null);
+    });
+
+    if (isPickup) {
+        modifyPickupMapObj = map;
+        modifyPickupMarker = marker;
+    } else {
+        modifyReturnMapObj = map;
+        modifyReturnMarker = marker;
+    }
+
+    if (saved) updateModifyMapCoords(type, saved.lat, saved.lon, saved.name || null);
+    setTimeout(() => map.invalidateSize(), 200);
+}
+
+function toggleModifyMapExpand(type) {
+    const container = document.getElementById(type === 'pickup' ? 'modifyPickupMapContainer' : 'modifyReturnMapContainer');
+    if (!container) return;
+    container.classList.toggle('expanded');
+    const map = type === 'pickup' ? modifyPickupMapObj : modifyReturnMapObj;
+    if (map) setTimeout(() => map.invalidateSize(), 300);
+}
+
+async function confirmModifyMapLocation(type) {
+    const isPickup = type === 'pickup';
+    const input = document.getElementById(isPickup ? 'modifyPickupLocation' : 'modifyDestination');
+    const marker = isPickup ? modifyPickupMarker : modifyReturnMarker;
+    const saved = modifySelectedAddresses[type];
+
+    if (!input || !marker) {
+        closeModifyMapPicker(type);
+        return;
+    }
+
+    if (saved && saved.name) {
+        input.value = saved.name;
+        closeModifyMapPicker(type);
+        showToast('📍 Location confirmed!', 'success');
+        return;
+    }
+
+    const pos = marker.getLatLng();
+    try {
+        const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + pos.lat + '&lon=' + pos.lng + '&zoom=18&addressdetails=1', {
+            headers: { 'Accept-Language': 'en' }
+        });
+        const data = await res.json();
+        const address = data.display_name || (pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6));
+        input.value = address;
+        modifySelectedAddresses[type] = { lat: pos.lat, lon: pos.lng, name: address };
+        updateModifyMapCoords(type, pos.lat, pos.lng, address);
+    } catch (err) {
+        const fallback = pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6);
+        input.value = fallback;
+        modifySelectedAddresses[type] = { lat: pos.lat, lon: pos.lng, name: fallback };
+        updateModifyMapCoords(type, pos.lat, pos.lng, fallback);
+    }
+
+    closeModifyMapPicker(type);
+    showToast('📍 Location confirmed!', 'success');
+}
+
+async function geocodeModifyAddress(type, text) {
+    const query = String(text || '').trim();
+    if (query.length < 3) {
+        modifySelectedAddresses[type] = null;
+        return;
+    }
+    try {
+        const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=1&countrycodes=gb', {
+            headers: { 'Accept-Language': 'en' }
+        });
+        const results = await res.json();
+        if (Array.isArray(results) && results.length > 0) {
+            const r = results[0];
+            const lat = parseFloat(r.lat);
+            const lon = parseFloat(r.lon);
+            const name = String(r.display_name || query);
+            modifySelectedAddresses[type] = { lat, lon, name };
+            updateModifyMapCoords(type, lat, lon, name);
+        }
+    } catch (err) {
+        console.error('Failed to geocode modify address:', err);
+    }
+}
+
+function escapeHtml(text) {
+    const str = String(text || '');
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function openModifyBookingModal(bookingId) {
+    const order = allOrders.find(o => String(o.id) === String(bookingId));
+    if (!order) {
+        showToast('Booking not found.', 'error');
+        return;
+    }
+
+    if (!canCustomerModifyOrder(order)) {
+        showToast('Bookings cannot be modified within 24 hours before pickup.', 'warning');
+        return;
+    }
+
+    modifyBookingId = bookingId;
+
+    document.getElementById('modifyBookingId').textContent = '#' + String(order.id).substring(0, 8);
+    document.getElementById('modifyPickupLocation').value = order.pickup_location || '';
+    document.getElementById('modifyDestination').value = order.return_location || '';
+    document.getElementById('modifyRideTier').value = normalizeRideTierValue(order.ride_tier);
+    document.getElementById('modifySeats').value = String(normalizeModifySeatsValue(order.number_of_passengers));
+
+    modifySelectedAddresses = { pickup: null, return: null };
+    closeModifyMapPicker('pickup');
+    closeModifyMapPicker('return');
+
+    geocodeModifyAddress('pickup', order.pickup_location || '');
+    geocodeModifyAddress('return', order.return_location || '');
+
+    loadModifyAvailabilityMatrix();
+    document.getElementById('modifyBookingModalOverlay').style.display = 'flex';
+}
+
+function normalizeRideTierValue(rideTier) {
+    const value = String(rideTier || '').toLowerCase();
+    if (value === 'premium') return 'luxury';
+    if (['eco', 'standard', 'luxury'].includes(value)) return value;
+    return 'standard';
+}
+
+function normalizeModifySeatsValue(seats) {
+    const value = parseInt(seats, 10);
+    return value >= 7 ? 7 : 4;
+}
+
+function closeModifyBookingModal() {
+    modifyBookingId = null;
+    closeModifyMapPicker('pickup');
+    closeModifyMapPicker('return');
+    const overlay = document.getElementById('modifyBookingModalOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+async function submitModifyBooking() {
+    if (!modifyBookingId) return;
+
+    const pickupLocation = document.getElementById('modifyPickupLocation').value.trim();
+    const destination = document.getElementById('modifyDestination').value.trim();
+    const rideTier = document.getElementById('modifyRideTier').value;
+    const seats = parseInt(document.getElementById('modifySeats').value, 10);
+
+    if (!pickupLocation || !destination) {
+        showToast('Pickup location and destination are required.', 'warning');
+        return;
+    }
+    if (!['eco', 'standard', 'luxury'].includes(rideTier)) {
+        showToast('Please choose a valid service tier.', 'warning');
+        return;
+    }
+    if (![4, 7].includes(seats)) {
+        showToast('Seats must be 4 or 7.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('modifyBookingSaveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    try {
+        const res = await fetch(BOOKINGS_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'modify-booking',
+                booking_id: modifyBookingId,
+                pickup_location: pickupLocation,
+                return_location: destination,
+                ride_tier: rideTier,
+                number_of_passengers: seats
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast('✅ Booking updated successfully!', 'success');
+            closeModifyBookingModal();
+            closeTripDetailModal();
+            loadOrders();
+        } else {
+            showToast('❌ ' + (data.message || 'Failed to modify booking.'), 'error');
+        }
+    } catch (err) {
+        showToast('Connection error. Please try again.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
+    }
 }
 
 function truncate(str, max) {
     return str.length > max ? str.substring(0, max) + '...' : str;
 }
+
+window.openModifyMapPicker = openModifyMapPicker;
+window.toggleModifyMapExpand = toggleModifyMapExpand;
+window.confirmModifyMapLocation = confirmModifyMapLocation;
 
 // ===== REVIEW MODAL MANAGEMENT =====
 function openReviewModal(bookingId, carName) {

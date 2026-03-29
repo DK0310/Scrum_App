@@ -82,6 +82,10 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Membership
     membership      membership_tier NOT NULL DEFAULT 'free',
+
+    -- Driver dispatch assignment
+    assigned_vehicle_id UUID,
+    assigned_vehicle_assigned_at TIMESTAMPTZ,
     
     -- Status
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
@@ -99,6 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_assigned_vehicle ON users(assigned_vehicle_id);
 
 -- =====================================================
 -- 3. AUTH SESSIONS TABLE
@@ -156,6 +161,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     -- Specs
     engine_size     VARCHAR(20),
     consumption     VARCHAR(30),                -- e.g., "7L/100km" or "358mi"
+    price_per_day   DECIMAL(10, 2) NOT NULL DEFAULT 0,
     features        TEXT[],                     -- GPS, A/C, Premium audio, etc.
     
     -- Images (stored in vehicle_images table as BYTEA)
@@ -206,10 +212,41 @@ CREATE TABLE IF NOT EXISTS vehicle_images (
 CREATE INDEX IF NOT EXISTS idx_vehicle_images_vehicle ON vehicle_images(vehicle_id);
 CREATE INDEX IF NOT EXISTS idx_vehicle_images_thumbnail ON vehicle_images(vehicle_id, is_thumbnail);
 
+-- =====================================================
+-- 4c. VEHICLE ASSIGNMENTS TABLE (driver dispatch)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS vehicle_assignments (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    staff_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    driver_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    vehicle_id      UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    assigned_date   DATE NOT NULL,
+    assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    unassigned_at   TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_vehicle_assignments_driver_date ON vehicle_assignments(driver_id, assigned_date);
+CREATE INDEX IF NOT EXISTS idx_vehicle_assignments_vehicle_date ON vehicle_assignments(vehicle_id, assigned_date);
+CREATE INDEX IF NOT EXISTS idx_vehicle_assignments_staff ON vehicle_assignments(staff_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_vehicle_assignments_driver_active
+    ON vehicle_assignments(driver_id, assigned_date)
+    WHERE unassigned_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_vehicle_assignments_vehicle_active
+    ON vehicle_assignments(vehicle_id, assigned_date)
+    WHERE unassigned_at IS NULL;
+
 -- Add FK for thumbnail_id after vehicle_images table exists
 DO $$ BEGIN
     ALTER TABLE vehicles ADD CONSTRAINT fk_vehicles_thumbnail
         FOREIGN KEY (thumbnail_id) REFERENCES vehicle_images(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE users ADD CONSTRAINT fk_users_assigned_vehicle
+        FOREIGN KEY (assigned_vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -506,7 +543,38 @@ CREATE TABLE trip_enquiries (
 CREATE INDEX idx_enquiries_status ON trip_enquiries(status);
 
 -- =====================================================
--- 17. UPDATED_AT TRIGGER FUNCTION
+-- 17. CUSTOMER ENQUIRIES TABLES
+-- =====================================================
+CREATE TABLE customer_enquiries (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    enquiry_type        VARCHAR(20) NOT NULL CHECK (enquiry_type IN ('trip', 'general')),
+    content             TEXT NOT NULL,
+    image_storage_path  TEXT,
+    status              VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'replied')),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    replied_at          TIMESTAMPTZ
+);
+
+CREATE INDEX idx_customer_enquiries_customer ON customer_enquiries(customer_id);
+CREATE INDEX idx_customer_enquiries_created ON customer_enquiries(created_at DESC);
+CREATE INDEX idx_customer_enquiries_status ON customer_enquiries(status);
+
+CREATE TABLE enquiry_replies (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    enquiry_id          UUID NOT NULL UNIQUE REFERENCES customer_enquiries(id) ON DELETE CASCADE,
+    staff_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content             TEXT NOT NULL,
+    image_storage_path  TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_enquiry_replies_staff ON enquiry_replies(staff_id);
+CREATE INDEX idx_enquiry_replies_created ON enquiry_replies(created_at DESC);
+
+-- =====================================================
+-- 18. UPDATED_AT TRIGGER FUNCTION
 -- =====================================================
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
@@ -534,8 +602,11 @@ CREATE TRIGGER trg_reviews_updated_at
 CREATE TRIGGER trg_posts_updated_at
     BEFORE UPDATE ON community_posts FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+CREATE TRIGGER trg_customer_enquiries_updated_at
+    BEFORE UPDATE ON customer_enquiries FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- =====================================================
--- 18. SEED DATA - DEFAULT PROMOTIONS
+-- 19. SEED DATA - DEFAULT PROMOTIONS
 -- =====================================================
 INSERT INTO promotions (code, title, description, discount_type, discount_value, min_booking_days, expires_at) VALUES
 ('WEEKEND20', 'Weekend Special', 'Book any car for the weekend and save 20%. Valid until March 31.', 'percentage', 20, 2, '2026-03-31 23:59:59+00'),
@@ -546,7 +617,7 @@ INSERT INTO promotions (code, title, description, discount_type, discount_value,
 ('REFER20', 'Refer a Friend', 'Refer a friend and both get $20 off your next booking.', 'fixed', 20, 1, NULL);
 
 -- =====================================================
--- 18b. SEED DATA - DEFAULT ADMIN & STAFF USERS
+-- 19b. SEED DATA - DEFAULT ADMIN & STAFF USERS
 -- =====================================================
 INSERT INTO users (email, full_name, auth_provider, role, profile_completed, email_verified, password_hash) VALUES
 ('admin1@drivenow.local', 'Administrator', 'email', 'admin'::user_role_v2, true, true, '$2y$10$hRY0TwzUrQK2d42oXUAE9Ob9DN2yhbB6LhKE8Hrx/fZ9S2a.CJyx6'),
@@ -560,7 +631,7 @@ INSERT INTO users (email, full_name, auth_provider, role, profile_completed, ema
 -- You can verify/recreate them using PHP: password_hash('admin123', PASSWORD_BCRYPT)
 
 -- =====================================================
--- 19. ROW LEVEL SECURITY (Supabase)
+-- 20. ROW LEVEL SECURITY (Supabase)
 -- =====================================================
 
 -- Enable RLS on all tables
@@ -579,6 +650,9 @@ ALTER TABLE memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gps_tracking ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trip_enquiries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE promotions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_enquiries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE enquiry_replies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vehicle_assignments ENABLE ROW LEVEL SECURITY;
 
 -- Public read for vehicles & promotions
 DROP POLICY IF EXISTS "Vehicles are viewable by everyone" ON vehicles;

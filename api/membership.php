@@ -20,15 +20,15 @@ $currentPage = 'membership';
 $plans = [
     [
         'name' => 'Basic', 'price' => 9, 'popular' => false, 'slug' => 'basic',
-        'features' => ['5% discount on all rentals', 'Priority email support', 'Free cancellation (48h)', 'Monthly newsletter', 'Basic GPS tracking']
+        'features' => ['5% discount on all rentals', 'Priority email support', 'Free cancellation/modification (24h)', 'Monthly newsletter', 'Basic GPS tracking']
     ],
     [
         'name' => 'Premium', 'price' => 29, 'popular' => true, 'slug' => 'premium',
-        'features' => ['15% discount on all rentals', '24/7 priority support', 'Free cancellation (24h)', 'Free driver upgrade', 'Advanced GPS + route history', 'Airport lounge access']
+        'features' => ['15% discount on all rentals', '24/7 priority support', 'Free cancellation/modification (24h)', 'Free driver upgrade', 'Advanced GPS + route history', 'Airport lounge access']
     ],
     [
         'name' => 'Corporate', 'price' => 99, 'popular' => false, 'slug' => 'corporate',
-        'features' => ['25% discount on all rentals', 'Dedicated account manager', 'Unlimited free cancellation', 'Fleet management dashboard', 'Custom billing & invoicing', 'Long-term contract rates', 'Multi-user accounts']
+        'features' => ['25% discount on all rentals', 'Dedicated account manager', 'Free cancellation/modification (24h)', 'Fleet management dashboard', 'Custom billing & invoicing', 'Long-term contract rates', 'Multi-user accounts']
     ],
 ];
 

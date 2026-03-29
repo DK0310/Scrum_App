@@ -228,7 +228,7 @@ function applyPromo(code) {
         showToast('🎟️ Promo "' + code + '" saved to your wallet! Redirecting to booking...', 'success');
     }
     setTimeout(() => {
-        window.location.href = '/api/bookings.php?promo=' + encodeURIComponent(code);
+        window.location.href = '/booking.php?promo=' + encodeURIComponent(code);
     }, 1000);
 }
 
@@ -242,12 +242,12 @@ function bookCar(carId) {
     if (!isLoggedIn) {
         if (typeof showToast === 'function') showToast('Please sign in to book a car.', 'warning');
         setTimeout(() => {
-            window.location.href = '/login.php?redirect=/api/bookings.php&car_id=' + encodeURIComponent(carId);
+            window.location.href = '/login.php?redirect=/booking.php&car_id=' + encodeURIComponent(carId);
         }, 1000);
         return;
     }
     
-    window.location.href = '/api/bookings.php?car_id=' + encodeURIComponent(carId);
+    window.location.href = '/booking.php?car_id=' + encodeURIComponent(carId);
 }
 
 // ===== INITIALIZATION =====

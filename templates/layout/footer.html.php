@@ -30,9 +30,9 @@
                     <h4 class="footer-title">Services</h4>
                     <ul class="footer-links">
                         <li><a href="/api/cars.php">Hire With Driver</a></li>
-                        <li><a href="/api/bookings.php?mode=minicab">Book a Minicab</a></li>
+                        <li><a href="/booking.php?mode=minicab">Book a Minicab</a></li>
                         <li><a href="membership.php">Corporate Fleet</a></li>
-                        <li><a href="/api/bookings.php">Long-term Rental</a></li>
+                        <li><a href="/booking.php">Long-term Rental</a></li>
                     </ul>
                 </div>
                 <div>

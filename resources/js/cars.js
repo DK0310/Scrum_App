@@ -650,7 +650,7 @@
     if (!isLoggedIn) {
       if (typeof showToast === 'function') showToast('Please sign in to book a car.', 'warning');
       setTimeout(() => {
-        window.location.href = 'login.php?redirect=/api/bookings.php&car_id=' + encodeURIComponent(carId);
+        window.location.href = 'login.php?redirect=/booking.php&car_id=' + encodeURIComponent(carId);
       }, 1000);
       return;
     }
@@ -660,7 +660,7 @@
       if (typeof showToast === 'function') showToast('This vehicle is currently rented and not available for booking.', 'warning');
       return;
     }
-    window.location.href = '/api/bookings.php?car_id=' + encodeURIComponent(carId);
+    window.location.href = '/booking.php?car_id=' + encodeURIComponent(carId);
   }
 
   function toggleFavorite(btn) {

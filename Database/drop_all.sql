@@ -4,13 +4,33 @@
 -- Order: drop dependent tables first (FK constraints)
 -- =====================================================
 
--- Drop all triggers
-DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
-DROP TRIGGER IF EXISTS trg_vehicles_updated_at ON vehicles;
-DROP TRIGGER IF EXISTS trg_bookings_updated_at ON bookings;
-DROP TRIGGER IF EXISTS trg_reviews_updated_at ON reviews;
-DROP TRIGGER IF EXISTS trg_posts_updated_at ON community_posts;
-DROP TRIGGER IF EXISTS trg_active_trips_updated_at ON active_trips;
+-- Drop all triggers (guard table existence to avoid 42P01)
+DO $$
+BEGIN
+	IF to_regclass('public.users') IS NOT NULL THEN
+		EXECUTE 'DROP TRIGGER IF EXISTS trg_users_updated_at ON users';
+	END IF;
+
+	IF to_regclass('public.vehicles') IS NOT NULL THEN
+		EXECUTE 'DROP TRIGGER IF EXISTS trg_vehicles_updated_at ON vehicles';
+	END IF;
+
+	IF to_regclass('public.bookings') IS NOT NULL THEN
+		EXECUTE 'DROP TRIGGER IF EXISTS trg_bookings_updated_at ON bookings';
+	END IF;
+
+	IF to_regclass('public.reviews') IS NOT NULL THEN
+		EXECUTE 'DROP TRIGGER IF EXISTS trg_reviews_updated_at ON reviews';
+	END IF;
+
+	IF to_regclass('public.community_posts') IS NOT NULL THEN
+		EXECUTE 'DROP TRIGGER IF EXISTS trg_posts_updated_at ON community_posts';
+	END IF;
+
+	IF to_regclass('public.active_trips') IS NOT NULL THEN
+		EXECUTE 'DROP TRIGGER IF EXISTS trg_active_trips_updated_at ON active_trips';
+	END IF;
+END $$;
 
 -- Drop trigger function (with CASCADE for dependent objects)
 DROP FUNCTION IF EXISTS update_updated_at() CASCADE;
@@ -26,6 +46,7 @@ DROP TABLE IF EXISTS favorites CASCADE;
 DROP TABLE IF EXISTS community_likes CASCADE;
 DROP TABLE IF EXISTS community_comments CASCADE;
 DROP TABLE IF EXISTS community_posts CASCADE;
+DROP TABLE IF EXISTS vehicle_assignments CASCADE;
 DROP TABLE IF EXISTS reviews CASCADE;
 DROP TABLE IF EXISTS payments CASCADE;
 DROP TABLE IF EXISTS bookings CASCADE;

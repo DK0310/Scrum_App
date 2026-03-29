@@ -422,6 +422,52 @@ final class BookingRepository
     }
 
     /**
+     * Load booking data needed for customer-side modify/cancel checks.
+     * @return array<string,mixed>|null
+     */
+    public function getBookingForCustomerEdit(string $bookingId): ?array
+    {
+        $stmt = $this->pdo->prepare("\n            SELECT id, renter_id, owner_id, status, booking_type,\n                   pickup_date, pickup_time,\n                   pickup_location, return_location,\n                   ride_tier, number_of_passengers\n            FROM bookings\n            WHERE id = ?\n            LIMIT 1\n        ");
+        $stmt->execute([$bookingId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Update customer-editable booking fields only.
+     * Allowed keys: pickup_location, return_location, ride_tier, number_of_passengers.
+     */
+    public function updateCustomerEditableFields(string $bookingId, array $updates): bool
+    {
+        $allowedFields = ['pickup_location', 'return_location', 'ride_tier', 'number_of_passengers'];
+        $setParts = [];
+        $params = [];
+
+        foreach ($allowedFields as $field) {
+            if (!array_key_exists($field, $updates)) {
+                continue;
+            }
+
+            if ($field === 'number_of_passengers') {
+                $setParts[] = $field . ' = ?';
+                $params[] = (int)$updates[$field];
+            } else {
+                $setParts[] = $field . ' = ?';
+                $params[] = $updates[$field] === null ? null : trim((string)$updates[$field]);
+            }
+        }
+
+        if (empty($setParts)) {
+            return false;
+        }
+
+        $sql = 'UPDATE bookings SET ' . implode(', ', $setParts) . ', updated_at = NOW() WHERE id = ?';
+        $params[] = $bookingId;
+
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($params) && $stmt->rowCount() > 0;
+    }
+
+    /**
      * List bookings for a user (as renter or owner)
      * @return array<int,array<string,mixed>>
      */

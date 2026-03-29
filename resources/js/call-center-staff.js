@@ -1,5 +1,6 @@
 (function () {
     const API = '/api/CallCenterStaff.php';
+    const ENQUIRY_API = '/api/customer-enquiry.php';
     const UK_DEFAULT_CENTER = { lat: 51.5074, lon: -0.1278 }; // London
     const MIN_PICKUP_LEAD_MINUTES = 1;
     const TIER_ORDER = ['eco', 'standard', 'premium'];
@@ -35,6 +36,14 @@
         pickupDateHint: document.getElementById('ccPickupDateHint'),
         rideTierHint: document.getElementById('ccRideTierHint'),
         seatCapacityHint: document.getElementById('ccSeatCapacityHint')
+        ,
+        enquiryTable: document.getElementById('ccEnquiryTable'),
+        replyModal: document.getElementById('ccReplyModal'),
+        replyEnquiryId: document.getElementById('ccReplyEnquiryId'),
+        replyContent: document.getElementById('ccReplyContent'),
+        replyImage: document.getElementById('ccReplyImage'),
+        replyMeta: document.getElementById('ccReplyMeta'),
+        replySubmitBtn: document.getElementById('ccReplySubmitBtn')
     };
 
     function setFormStatus(text, isError) {
@@ -55,6 +64,12 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
+        return res.json();
+    }
+
+    async function enquiryGet(params) {
+        const qs = new URLSearchParams(params);
+        const res = await fetch(ENQUIRY_API + '?' + qs.toString());
         return res.json();
     }
 
@@ -333,6 +348,141 @@
                 }
             });
         });
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '-';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value);
+        return d.toLocaleString('en-GB', {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    async function loadEnquiries() {
+        if (!el.enquiryTable) return;
+        el.enquiryTable.innerHTML = '<tr><td colspan="6">Loading enquiries...</td></tr>';
+
+        try {
+            const data = await enquiryGet({ action: 'list-staff-enquiries' });
+            if (!data.success) {
+                el.enquiryTable.innerHTML = '<tr><td colspan="6">Cannot load enquiries</td></tr>';
+                return;
+            }
+
+            const rows = data.enquiries || [];
+            if (rows.length === 0) {
+                el.enquiryTable.innerHTML = '<tr><td colspan="6">No enquiries</td></tr>';
+                return;
+            }
+
+            el.enquiryTable.innerHTML = rows.map((e) => {
+                const id = escapeHtml(e.id || '');
+                const created = escapeHtml(formatDateTime(e.created_at));
+                const type = e.enquiry_type === 'trip' ? 'Trip' : 'General';
+                const customer = escapeHtml(e.customer_name || 'Unknown');
+                const status = escapeHtml(e.status || 'open');
+                const preview = escapeHtml(String(e.content || '').substring(0, 100));
+                const replied = !!e.reply_id || status === 'replied';
+
+                let actionHtml = '<button class="cc-btn cc-btn-primary" data-action="reply" data-id="' + id + '">Reply</button>';
+                if (replied) {
+                    actionHtml = '<button class="cc-btn cc-btn-secondary" disabled>Replied</button>';
+                }
+
+                return '<tr>'
+                    + '<td>' + created + '</td>'
+                    + '<td>' + escapeHtml(type) + '</td>'
+                    + '<td>' + customer + '</td>'
+                    + '<td><span class="' + statusClass(status) + '">' + status + '</span></td>'
+                    + '<td>' + preview + (String(e.content || '').length > 100 ? '...' : '') + '</td>'
+                    + '<td>' + actionHtml + '</td>'
+                    + '</tr>';
+            }).join('');
+
+            Array.from(el.enquiryTable.querySelectorAll('button[data-action="reply"]')).forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const enquiryId = btn.getAttribute('data-id') || '';
+                    if (!enquiryId) return;
+                    openEnquiryReplyModal(enquiryId, rows);
+                });
+            });
+        } catch (err) {
+            el.enquiryTable.innerHTML = '<tr><td colspan="6">Network error</td></tr>';
+        }
+    }
+
+    function openEnquiryReplyModal(enquiryId, rows) {
+        if (!el.replyModal || !el.replyEnquiryId || !el.replyContent) return;
+        const row = (rows || []).find((r) => String(r.id) === String(enquiryId));
+        el.replyEnquiryId.value = enquiryId;
+        el.replyContent.value = '';
+        if (el.replyImage) {
+            el.replyImage.value = '';
+        }
+        if (el.replyMeta) {
+            const type = row && row.enquiry_type === 'trip' ? 'Trip' : 'General';
+            const customer = row ? (row.customer_name || 'Unknown') : 'Unknown';
+            el.replyMeta.textContent = 'Enquiry: ' + enquiryId.substring(0, 8) + ' | Type: ' + type + ' | Customer: ' + customer;
+        }
+        el.replyModal.classList.add('open');
+    }
+
+    async function submitEnquiryReply() {
+        if (!el.replyEnquiryId || !el.replyContent) return;
+
+        const enquiryId = (el.replyEnquiryId.value || '').trim();
+        const content = (el.replyContent.value || '').trim();
+        const image = el.replyImage && el.replyImage.files ? (el.replyImage.files[0] || null) : null;
+
+        if (!enquiryId || !content) {
+            alert('Reply content is required.');
+            return;
+        }
+
+        if (el.replySubmitBtn) {
+            el.replySubmitBtn.disabled = true;
+            el.replySubmitBtn.textContent = 'Sending...';
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('action', 'reply-enquiry');
+            formData.append('enquiry_id', enquiryId);
+            formData.append('content', content);
+            if (image) {
+                formData.append('image', image);
+            }
+
+            const res = await fetch(ENQUIRY_API, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+
+            if (!data.success) {
+                alert(data.message || 'Failed to send reply');
+                return;
+            }
+
+            if (typeof closeModal === 'function') {
+                closeModal('ccReplyModal');
+            } else if (el.replyModal) {
+                el.replyModal.classList.remove('open');
+            }
+            await loadEnquiries();
+        } catch (err) {
+            alert('Network error');
+        } finally {
+            if (el.replySubmitBtn) {
+                el.replySubmitBtn.disabled = false;
+                el.replySubmitBtn.textContent = 'Send Reply';
+            }
+        }
     }
 
     async function submitCancel(bookingId) {
@@ -701,11 +851,13 @@
         validatePickupDateTimeRealtime();
         await loadAvailabilityOptions();
         await loadRequests();
+        await loadEnquiries();
     }
 
     window.openMapPicker = openMapPicker;
     window.toggleMapExpand = toggleMapExpand;
     window.confirmMapLocation = confirmMapLocation;
+    window.submitEnquiryReply = submitEnquiryReply;
 
     document.addEventListener('DOMContentLoaded', init);
 })();

@@ -31,7 +31,7 @@
                 <div style="font-size:3rem;margin-bottom:16px;">📭</div>
                 <h3 style="color:var(--gray-700);margin-bottom:8px;">No orders yet</h3>
                 <p style="color:var(--gray-500);margin-bottom:24px;">Start by browsing our car listings and make your first booking!</p>
-                <a href="/api/cars.php" class="btn btn-primary" style="display:inline-block;width:auto;padding:12px 32px;">Browse Cars</a>
+                <a href="/cars.php" class="btn btn-primary" style="display:inline-block;width:auto;padding:12px 32px;">Browse Cars</a>
             </div>
 
             <!-- Orders List -->
@@ -183,6 +183,81 @@
         </div>
     </div>
 
+    <div class="review-modal-overlay" id="modifyBookingModalOverlay" style="display:none;">
+        <div class="review-modal" role="dialog" aria-modal="true" aria-labelledby="modifyBookingTitle">
+            <div class="review-modal-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                <div style="text-align:left;">
+                    <h3 id="modifyBookingTitle" style="margin:0 0 4px;color:var(--gray-900);">Modify Booking</h3>
+                    <p style="margin:0;color:var(--gray-600);font-size:0.88rem;">Order <span id="modifyBookingId">-</span> · Editable until 24 hours before pickup</p>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModifyBookingModal()" style="min-width:44px;padding:8px 12px;">✕</button>
+            </div>
+            <div class="review-modal-body" style="padding-top:18px;">
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label class="order-detail-label" for="modifyPickupLocation" style="display:block;margin-bottom:6px;">Pick-up Location</label>
+                    <div class="location-input-wrapper">
+                        <input id="modifyPickupLocation" class="form-input" type="text" placeholder="Enter pickup location" autocomplete="off">
+                        <button type="button" class="location-map-btn" onclick="openModifyMapPicker('pickup')" title="Choose on map">📍</button>
+                    </div>
+                    <div id="modifyPickupMapContainer" class="map-picker-container" style="display:none;">
+                        <div class="map-picker-wrapper">
+                            <div id="modifyPickupMap" class="map-picker"></div>
+                            <button type="button" class="map-expand-btn" onclick="toggleModifyMapExpand('pickup')" title="Expand map">⛶</button>
+                        </div>
+                        <div class="map-picker-footer">
+                            <span class="map-coords" id="modifyPickupMapCoords">Drag marker or click to select location</span>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="confirmModifyMapLocation('pickup')">✓ Confirm Location</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label class="order-detail-label" for="modifyDestination" style="display:block;margin-bottom:6px;">Destination</label>
+                    <div class="location-input-wrapper">
+                        <input id="modifyDestination" class="form-input" type="text" placeholder="Enter destination" autocomplete="off">
+                        <button type="button" class="location-map-btn" onclick="openModifyMapPicker('return')" title="Choose on map">📍</button>
+                    </div>
+                    <div id="modifyReturnMapContainer" class="map-picker-container" style="display:none;">
+                        <div class="map-picker-wrapper">
+                            <div id="modifyReturnMap" class="map-picker"></div>
+                            <button type="button" class="map-expand-btn" onclick="toggleModifyMapExpand('return')" title="Expand map">⛶</button>
+                        </div>
+                        <div class="map-picker-footer">
+                            <span class="map-coords" id="modifyReturnMapCoords">Drag marker or click to select location</span>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="confirmModifyMapLocation('return')">✓ Confirm Location</button>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="order-detail-label" for="modifyRideTier" style="display:block;margin-bottom:6px;">Service Tier</label>
+                        <select id="modifyRideTier" class="form-input">
+                            <option value="eco">Eco</option>
+                            <option value="standard">Standard</option>
+                            <option value="luxury">Luxury</option>
+                        </select>
+                        <small id="modifyTierAvailabilityHint" style="display:block;margin-top:6px;color:var(--gray-500);font-size:0.75rem;">Loading availability...</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="order-detail-label" for="modifySeats" style="display:block;margin-bottom:6px;">Seats</label>
+                        <select id="modifySeats" class="form-input">
+                            <option value="4">4</option>
+                            <option value="7">7</option>
+                        </select>
+                        <small id="modifySeatsAvailabilityHint" style="display:block;margin-top:6px;color:var(--gray-500);font-size:0.75rem;">Loading availability...</small>
+                    </div>
+                </div>
+            </div>
+            <div class="review-modal-footer" style="padding-top:8px;justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeModifyBookingModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="modifyBookingSaveBtn" onclick="submitModifyBooking()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OpenStreetMap + Leaflet (free, no API key needed) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <script src="/resources/js/orders.js"></script>
     
     <!-- Set USER_ROLE from PHP before orders.js initializes -->
@@ -222,6 +297,90 @@
             color: #f59e0b; transform: scale(1.15);
         }
         .review-star-btn:hover { text-shadow: 0 0 12px rgba(245,158,11,0.4); }
+
+        .location-input-wrapper {
+            position: relative;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .location-map-btn {
+            width: 44px;
+            height: 44px;
+            border: 1px solid var(--gray-300);
+            border-radius: 10px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .location-map-btn:hover { background: var(--gray-100); }
+        .leaflet-autocomplete-list {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 52px;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            box-shadow: var(--shadow-lg);
+            z-index: 10020;
+            max-height: 240px;
+            overflow: auto;
+        }
+        .leaflet-autocomplete-list .autocomplete-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--gray-100);
+            cursor: pointer;
+        }
+        .leaflet-autocomplete-list .autocomplete-item:last-child { border-bottom: none; }
+        .leaflet-autocomplete-list .autocomplete-item:hover { background: var(--primary-50); }
+        .leaflet-autocomplete-list .autocomplete-item .ac-main { font-weight: 600; }
+        .leaflet-autocomplete-list .autocomplete-item .ac-sub { font-size: 0.75rem; color: var(--gray-500); margin-top: 2px; }
+
+        .map-picker-container {
+            margin-top: 10px;
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .map-picker-container.expanded {
+            position: fixed;
+            inset: 16px;
+            z-index: 10030;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+        }
+        .map-picker-container.expanded .map-picker { height: calc(100% - 52px); }
+        .map-picker-wrapper { position: relative; }
+        .map-picker { height: 220px; width: 100%; }
+        .map-expand-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            border: 1px solid var(--gray-300);
+            background: #fff;
+            border-radius: 8px;
+            width: 34px;
+            height: 34px;
+            cursor: pointer;
+        }
+        .map-picker-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 10px;
+            border-top: 1px solid var(--gray-100);
+        }
+        .map-coords {
+            font-size: 0.75rem;
+            color: var(--gray-600);
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
         #tripDetailModalOverlay {
             padding: 12px;
