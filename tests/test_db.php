@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/Database/db.php';
+require_once __DIR__ . '/../Database/db.php';
 
 echo "=== USER TABLE ===\n";
 $stmt = $pdo->query("SELECT id, email, phone, full_name, password_hash, is_active FROM users LIMIT 10");

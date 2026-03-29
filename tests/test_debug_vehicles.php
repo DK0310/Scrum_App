@@ -1,6 +1,6 @@
 <?php
-require_once 'Database/db.php';
-require_once 'sql/VehicleRepository.php';
+require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../sql/VehicleRepository.php';
 
 $vehicleRepo = new VehicleRepository($pdo);
 $allVehicles = $vehicleRepo->listAll();

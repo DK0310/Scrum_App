@@ -15,28 +15,15 @@ if (!is_array($input)) {
 }
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
-// ===== PAGE VIEW MODE (no action and not get-avatar) =====
+// get-avatar remains a non-JSON file redirect endpoint.
 $preAction = $_GET['action'] ?? '';
 if (empty($action) && $preAction !== 'get-avatar') {
-    // Render profile page (not API)
-    $title = 'My Profile - Private Hire';
-    $currentPage = 'profile';
-
-    $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
-    $userRole = $_SESSION['role'] ?? 'user';
-    $currentUser = $isLoggedIn ? ($_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['email'] ?? 'User') : null;
-
-    if (!$isLoggedIn) {
-        $_SESSION['login_flash'] = [
-            'type' => 'error',
-            'message' => 'Please sign in to view your profile.'
-        ];
-        $_SESSION['login_old_identifier'] = $_SESSION['login_old_identifier'] ?? '';
-        header('Location: /');
-        exit;
-    }
-
-    require __DIR__ . '/../templates/profile.html.php';
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Page controller moved to /profile.php.',
+        'moved_to' => '/profile.php'
+    ]);
     exit;
 }
 

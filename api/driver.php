@@ -157,8 +157,11 @@ function driver_send_dispatch_email(array $booking, string $driverNameFallback =
 }
 
 if ($action === '') {
-    require __DIR__ . '/../templates/driver.html.php';
-    exit;
+    driver_json([
+        'success' => false,
+        'message' => 'Page controller moved to /driver.php.',
+        'moved_to' => '/driver.php'
+    ], 400);
 }
 
 header('Access-Control-Allow-Origin: *');

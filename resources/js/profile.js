@@ -230,7 +230,7 @@ async function doSaveProfile() {
             showToast('✅ Profile updated successfully!', 'success');
 
             // Update header name
-            const nameLink = document.querySelector('.navbar-actions a[href="/api/profile.php"]');
+            const nameLink = document.querySelector('.navbar-actions a[href="/profile.php"]');
             if (nameLink) nameLink.innerHTML = '👤 ' + payload.full_name;
 
             // Instant role change — update navbar UI
@@ -240,7 +240,7 @@ async function doSaveProfile() {
             if (['controlstaff', 'admin'].includes(newRole)) {
                 // Show My Vehicles link - controlstaff/admin can manage vehicles
                 if (!myVehiclesLink) {
-                    const ordersLi = document.querySelector('.navbar-nav a[href="/api/orders.php"]')?.parentElement;
+                    const ordersLi = document.querySelector('.navbar-nav a[href="/orders.php"]')?.parentElement;
                     if (ordersLi) {
                         const li = document.createElement('li');
                         li.innerHTML = '<a href="my-vehicles.php" style="color:var(--primary);font-weight:600;">🚗 My Vehicles</a>';

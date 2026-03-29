@@ -1,9 +1,7 @@
 <?php
 /**
- * Bookings Page & API - Private Hire
- * Route controller for booking page view + API endpoints for booking actions
- * If no action param → render booking page
- * If action param → handle API request
+ * Bookings API - Private Hire
+ * JSON-only endpoint for booking actions.
  */
 
 session_start();
@@ -17,37 +15,16 @@ if (!is_array($input)) {
 }
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
-// ===== PAGE VIEW MODE (no action) =====
 if (empty($action)) {
-    // Render booking page (not API)
-    $title = 'Private Hire - Book Your Ride';
-    $currentPage = 'booking';
-
-    $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
-    $currentUser = $isLoggedIn ? ($_SESSION['full_name'] ?? $_SESSION['username'] ?? null) : null;
-    $currentEmail = $isLoggedIn ? ($_SESSION['email'] ?? '') : '';
-    $userRole = $_SESSION['role'] ?? 'user';
-
-    // Require login to book
-    if (!$isLoggedIn) {
-        $_SESSION['login_flash'] = [
-            'type' => 'error',
-            'message' => 'Please sign in to continue booking.'
-        ];
-        header('Location: /');
-        exit;
-    }
-
-    // Get query params for booking mode
-    $carId = $_GET['car_id'] ?? '';
-    $promoCode = $_GET['promo'] ?? '';
-    $bookingMode = $_GET['mode'] ?? '';
-
-    require __DIR__ . '/../templates/booking.html.php';
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Page controller moved to /booking.php.',
+        'moved_to' => '/booking.php'
+    ]);
     exit;
 }
 
-// ===== API MODE (action parameter exists) =====
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
@@ -382,8 +359,8 @@ if ($action === 'create') {
         $paypalMeta = null;
         if ($paymentMethod === 'paypal') {
             $baseUrl = getAppBaseUrl();
-            $returnUrl = $baseUrl . '/api/bookings.php?paypal=return&booking_id=' . urlencode((string)$booking['id']);
-            $cancelUrl = $baseUrl . '/api/bookings.php?paypal=cancel&booking_id=' . urlencode((string)$booking['id']);
+            $returnUrl = $baseUrl . '/booking.php?paypal=return&booking_id=' . urlencode((string)$booking['id']);
+            $cancelUrl = $baseUrl . '/booking.php?paypal=cancel&booking_id=' . urlencode((string)$booking['id']);
 
             $paypalOrder = $paypalGateway->createOrder((float)$totalAmount, 'GBP', (string)$booking['id'], $returnUrl, $cancelUrl);
             if (empty($paypalOrder['success'])) {

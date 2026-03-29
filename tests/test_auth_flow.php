@@ -6,8 +6,8 @@ echo "=== LOGIN FLOW DEBUG ===\n\n";
 echo "1. Session ID before: " . session_id() . "\n";
 
 // Test 2: Simulate login API call
-require_once __DIR__ . '/Database/db.php';
-require_once __DIR__ . '/sql/AuthRepository.php';
+require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../sql/AuthRepository.php';
 
 $authRepo = new AuthRepository($pdo);
 

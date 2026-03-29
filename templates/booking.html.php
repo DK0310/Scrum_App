@@ -29,7 +29,7 @@
                 <h3 style="color:var(--gray-700);margin-bottom:8px;">No vehicle selected</h3>
                 <p style="color:var(--gray-500);margin-bottom:24px;">Select a car for hire with driver, or book a minicab instantly.</p>
                 <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-                    <a href="/api/cars.php" class="btn btn-primary">🔍 Browse Cars</a>
+                    <a href="/cars.php" class="btn btn-primary">🔍 Browse Cars</a>
                     <a href="/booking.php?mode=minicab" class="btn btn-outline">🚕 Book a Minicab</a>
                 </div>
             </div>
@@ -410,8 +410,8 @@
                     <p style="color:var(--gray-500);margin-bottom:24px;line-height:1.7;" id="successMessage">Your payment has been received. Please check your email for booking details or view your orders to track the status.</p>
                     <div class="success-booking-summary" id="successSummary"></div>
                     <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;flex-wrap:wrap;">
-                        <a href="/api/orders.php" class="btn btn-primary">📋 View My Orders</a>
-                        <a href="/api/cars.php" class="btn btn-outline">Browse More Cars</a>
+                        <a href="/orders.php" class="btn btn-primary">📋 View My Orders</a>
+                        <a href="/cars.php" class="btn btn-outline">Browse More Cars</a>
                     </div>
                 </div>
             </div>
@@ -431,7 +431,7 @@
                 <!-- Dynamically populated -->
             </div>
             <div class="license-modal-actions">
-                <button class="btn btn-primary" onclick="window.location.href='/api/profile.php'" style="flex:1;gap:8px;">
+                <button class="btn btn-primary" onclick="window.location.href='/profile.php'" style="flex:1;gap:8px;">
                     👤 Go to Profile
                 </button>
                 <button class="btn btn-secondary" onclick="closeLicenseModal()" style="flex:1;">

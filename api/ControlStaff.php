@@ -197,14 +197,13 @@ if (!is_array($bodyJson)) {
 }
 $action = $_GET['action'] ?? $_POST['action'] ?? ($bodyJson['action'] ?? '');
 
-// Page mode
 if ($action === '') {
-    $title = 'Control Staff - Private Hire';
-    $currentPage = 'control-staff';
-    $isLoggedIn = true;
-    $currentUser = $_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['email'] ?? 'Control Staff';
-
-    require __DIR__ . '/../templates/ControlStaff.html.php';
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Page controller moved to /control-staff.php.',
+        'moved_to' => '/control-staff.php'
+    ]);
     exit;
 }
 

@@ -8,16 +8,13 @@ if (!is_array($input)) {
 
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
-// Page view mode: render reset page when no API action is provided.
 if (empty($action)) {
-	$title = 'Reset Password - Private Hire';
-	$currentPage = 'password-change';
-
-	$isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
-	$userRole = $_SESSION['role'] ?? 'user';
-	$currentUser = $isLoggedIn ? ($_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['email'] ?? 'User') : null;
-
-	require __DIR__ . '/../templates/password-change.html.php';
+	header('Content-Type: application/json');
+	echo json_encode([
+		'success' => false,
+		'message' => 'Page controller moved to /password-change.php.',
+		'moved_to' => '/password-change.php'
+	]);
 	exit;
 }
 
@@ -116,7 +113,7 @@ if ($action === 'send-reset-link') {
 		$user = $authRepo->findUserByEmail($email);
 		if ($user && !empty($user['id']) && !empty($user['email'])) {
 			$token = $authRepo->createPasswordResetToken($user['id'], 5);
-			$resetLink = buildBaseUrl() . '/api/password-change.php?token=' . urlencode($token);
+			$resetLink = buildBaseUrl() . '/password-change.php?token=' . urlencode($token);
 			sendResetEmail($user['email'], $resetLink);
 
 			createNotification($pdo, $user['id'], 'system', '🔐 Password Reset Requested', 'A password reset link was requested for your account.');
@@ -157,7 +154,7 @@ if ($action === 'send-reset-link-current-user') {
 
 	try {
 		$token = $authRepo->createPasswordResetToken($userId, 5);
-		$resetLink = buildBaseUrl() . '/api/password-change.php?token=' . urlencode($token);
+		$resetLink = buildBaseUrl() . '/password-change.php?token=' . urlencode($token);
 		$sent = sendResetEmail($email, $resetLink);
 
 		if (!$sent) {

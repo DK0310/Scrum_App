@@ -77,15 +77,13 @@ if (!is_array($bodyJson)) {
 }
 $action = $_GET['action'] ?? $_POST['action'] ?? ($bodyJson['action'] ?? '');
 
-// Page mode
 if ($action === '') {
-    $title = 'Call Center Staff - Private Hire';
-    $currentPage = 'call-center-staff';
-    $isLoggedIn = true;
-    $currentUser = $_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['email'] ?? 'Call Center Staff';
-    $canCreateAccount = cc_is_callcenterstaff_only($userRole);
-
-    require __DIR__ . '/../templates/CallCenterStaff.html.php';
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Page controller moved to /call-center-staff.php.',
+        'moved_to' => '/call-center-staff.php'
+    ]);
     exit;
 }
 

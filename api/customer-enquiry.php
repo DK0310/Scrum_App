@@ -63,6 +63,16 @@ if (!is_array($bodyJson)) {
 
 $action = $_GET['action'] ?? $_POST['action'] ?? ($bodyJson['action'] ?? '');
 
+if ($action === '') {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Page controller moved to /customer-enquiry.php.',
+        'moved_to' => '/customer-enquiry.php'
+    ]);
+    exit;
+}
+
 if ($action === 'get-enquiry-image') {
     $id = trim((string)($_GET['id'] ?? ''));
     $kind = trim((string)($_GET['kind'] ?? 'enquiry'));
@@ -97,17 +107,16 @@ if ($action === 'get-enquiry-image') {
     }
 }
 
-if ($action !== '') {
-    header('Content-Type: application/json');
-    header('Access-Control-Allow-Origin: *');
-    header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type');
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
 
-    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
-        exit(0);
-    }
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+    exit(0);
+}
 
-    $storage = new SupabaseStorage();
+$storage = new SupabaseStorage();
 
     // Customer actions
     if ($action === 'create-enquiry') {
@@ -317,8 +326,5 @@ if ($action !== '') {
         exit;
     }
 
-    echo json_encode(['success' => false, 'message' => 'Unknown action: ' . $action]);
-    exit;
-}
-
-require __DIR__ . '/../templates/customer-enquiry.html.php';
+echo json_encode(['success' => false, 'message' => 'Unknown action: ' . $action]);
+exit;

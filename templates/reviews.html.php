@@ -33,7 +33,7 @@
                 <div style="font-size:3rem;margin-bottom:16px;">📝</div>
                 <h3 style="color:var(--gray-700);margin-bottom:8px;">No reviews yet</h3>
                 <p style="color:var(--gray-500);margin-bottom:24px;">Be the first to leave a review after completing a booking!</p>
-                <a href="/api/cars.php" class="btn btn-primary" style="display:inline-block;width:auto;padding:12px 32px;">Browse Cars</a>
+                <a href="/cars.php" class="btn btn-primary" style="display:inline-block;width:auto;padding:12px 32px;">Browse Cars</a>
             </div>
 
             <!-- Review Cards (dynamic) -->

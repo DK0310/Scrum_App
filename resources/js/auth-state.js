@@ -44,7 +44,7 @@
         notifBtn.innerHTML = '🔔<span class="notification-badge" id="notifCount" style="display:none;">0</span>';
 
         const profile = document.createElement('a');
-        profile.href = '/api/profile.php';
+        profile.href = '/profile.php';
         profile.className = 'navbar-profile-link';
         profile.textContent = '👤 ' + (user.full_name || user.email || 'User');
         if (currentPage === 'profile') {
@@ -57,7 +57,7 @@
 
         if (role !== 'admin' && role !== 'controlstaff' && role !== 'callcenterstaff') {
             const ordersLink = document.createElement('a');
-            ordersLink.href = '/api/orders.php';
+            ordersLink.href = '/orders.php';
             ordersLink.className = 'btn btn-outline btn-sm navbar-action-link';
             ordersLink.textContent = '📋 My Orders';
             if (currentPage === 'orders') {

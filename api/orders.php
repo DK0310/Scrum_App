@@ -1,45 +1,18 @@
 <?php
 /**
- * My Orders Page & API - Private Hire
- * - Page view: renders orders template
- * - API mode: handles order-specific actions for Orders screen
+ * Orders API - Private Hire
+ * JSON-only endpoint for order-related actions.
  */
 
 session_start();
 
-// Parse action first to determine if this is a page view or API request
+// Parse action payload for API routing
 $input = json_decode(file_get_contents('php://input'), true);
 if (!is_array($input)) {
     $input = $_POST;
 }
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
-// ===== PAGE VIEW MODE (no action) =====
-if (empty($action)) {
-    $title = 'Private Hire - My Orders';
-    $currentPage = 'orders';
-
-    require_once __DIR__ . '/../config/env.php';
-    require_once __DIR__ . '/../Database/db.php';
-
-    $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
-    $currentUser = $isLoggedIn ? ($_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['email'] ?? null) : null;
-    $userRole = $_SESSION['role'] ?? 'user';
-
-    if (!$isLoggedIn) {
-        $_SESSION['login_flash'] = [
-            'type' => 'error',
-            'message' => 'Please sign in to view your orders.'
-        ];
-        header('Location: /');
-        exit;
-    }
-
-    require __DIR__ . '/../templates/orders.html.php';
-    exit;
-}
-
-// ===== API MODE =====
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');

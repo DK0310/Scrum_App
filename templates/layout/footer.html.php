@@ -29,18 +29,18 @@
                 <div>
                     <h4 class="footer-title">Services</h4>
                     <ul class="footer-links">
-                        <li><a href="/api/cars.php">Hire With Driver</a></li>
+                        <li><a href="/cars.php">Hire With Driver</a></li>
                         <li><a href="/booking.php?mode=minicab">Book a Minicab</a></li>
-                        <li><a href="membership.php">Corporate Fleet</a></li>
+                        <li><a href="/membership.php">Corporate Fleet</a></li>
                         <li><a href="/booking.php">Long-term Rental</a></li>
                     </ul>
                 </div>
                 <div>
                     <h4 class="footer-title">Support</h4>
                     <ul class="footer-links">
-                        <li><a href="support.php">Help Center</a></li>
-                        <li><a href="support.php">Contact Us</a></li>
-                        <li><a href="support.php">Trip Enquiry</a></li>
+                        <li><a href="/support.php">Help Center</a></li>
+                        <li><a href="/support.php">Contact Us</a></li>
+                        <li><a href="/support.php">Trip Enquiry</a></li>
                         <li><a href="#">Cancellation Policy</a></li>
                         <li><a href="#">Insurance</a></li>
                     </ul>

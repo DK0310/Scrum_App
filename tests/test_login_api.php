@@ -22,7 +22,7 @@ $_POST = [
 ob_start();
 
 // Include the login API
-require_once __DIR__ . '/api/login.php';
+require_once __DIR__ . '/../api/login.php';
 
 $output = ob_get_clean();
 

@@ -1,10 +1,10 @@
 <?php
 // Simulate the exact API call that the JavaScript makes
-require_once 'Database/db.php';
-require_once 'config/env.php';
-require_once 'sql/UserRepository.php';
-require_once 'sql/BookingRepository.php';
-require_once 'sql/VehicleRepository.php';
+require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../config/env.php';
+require_once __DIR__ . '/../sql/UserRepository.php';
+require_once __DIR__ . '/../sql/BookingRepository.php';
+require_once __DIR__ . '/../sql/VehicleRepository.php';
 
 $userRepo = new UserRepository($pdo);
 $bookingRepo = new BookingRepository($pdo);

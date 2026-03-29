@@ -100,27 +100,13 @@ if (!is_array($input)) {
 }
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
-// ===== PAGE VIEW MODE (no action) =====
 if (empty($action)) {
-    // Render admin page (not API)
-    $title = 'Admin Dashboard - Private Hire';
-    $currentPage = 'admin';
-
-    $isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
-    $userRole = $_SESSION['role'] ?? '';
-
-    // Require admin role
-    if (!$isLoggedIn || $userRole !== 'admin') {
-        http_response_code(403);
-        $_SESSION['login_flash'] = [
-            'type' => 'error',
-            'message' => 'Admin access required.'
-        ];
-        header('Location: /');
-        exit;
-    }
-
-    require __DIR__ . '/../templates/admin.html.php';
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Page controller moved to /admin.php.',
+        'moved_to' => '/admin.php'
+    ]);
     exit;
 }
 

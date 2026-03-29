@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/Database/db.php';
-require_once __DIR__ . '/sql/AuthRepository.php';
+require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../sql/AuthRepository.php';
 
 $authRepo = new AuthRepository($pdo);
 

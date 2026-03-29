@@ -53,9 +53,9 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                         🔔
                         <span class="notification-badge" id="notifCount" style="display:none;">0</span>
                     </button>
-                    <a href="/api/profile.php" class="navbar-profile-link" <?= ($currentPage ?? '') === 'profile' ? 'style="background:var(--primary-50);color:var(--primary);"' : '' ?>>👤 <?= htmlspecialchars($currentUser) ?></a>
+                    <a href="/profile.php" class="navbar-profile-link" <?= ($currentPage ?? '') === 'profile' ? 'style="background:var(--primary-50);color:var(--primary);"' : '' ?>>👤 <?= htmlspecialchars($currentUser) ?></a>
                     <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
-                    <a href="/api/orders.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'orders' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">📋 My Orders</a>
+                    <a href="/orders.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'orders' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">📋 My Orders</a>
                     <?php endif; ?>
                     <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
                 <?php else: ?>
@@ -81,7 +81,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             <button class="side-menu-close" onclick="closeSideMenu()">✕</button>
         </div>
         <nav class="side-menu-nav">
-            <a href="/api/cars.php" class="side-menu-item <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">
+            <a href="/cars.php" class="side-menu-item <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚗</span> Cars
             </a>
             <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
@@ -92,53 +92,53 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             <a href="/#how-it-works" class="side-menu-item <?= ($currentPage ?? '') === 'how-it-works' ? 'active' : '' ?>">
                 <span class="side-menu-icon">📖</span> How It Works
             </a>
-            <a href="/api/promotions.php" class="side-menu-item <?= ($currentPage ?? '') === 'promotions' ? 'active' : '' ?>">
+            <a href="/promotions.php" class="side-menu-item <?= ($currentPage ?? '') === 'promotions' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🏷️</span> Promotions
             </a>
-            <a href="/api/customer-enquiry.php" class="side-menu-item <?= ($currentPage ?? '') === 'customer-enquiry' ? 'active' : '' ?>">
+            <a href="/customer-enquiry.php" class="side-menu-item <?= ($currentPage ?? '') === 'customer-enquiry' ? 'active' : '' ?>">
                 <span class="side-menu-icon">✉️</span> Customer Enquiry
             </a>
-            <a href="/api/membership.php" class="side-menu-item <?= ($currentPage ?? '') === 'membership' ? 'active' : '' ?>">
+            <a href="/membership.php" class="side-menu-item <?= ($currentPage ?? '') === 'membership' ? 'active' : '' ?>">
                 <span class="side-menu-icon">⭐</span> Membership
             </a>
-            <a href="/api/support.php" class="side-menu-item <?= ($currentPage ?? '') === 'support' ? 'active' : '' ?>">
+            <a href="/support.php" class="side-menu-item <?= ($currentPage ?? '') === 'support' ? 'active' : '' ?>">
                 <span class="side-menu-icon">💬</span> Support
             </a>
             <?php if (isset($isLoggedIn) && $isLoggedIn): ?>
             <div class="side-menu-divider side-menu-mobile-only"></div>
-            <a href="/api/profile.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'profile' ? 'active' : '' ?>">
+            <a href="/profile.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'profile' ? 'active' : '' ?>">
                 <span class="side-menu-icon">👤</span> My Profile
             </a>
             <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
-            <a href="/api/orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
+            <a href="/orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
                 <span class="side-menu-icon">📋</span> My Orders
             </a>
             <?php endif; ?>
             <?php endif; ?>
             <?php if (isset($isLoggedIn) && $isLoggedIn && $isAdminRole): ?>
             <div class="side-menu-divider"></div>
-            <a href="/api/admin.php" class="side-menu-item side-menu-admin <?= ($currentPage ?? '') === 'admin' ? 'active' : '' ?>">
+            <a href="/admin.php" class="side-menu-item side-menu-admin <?= ($currentPage ?? '') === 'admin' ? 'active' : '' ?>">
                 <span class="side-menu-icon">⚙️</span> Admin Dashboard
             </a>
             <?php endif; ?>
 
             <?php if (isset($isLoggedIn) && $isLoggedIn && $isControlStaffRole): ?>
             <div class="side-menu-divider"></div>
-            <a href="/api/ControlStaff.php" class="side-menu-item side-menu-staff <?= ($currentPage ?? '') === 'control-staff' ? 'active' : '' ?>">
+            <a href="/control-staff.php" class="side-menu-item side-menu-staff <?= ($currentPage ?? '') === 'control-staff' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🧭</span> Control Staff
             </a>
             <?php endif; ?>
 
             <?php if (isset($isLoggedIn) && $isLoggedIn && $isCallCenterStaffRole): ?>
             <div class="side-menu-divider"></div>
-            <a href="/api/CallCenterStaff.php" class="side-menu-item side-menu-staff <?= ($currentPage ?? '') === 'call-center-staff' ? 'active' : '' ?>">
+            <a href="/call-center-staff.php" class="side-menu-item side-menu-staff <?= ($currentPage ?? '') === 'call-center-staff' ? 'active' : '' ?>">
                 <span class="side-menu-icon">📞</span> Call Center Staff
             </a>
             <?php endif; ?>
 
             <?php if (isset($isLoggedIn) && $isLoggedIn && ($userRole ?? '') === 'driver'): ?>
             <div class="side-menu-divider"></div>
-            <a href="/api/driver.php" class="side-menu-item side-menu-driver <?= ($currentPage ?? '') === 'driver' ? 'active' : '' ?>">
+            <a href="/driver.php" class="side-menu-item side-menu-driver <?= ($currentPage ?? '') === 'driver' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚗</span> Driver Dashboard
             </a>
             <?php endif; ?>

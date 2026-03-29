@@ -26,7 +26,7 @@ echo "   - password: " . $_POST['password'] . "\n\n";
 
 // Include login API and capture output
 ob_start();
-include __DIR__ . '/api/login.php';
+include __DIR__ . '/../api/login.php';
 $apiOutput = ob_get_clean();
 
 echo "3. API Response:\n";

@@ -1,30 +1,15 @@
 <?php
 /**
- * My Vehicles Page - Backend (Owner Only)
- * Dashboard for car owners to manage their fleet
+ * My Vehicles API Placeholder - Private Hire
+ * Page controller moved to /my-vehicles.php
+ * Vehicle management data APIs are served by /api/vehicles.php
  */
 session_start();
-$title = "DriveNow - My Vehicles";
-$currentPage = 'my-vehicles';
 
-require_once '../config/env.php';
-require_once '../Database/db.php';
-
-$isLoggedIn = isset($_SESSION['logged_in']) && $_SESSION['logged_in'];
-$currentUser = $isLoggedIn ? $_SESSION['username'] : null;
-$userRole = $_SESSION['role'] ?? 'user';
-
-// Require login
-if (!$isLoggedIn) {
-    header('Location: /auth?mode=login&redirect=my-vehicles.php');
-    exit;
-}
-
-// Require staff or admin role (vehicle management)
-if ($userRole !== 'staff' && $userRole !== 'admin') {
-    header('Location: index.php');
-    exit;
-}
-
-include '../templates/my-vehicles.html.php';
+header('Content-Type: application/json');
+echo json_encode([
+    'success' => false,
+    'message' => 'Page controller moved to /my-vehicles.php. Use /api/vehicles.php for data actions.',
+    'moved_to' => '/my-vehicles.php'
+]);
 ?>

@@ -76,7 +76,7 @@ function showFaceIdLogin() {
 }
 
 function openForgotPassword() {
-    window.location.href = '/api/password-change.php';
+    window.location.href = '/password-change.php';
 }
 
 // ============================================

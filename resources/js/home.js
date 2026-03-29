@@ -206,10 +206,10 @@ function startHeroAutoRotate() {
 
 /**
  * Filter vehicles by category
- * Redirect to /api/cars.php with category parameter
+ * Redirect to /cars.php with category parameter
  */
 function filterByCategory(category) {
-    window.location.href = '/api/cars.php?category=' + encodeURIComponent(category);
+    window.location.href = '/cars.php?category=' + encodeURIComponent(category);
 }
 
 /**
