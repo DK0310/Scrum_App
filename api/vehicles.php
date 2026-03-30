@@ -299,6 +299,7 @@ if ($action === 'public-list') {
 if ($action === 'list') {
     $filters = [
         'category' => $_GET['category'] ?? $input['category'] ?? '',
+        'tier' => $_GET['tier'] ?? $input['tier'] ?? $_GET['service_tier'] ?? $input['service_tier'] ?? '',
         'brand' => $_GET['brand'] ?? $input['brand'] ?? '',
         'fuel' => $_GET['fuel'] ?? $input['fuel'] ?? '',
         'transmission' => $_GET['transmission'] ?? $input['transmission'] ?? '',
@@ -670,7 +671,7 @@ if ($action === 'upload-image') {
             exit;
         }
 
-        $imageId = $vehicleRepo->insertImage($vehicleId, $storagePath, $file['type'], $file['name'], $file['size']);
+        $imageId = $vehicleRepo->insertImage($vehicleId, $storagePath, $file['type'], $file['name'], $file['size'], $imageData);
 
         echo json_encode([
             'success' => true,

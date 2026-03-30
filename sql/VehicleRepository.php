@@ -81,6 +81,7 @@ final class VehicleRepository
     public function listAvailable(array $filters): array
     {
         $category = trim((string)($filters['category'] ?? ''));
+        $tier = strtolower(trim((string)($filters['tier'] ?? '')));
         $brand = trim((string)($filters['brand'] ?? ''));
         $fuel = trim((string)($filters['fuel'] ?? ''));
         $transmission = trim((string)($filters['transmission'] ?? ''));
@@ -96,6 +97,16 @@ final class VehicleRepository
         if ($category !== '') {
             $where[] = 'LOWER(v.category) = LOWER(?)';
             $params[] = $category;
+        }
+        if ($tier !== '') {
+            if ($tier === 'luxury' || $tier === 'premium') {
+                $where[] = 'LOWER(v.service_tier) IN (?, ?)';
+                $params[] = 'luxury';
+                $params[] = 'premium';
+            } else {
+                $where[] = 'LOWER(v.service_tier) = LOWER(?)';
+                $params[] = $tier;
+            }
         }
         if ($brand !== '') {
             $where[] = 'LOWER(v.brand) ILIKE ?';
@@ -444,14 +455,15 @@ final class VehicleRepository
      * @param int $fileSize
      * @return string Image ID
      */
-    public function insertImage(?string $vehicleId, string $storagePath, string $mimeType, string $fileName, int $fileSize): string
+    public function insertImage(?string $vehicleId, string $storagePath, string $mimeType, string $fileName, int $fileSize, ?string $imageData = null): string
     {
         $stmt = $this->pdo->prepare("
-            INSERT INTO vehicle_images (vehicle_id, storage_path, mime_type, file_name, file_size)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO vehicle_images (vehicle_id, storage_path, image_data, mime_type, file_name, file_size)
+            VALUES (?, ?, decode(?, 'base64'), ?, ?, ?)
             RETURNING id
         ");
-        $stmt->execute([$vehicleId, $storagePath, $mimeType, $fileName, $fileSize]);
+        $encodedImageData = base64_encode($imageData ?? '');
+        $stmt->execute([$vehicleId, $storagePath, $encodedImageData, $mimeType, $fileName, $fileSize]);
         return (string)$stmt->fetchColumn();
     }
 

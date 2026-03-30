@@ -19,17 +19,32 @@
     fuel: '',
     max_price: 500,
     category: '',
+    tier: '',
     search: ''
   };
 
   // Init from URL params
   function initFromURL() {
     const p = new URLSearchParams(window.location.search);
+    const rawCategory = p.get('category') || '';
+    const rawTier = p.get('tier') || '';
+    const legacyTierValues = ['eco', 'standard', 'luxury', 'premium'];
+
     filterState.brand = p.get('brand') || '';
     filterState.transmission = p.get('transmission') || '';
     filterState.fuel = p.get('fuel') || '';
     filterState.max_price = parseInt(p.get('max_price')) || 500;
-    filterState.category = p.get('category') || '';
+    if (rawTier) {
+      filterState.tier = rawTier;
+      filterState.category = rawCategory;
+    } else if (legacyTierValues.includes(rawCategory.toLowerCase())) {
+      // Backward compatibility for old links like /cars.php?category=eco
+      filterState.tier = rawCategory;
+      filterState.category = '';
+    } else {
+      filterState.tier = '';
+      filterState.category = rawCategory;
+    }
     filterState.search = p.get('search') || '';
 
     // Set active chips from URL (for static filters)
@@ -310,6 +325,7 @@
     if (filterState.fuel) params.set('fuel', filterState.fuel);
     if (filterState.max_price < 500) params.set('max_price', filterState.max_price);
     if (filterState.category) params.set('category', filterState.category);
+    if (filterState.tier) params.set('tier', filterState.tier);
     window.location.href = '/cars.php?' + params.toString();
   }
 
@@ -321,9 +337,16 @@
   async function loadCars() {
     try {
       const params = new URLSearchParams(window.location.search);
+      const rawCategory = params.get('category') || '';
+      const rawTier = params.get('tier') || '';
+      const legacyTierValues = ['eco', 'standard', 'luxury', 'premium'];
+      const effectiveTier = rawTier || (legacyTierValues.includes(rawCategory.toLowerCase()) ? rawCategory : '');
+      const effectiveCategory = rawTier ? rawCategory : (legacyTierValues.includes(rawCategory.toLowerCase()) ? '' : rawCategory);
+
       const payload = {
         action: 'list',
-        category: params.get('category') || '',
+        category: effectiveCategory,
+        tier: effectiveTier,
         brand: params.get('brand') || '',
         fuel: params.get('fuel') || '',
         transmission: params.get('transmission') || '',

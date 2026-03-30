@@ -5,10 +5,30 @@ declare(strict_types=1);
 final class BookingRepository
 {
     private PDO $pdo;
+    /** @var array<string,bool>|null */
+    private ?array $bookingColumnCache = null;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+    }
+
+    private function bookingHasColumn(string $columnName): bool
+    {
+        if ($this->bookingColumnCache === null) {
+            $this->bookingColumnCache = [];
+            try {
+                $stmt = $this->pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'bookings'");
+                $cols = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+                foreach ($cols as $col) {
+                    $this->bookingColumnCache[(string)$col] = true;
+                }
+            } catch (PDOException $e) {
+                $this->bookingColumnCache = [];
+            }
+        }
+
+        return isset($this->bookingColumnCache[$columnName]);
     }
 
     private function ensureVehicleServiceTierColumnExists(): void
@@ -26,6 +46,7 @@ final class BookingRepository
     public function ensureBookingColumnsExist(): void
     {
         $columns = [
+            'pickup_time VARCHAR(20) DEFAULT NULL',
             'service_type VARCHAR(50) DEFAULT \'local\'',
             'distance_km DECIMAL(10,2) DEFAULT NULL',
             'transfer_cost DECIMAL(10,2) DEFAULT NULL',
@@ -94,43 +115,73 @@ final class BookingRepository
      */
     public function createBooking(array $data): array
     {
-        $stmt = $this->pdo->prepare("
-            INSERT INTO bookings (
-                renter_id, vehicle_id, owner_id, booking_type, pickup_date, pickup_time, return_date,
-                pickup_location, return_location, total_days, subtotal,
-                discount_amount, total_amount, promo_code, special_requests, driver_requested,
-                distance_km, transfer_cost, service_type, number_of_passengers, ride_tier, status
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending'
-            )
-            RETURNING id, created_at
-        ");
-
-        $stmt->execute([
+        $columns = [
+            'renter_id',
+            'vehicle_id',
+            'owner_id',
+            'booking_type',
+            'pickup_date',
+            'pickup_location',
+            'total_days',
+            'subtotal',
+            'discount_amount',
+            'total_amount',
+            'status',
+        ];
+        $values = [
             $data['renter_id'],
             $data['vehicle_id'],
             $data['owner_id'],
             $data['booking_type'],
             $data['pickup_date'],
-            $data['pickup_time'] ?? null,
-            $data['return_date'] ?? null,
             $data['pickup_location'],
-            $data['return_location'] ?? null,
             $data['total_days'],
             $data['subtotal'],
             $data['discount_amount'],
             $data['total_amount'],
-            $data['promo_code'] ?? null,
-            $data['special_requests'] ?? '',
-            $data['driver_requested'] ?? 't',
-            $data['distance_km'] ?? null,
-            $data['transfer_cost'] ?? null,
-            $data['service_type'] ?? null,
-            $data['number_of_passengers'] ?? 1,
-            $data['ride_tier'] ?? null,
-        ]);
+            'pending',
+        ];
 
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $optionalMap = [
+            'price_per_day' => isset($data['price_per_day'])
+                ? (float)$data['price_per_day']
+                : round(((float)($data['subtotal'] ?? 0)) / max(1, (int)($data['total_days'] ?? 1)), 2),
+            'pickup_time' => $data['pickup_time'] ?? null,
+            'return_date' => $data['return_date'] ?? null,
+            'return_location' => $data['return_location'] ?? null,
+            'promo_code' => $data['promo_code'] ?? null,
+            'special_requests' => $data['special_requests'] ?? '',
+            'driver_requested' => $data['driver_requested'] ?? 't',
+            'distance_km' => $data['distance_km'] ?? null,
+            'transfer_cost' => $data['transfer_cost'] ?? null,
+            'service_type' => $data['service_type'] ?? null,
+            'number_of_passengers' => $data['number_of_passengers'] ?? 1,
+            'ride_tier' => $data['ride_tier'] ?? null,
+        ];
+
+        foreach ($optionalMap as $column => $value) {
+            if ($this->bookingHasColumn($column)) {
+                $columns[] = $column;
+                $values[] = $value;
+            }
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+        $returningCols = $this->bookingHasColumn('created_at') ? 'id, created_at' : 'id';
+        $sql = 'INSERT INTO bookings (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ') RETURNING ' . $returningCols;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($values);
+
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return ['id' => '', 'created_at' => null];
+        }
+        if (!array_key_exists('created_at', $row)) {
+            $row['created_at'] = null;
+        }
+
+        return $row;
     }
 
     /**
@@ -229,11 +280,7 @@ final class BookingRepository
      */
     public function completeBooking(string $bookingId): bool
     {
-        $stmt = $this->pdo->prepare("
-            UPDATE bookings
-            SET status = 'completed'
-            WHERE id = ?
-        ");
+        $stmt = $this->pdo->prepare("\n            UPDATE bookings\n            SET status = 'completed'\n            WHERE id = ?\n        ");
         return $stmt->execute([$bookingId]) && $stmt->rowCount() > 0;
     }
 
@@ -242,11 +289,7 @@ final class BookingRepository
      */
     public function cancelBooking(string $bookingId, ?string $reason = null): bool
     {
-        $stmt = $this->pdo->prepare("
-            UPDATE bookings
-            SET status = 'cancelled', cancellation_reason = ?
-            WHERE id = ?
-        ");
+        $stmt = $this->pdo->prepare("\n            UPDATE bookings\n            SET status = 'cancelled', cancellation_reason = ?\n            WHERE id = ?\n        ");
         return $stmt->execute([$reason, $bookingId]) && $stmt->rowCount() > 0;
     }
 
@@ -377,17 +420,31 @@ final class BookingRepository
      */
     public function listAll(int $limit = 50, int $offset = 0): array
     {
+        $driverIdExpr = $this->bookingHasColumn('driver_id') ? 'b.driver_id' : 'NULL::uuid AS driver_id';
+        $serviceTypeExpr = $this->bookingHasColumn('service_type') ? 'b.service_type' : 'NULL::text AS service_type';
+        $passengerExpr = $this->bookingHasColumn('number_of_passengers') ? 'b.number_of_passengers' : 'NULL::int AS number_of_passengers';
+        $rideTierExpr = $this->bookingHasColumn('ride_tier') ? 'b.ride_tier' : 'NULL::text AS ride_tier';
+        $acceptedExpr = $this->bookingHasColumn('accepted_by_driver_at') ? 'b.accepted_by_driver_at' : 'NULL::timestamptz AS accepted_by_driver_at';
+
+        $driverJoin = $this->bookingHasColumn('driver_id')
+            ? 'LEFT JOIN users d ON b.driver_id = d.id'
+            : '';
+
+        $driverInfoExpr = $this->bookingHasColumn('driver_id')
+            ? 'd.full_name as driver_name, d.phone as driver_phone'
+            : 'NULL::text AS driver_name, NULL::text AS driver_phone';
+
         $stmt = $this->pdo->prepare("
             SELECT 
-                b.id, b.renter_id, b.driver_id, b.status, b.booking_type,
-                b.pickup_location, b.pickup_date, b.service_type,
-                b.total_amount, b.number_of_passengers, b.ride_tier,
-                b.created_at, b.accepted_by_driver_at,
+                b.id, b.renter_id, {$driverIdExpr}, b.status, b.booking_type,
+                b.pickup_location, b.pickup_date, {$serviceTypeExpr},
+                b.total_amount, {$passengerExpr}, {$rideTierExpr},
+                b.created_at, {$acceptedExpr},
                 u.full_name as user_name, u.phone as user_phone,
-                d.full_name as driver_name, d.phone as driver_phone
+                {$driverInfoExpr}
             FROM bookings b
             JOIN users u ON b.renter_id = u.id
-            LEFT JOIN users d ON b.driver_id = d.id
+            {$driverJoin}
             ORDER BY b.created_at DESC
             LIMIT ? OFFSET ?
         ");
@@ -401,19 +458,34 @@ final class BookingRepository
      */
     public function getBookingWithUserAndDriver(string $bookingId): ?array
     {
+        $driverIdExpr = $this->bookingHasColumn('driver_id') ? 'b.driver_id' : 'NULL::uuid AS driver_id';
+        $serviceTypeExpr = $this->bookingHasColumn('service_type') ? 'b.service_type' : 'NULL::text AS service_type';
+        $passengerExpr = $this->bookingHasColumn('number_of_passengers') ? 'b.number_of_passengers' : 'NULL::int AS number_of_passengers';
+        $rideTierExpr = $this->bookingHasColumn('ride_tier') ? 'b.ride_tier' : 'NULL::text AS ride_tier';
+        $acceptedExpr = $this->bookingHasColumn('accepted_by_driver_at') ? 'b.accepted_by_driver_at' : 'NULL::timestamptz AS accepted_by_driver_at';
+        $completedExpr = $this->bookingHasColumn('ride_completed_at') ? 'b.ride_completed_at' : 'NULL::timestamptz AS ride_completed_at';
+
+        $driverJoin = $this->bookingHasColumn('driver_id')
+            ? 'LEFT JOIN users d ON b.driver_id = d.id'
+            : '';
+
+        $driverInfoExpr = $this->bookingHasColumn('driver_id')
+            ? 'd.full_name as driver_name, d.phone as driver_phone'
+            : 'NULL::text AS driver_name, NULL::text AS driver_phone';
+
         $stmt = $this->pdo->prepare("
             SELECT 
-                b.id, b.renter_id, b.owner_id, b.driver_id, b.vehicle_id, b.status, b.booking_type,
+                b.id, b.renter_id, b.owner_id, {$driverIdExpr}, b.vehicle_id, b.status, b.booking_type,
                 b.pickup_location, b.return_location, b.pickup_date, b.return_date,
-                b.service_type, b.total_amount, b.number_of_passengers,
-                b.ride_tier, b.special_requests,
-                b.created_at, b.accepted_by_driver_at, b.ride_completed_at,
+                {$serviceTypeExpr}, b.total_amount, {$passengerExpr},
+                {$rideTierExpr}, b.special_requests,
+                b.created_at, {$acceptedExpr}, {$completedExpr},
                 u.full_name as user_name, u.phone as user_phone, u.email,
-                d.full_name as driver_name, d.phone as driver_phone,
+                {$driverInfoExpr},
                 v.brand, v.model, v.license_plate, v.year
             FROM bookings b
             JOIN users u ON b.renter_id = u.id
-            LEFT JOIN users d ON b.driver_id = d.id
+            {$driverJoin}
             LEFT JOIN vehicles v ON b.vehicle_id = v.id
             WHERE b.id = ?
         ");

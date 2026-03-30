@@ -5,6 +5,7 @@
 
 -- 1. Add storage_path column to vehicle_images
 ALTER TABLE vehicle_images ADD COLUMN IF NOT EXISTS storage_path TEXT;
+ALTER TABLE vehicle_images ALTER COLUMN image_data DROP NOT NULL;
 
 -- 2. Add storage_path column to hero_slides  
 ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS storage_path TEXT;

@@ -209,7 +209,7 @@ function startHeroAutoRotate() {
  * Redirect to /cars.php with category parameter
  */
 function filterByCategory(category) {
-    window.location.href = '/cars.php?category=' + encodeURIComponent(category);
+    window.location.href = '/cars.php?tier=' + encodeURIComponent(category);
 }
 
 /**

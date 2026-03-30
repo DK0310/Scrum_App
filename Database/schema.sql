@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS users (
     full_name       VARCHAR(255),
     date_of_birth   DATE,
     avatar_url      TEXT,
+    avatar_storage_path TEXT,
     
     -- Profile (optional fields)
     address         TEXT,
@@ -210,7 +211,8 @@ CREATE INDEX IF NOT EXISTS idx_vehicles_location ON vehicles(location_city);
 CREATE TABLE IF NOT EXISTS vehicle_images (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     vehicle_id      UUID REFERENCES vehicles(id) ON DELETE CASCADE,  -- nullable: images uploaded before vehicle is created
-    image_data      BYTEA NOT NULL,             -- actual image binary data
+    storage_path    TEXT,                        -- Supabase Storage object path
+    image_data      BYTEA,                      -- legacy BYTEA fallback (optional)
     mime_type       VARCHAR(50) NOT NULL,        -- image/jpeg, image/png, image/webp, image/gif
     file_name       VARCHAR(255),               -- original file name
     file_size       INT NOT NULL,               -- size in bytes
@@ -274,6 +276,7 @@ CREATE TABLE bookings (
     -- Booking details
     booking_type    VARCHAR(30) NOT NULL DEFAULT 'self-drive', -- self-drive, with-driver, airport
     pickup_date     DATE NOT NULL,
+    pickup_time     VARCHAR(20),
     return_date     DATE,                                      -- NULL for airport transfer
     pickup_location TEXT,
     return_location TEXT,
@@ -293,6 +296,17 @@ CREATE TABLE bookings (
     -- Extra
     special_requests TEXT,
     driver_requested BOOLEAN DEFAULT FALSE,
+    service_type    VARCHAR(50) DEFAULT 'local',
+    distance_km     DECIMAL(10, 2),
+    transfer_cost   DECIMAL(10, 2),
+    number_of_passengers INT DEFAULT 1 CHECK (number_of_passengers >= 1),
+    recommended_tier VARCHAR(50),
+    ride_tier       VARCHAR(50),
+    driver_id       UUID REFERENCES users(id) ON DELETE SET NULL,
+    accepted_by_driver_at TIMESTAMPTZ,
+    ride_started_at TIMESTAMPTZ,
+    driver_arrived_at TIMESTAMPTZ,
+    ride_completed_at TIMESTAMPTZ,
     
     -- Timestamps
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -305,8 +319,57 @@ CREATE TABLE bookings (
 CREATE INDEX idx_bookings_renter ON bookings(renter_id);
 CREATE INDEX idx_bookings_vehicle ON bookings(vehicle_id);
 CREATE INDEX idx_bookings_owner ON bookings(owner_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_driver ON bookings(driver_id);
 CREATE INDEX idx_bookings_status ON bookings(status);
 CREATE INDEX idx_bookings_dates ON bookings(pickup_date, return_date);
+
+-- =====================================================
+-- 5b. ACTIVE TRIPS TABLE (real-time minicab tracking)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS active_trips (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    booking_id          UUID NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE CASCADE,
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    driver_id           UUID REFERENCES users(id) ON DELETE SET NULL,
+    vehicle_id          UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    status              VARCHAR(50) NOT NULL DEFAULT 'searching_driver',
+    pickup_lat          DECIMAL(10, 7),
+    pickup_lng          DECIMAL(10, 7),
+    destination_lat     DECIMAL(10, 7),
+    destination_lng     DECIMAL(10, 7),
+    driver_lat          DECIMAL(10, 7),
+    driver_lng          DECIMAL(10, 7),
+    driver_heading      DECIMAL(5, 2),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    driver_accepted_at  TIMESTAMPTZ,
+    journey_started_at  TIMESTAMPTZ,
+    completed_at        TIMESTAMPTZ,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_active_trips_booking ON active_trips(booking_id);
+CREATE INDEX IF NOT EXISTS idx_active_trips_user ON active_trips(user_id);
+CREATE INDEX IF NOT EXISTS idx_active_trips_driver ON active_trips(driver_id);
+CREATE INDEX IF NOT EXISTS idx_active_trips_status ON active_trips(status);
+
+-- =====================================================
+-- 5c. DRIVER NOTIFICATIONS TABLE
+-- =====================================================
+CREATE TABLE IF NOT EXISTS driver_notifications (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    driver_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    booking_id          UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+    active_trip_id      UUID REFERENCES active_trips(id) ON DELETE CASCADE,
+    title               VARCHAR(255) NOT NULL,
+    message             TEXT NOT NULL,
+    notification_type   VARCHAR(50) NOT NULL,
+    is_read             BOOLEAN NOT NULL DEFAULT FALSE,
+    dismissed_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_driver_notif_driver ON driver_notifications(driver_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_driver_notif_booking ON driver_notifications(booking_id);
 
 -- =====================================================
 -- 6. PAYMENTS TABLE
@@ -365,7 +428,8 @@ CREATE INDEX idx_promos_active ON promotions(is_active, starts_at, expires_at);
 -- =====================================================
 CREATE TABLE IF NOT EXISTS hero_slides (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    image_data      BYTEA NOT NULL,             -- image binary (BYTEA like vehicle_images)
+    storage_path    TEXT,                       -- Supabase Storage object path
+    image_data      BYTEA,                      -- legacy BYTEA fallback (optional)
     mime_type       VARCHAR(50) NOT NULL,        -- image/jpeg, image/png, image/webp
     file_name       VARCHAR(255),
     file_size       INT NOT NULL,
@@ -416,6 +480,7 @@ CREATE TABLE community_posts (
     content         TEXT NOT NULL,
     category        VARCHAR(50),                -- 'road_trip', 'car_review', 'tips', 'question'
     image_url       TEXT,
+    image_storage_path TEXT,
     
     likes_count     INT DEFAULT 0,
     comments_count  INT DEFAULT 0,
@@ -615,6 +680,10 @@ CREATE TRIGGER trg_posts_updated_at
 CREATE TRIGGER trg_customer_enquiries_updated_at
     BEFORE UPDATE ON customer_enquiries FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS trg_active_trips_updated_at ON active_trips;
+CREATE TRIGGER trg_active_trips_updated_at
+    BEFORE UPDATE ON active_trips FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- =====================================================
 -- 19. SEED DATA - DEFAULT PROMOTIONS
 -- =====================================================
@@ -663,6 +732,10 @@ ALTER TABLE promotions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customer_enquiries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enquiry_replies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vehicle_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE active_trips ENABLE ROW LEVEL SECURITY;
+ALTER TABLE driver_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hero_slides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vehicle_images ENABLE ROW LEVEL SECURITY;
 
 -- Public read for vehicles & promotions
 DROP POLICY IF EXISTS "Vehicles are viewable by everyone" ON vehicles;
