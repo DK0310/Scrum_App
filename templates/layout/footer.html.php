@@ -106,6 +106,10 @@
     <!-- ===== TOAST CONTAINER ===== -->
     <div class="toast-container" id="toastContainer"></div>
 
+    <!-- ===== AUTH MODALS (Login & Register) ===== -->
+    <?php include __DIR__ . '/../login.html.php'; ?>
+    <?php include __DIR__ . '/../register.html.php'; ?>
+
     <!-- ===== EXTERNAL JAVASCRIPT MODULES ===== -->
     <script src="/resources/js/utils.js"></script>
     <script src="/resources/js/navbar.js"></script>
