@@ -4,18 +4,14 @@
  * Page controller moved to /promotions.php
  * Promo validation and promo wallet APIs are served by /api/bookings.php
  */
-session_start();
+require_once __DIR__ . '/bootstrap.php';
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-    $input = $_POST;
-}
-$action = $input['action'] ?? $_GET['action'] ?? '';
+$input = api_init(['allow_origin' => '*']);
+$action = api_action($input);
 
-header('Content-Type: application/json');
-echo json_encode([
+api_json([
     'success' => false,
-    'message' => empty($action)
+    'message' => $action === ''
         ? 'Page controller moved to /promotions.php. Use /api/bookings.php for promo actions.'
         : 'Unknown action',
     'moved_to' => '/promotions.php'

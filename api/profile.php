@@ -6,14 +6,10 @@
  * If action param → handle API request
  */
 
-session_start();
+require_once __DIR__ . '/bootstrap.php';
 
-// Parse action first to determine if this is a page view or API request
-$input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-    $input = $_POST;
-}
-$action = $input['action'] ?? $_GET['action'] ?? '';
+$input = api_init();
+$action = api_action($input);
 
 // get-avatar remains a non-JSON file redirect endpoint.
 $preAction = $_GET['action'] ?? '';
@@ -94,15 +90,6 @@ if ($preAction === 'get-avatar') {
 }
 
 // ===== JSON API RESPONSE MODE =====
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
-
 require_once __DIR__ . '/notification-helpers.php';
 
 // Re-parse input for API mode (handles file uploads)
@@ -112,13 +99,9 @@ if (isset($_FILES['avatar'])) {
         $input['action'] = 'upload-avatar';
     }
 } else {
-    // Already parsed at top of file
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!is_array($input)) {
-        $input = $_POST;
-    }
+    $input = is_array($input) ? $input : $_POST;
 }
-$action = $input['action'] ?? $_GET['action'] ?? '';
+$action = api_action($input);
 
 // Require authentication for API requests
 if (empty($action)) {

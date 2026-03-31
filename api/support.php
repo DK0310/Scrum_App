@@ -5,18 +5,9 @@
  * Page controller moved to /support.php
  */
 
-session_start();
-
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
-    exit(0);
-}
+require_once __DIR__ . '/bootstrap.php';
+$input = api_init();
+$action = api_action($input);
 
 if (empty($action)) {
     echo json_encode([
@@ -31,11 +22,6 @@ if (empty($action)) {
 // SUBMIT ENQUIRY
 // ==========================================================
 if ($action === 'submit-enquiry') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!is_array($input)) {
-        $input = $_POST;
-    }
-
     $name = $input['name'] ?? '';
     $email = $input['email'] ?? '';
     $details = $input['details'] ?? '';

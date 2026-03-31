@@ -1,29 +1,16 @@
 <?php
-// Chỉ set header nếu chưa được set bởi proxy
-if (!headers_sent()) {
-    header('Content-Type: application/json');
-    header('Access-Control-Allow-Origin: *');
-    header('Access-Control-Allow-Methods: POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type');
-}
+require_once __DIR__ . '/bootstrap.php';
 
-// Handle preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
+$input = api_init(['allow_origin' => '*']);
+$action = api_action($input);
 
-// Include database - dùng đường dẫn tuyệt đối
+// Include database - dung duong dan tuyet doi
 require_once __DIR__ . '/../Database/db.php';
 
-// Lấy JSON input
-$input = json_decode(file_get_contents('php://input'), true);
-
-if (!$input || !isset($input['action'])) {
-    echo json_encode(['success' => false, 'message' => 'Invalid request']);
+if ($action === '') {
+    api_json(['success' => false, 'message' => 'Invalid request']);
     exit;
 }
-
-$action = $input['action'];
 
 // =====================
 // ĐĂNG KÝ

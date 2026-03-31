@@ -4,16 +4,12 @@
  * JSON-only endpoint for booking actions.
  */
 
-session_start();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../config/env.php';
+require_once __DIR__ . '/bootstrap.php';
 
-// Parse action first to determine if this is a page view or API request
-$input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-    $input = $_POST;
-}
-$action = $input['action'] ?? $_GET['action'] ?? '';
+$input = api_init();
+$action = api_action($input);
 
 if (empty($action)) {
     header('Content-Type: application/json');
@@ -23,15 +19,6 @@ if (empty($action)) {
         'moved_to' => '/booking.php'
     ]);
     exit;
-}
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
 }
 
 // Include repositories

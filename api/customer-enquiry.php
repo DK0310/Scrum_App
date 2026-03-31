@@ -5,7 +5,9 @@
  * - API mode: /api/customer-enquiry.php?action=...
  */
 
-session_start();
+require_once __DIR__ . '/bootstrap.php';
+$input = api_init();
+$bodyJson = is_array($input) ? $input : [];
 
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/supabase-storage.php';
@@ -52,15 +54,6 @@ function formatEnquiryRow(array $row, SupabaseStorage $storage): array
     return $row;
 }
 
-$rawBody = file_get_contents('php://input');
-$bodyJson = null;
-if (is_string($rawBody) && trim($rawBody) !== '') {
-    $bodyJson = json_decode($rawBody, true);
-}
-if (!is_array($bodyJson)) {
-    $bodyJson = [];
-}
-
 $action = $_GET['action'] ?? $_POST['action'] ?? ($bodyJson['action'] ?? '');
 
 if ($action === '') {
@@ -105,15 +98,6 @@ if ($action === 'get-enquiry-image') {
         echo 'Server error';
         exit;
     }
-}
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
-    exit(0);
 }
 
 $storage = new SupabaseStorage();

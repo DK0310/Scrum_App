@@ -1,10 +1,14 @@
 <?php
-session_start();
-header('Content-Type: application/json');
+require_once __DIR__ . '/bootstrap.php';
 
-require_once '../Database/db.php';
-require_once '../sql/AuthRepository.php';
-require_once '../vendor/autoload.php';
+$input = api_init(['allow_origin' => '*']);
+if (empty($_POST) && is_array($input)) {
+    $_POST = $input;
+}
+
+require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../sql/AuthRepository.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;

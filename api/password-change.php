@@ -1,30 +1,16 @@
 <?php
-session_start();
+require_once __DIR__ . '/bootstrap.php';
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-	$input = $_POST;
-}
+$input = api_init(['allow_origin' => '*']);
+$action = api_action($input);
 
-$action = $input['action'] ?? $_GET['action'] ?? '';
-
-if (empty($action)) {
-	header('Content-Type: application/json');
-	echo json_encode([
+if ($action === '') {
+	api_json([
 		'success' => false,
 		'message' => 'Page controller moved to /password-change.php.',
 		'moved_to' => '/password-change.php'
 	]);
 	exit;
-}
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-	exit(0);
 }
 
 require_once __DIR__ . '/../Database/db.php';

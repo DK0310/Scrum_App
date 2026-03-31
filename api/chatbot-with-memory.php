@@ -1,22 +1,16 @@
 <?php
 /**
  * DriveNow Chatbot API — Sends messages to n8n AI Agent
- * 
+ *
  * n8n AI Agent uses PostgreSQL Chat Memory node with table: n8n_chat_histories
  * n8n handles conversation history automatically — PHP just proxies messages
- * 
+ *
  * n8n expects: { chatInput: "user message", sessionId: "unique-session-id" }
  * n8n returns: { output: "bot response" }
  */
-session_start();
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+require_once __DIR__ . '/bootstrap.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
+$input = api_init(['allow_origin' => '*']);
 
 // Load environment variables
 require_once __DIR__ . '/../config/env.php';
@@ -24,10 +18,8 @@ require_once __DIR__ . '/../config/env.php';
 define('N8N_WEBHOOK_URL', EnvLoader::get('N8N_WEBHOOK_URL'));
 
 // Get input
-$input = json_decode(file_get_contents('php://input'), true);
-
 if (!$input || empty(trim($input['message'] ?? $input['chatInput'] ?? ''))) {
-    echo json_encode(['success' => false, 'message' => 'Message is required']);
+    api_json(['success' => false, 'message' => 'Message is required']);
     exit;
 }
 

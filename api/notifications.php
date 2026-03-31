@@ -10,24 +10,15 @@
  *   - create: Internal helper (called from other APIs)
  */
 
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
-
-session_start();
+require_once __DIR__ . '/bootstrap.php';
+$input = api_init();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/notification-helpers.php';
 require_once __DIR__ . '/../sql/NotificationRepository.php';
 
 $notificationRepo = new NotificationRepository($pdo);
 
-$input = json_decode(file_get_contents('php://input'), true);
-$action = $input['action'] ?? $_GET['action'] ?? '';
+$action = api_action($input);
 
 if (empty($action)) {
     echo json_encode(['success' => false, 'message' => 'Action is required.']);
@@ -36,10 +27,7 @@ if (empty($action)) {
 
 // Helper: require login
 function requireAuth() {
-    if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
-        echo json_encode(['success' => false, 'message' => 'Authentication required.']);
-        exit;
-    }
+    api_require_auth();
 }
 
 // ==========================================================

@@ -6,7 +6,9 @@
  * - Cancel/delete own booking requests
  */
 
-session_start();
+require_once __DIR__ . '/bootstrap.php';
+
+$bodyJson = api_init(['allow_origin' => '*']);
 
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../config/env.php';
@@ -67,27 +69,16 @@ if (!cc_is_authorized($userRole)) {
     exit;
 }
 
-$rawBody = file_get_contents('php://input');
-$bodyJson = null;
-if (is_string($rawBody) && trim($rawBody) !== '') {
-    $bodyJson = json_decode($rawBody, true);
-}
-if (!is_array($bodyJson)) {
-    $bodyJson = $_POST ?? [];
-}
-$action = $_GET['action'] ?? $_POST['action'] ?? ($bodyJson['action'] ?? '');
+$action = api_action($bodyJson);
 
 if ($action === '') {
-    header('Content-Type: application/json');
-    echo json_encode([
+    api_json([
         'success' => false,
         'message' => 'Page controller moved to /call-center-staff.php.',
         'moved_to' => '/call-center-staff.php'
     ]);
     exit;
 }
-
-header('Content-Type: application/json');
 
 try {
     if ($action === 'search_customers') {

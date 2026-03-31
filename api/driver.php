@@ -41,13 +41,10 @@ $isLoggedIn = true;
 $userRole = 'driver';
 $currentUser = $user['full_name'] ?? $user['email'] ?? 'Driver';
 
-$rawBody = file_get_contents('php://input');
-$body = json_decode($rawBody ?: '', true);
-if (!is_array($body)) {
-    $body = $_POST;
-}
+require_once __DIR__ . '/bootstrap.php';
 
-$action = trim((string)($_GET['action'] ?? $_POST['action'] ?? $body['action'] ?? ''));
+$body = api_init(['allow_origin' => '*']);
+$action = trim(api_action($body));
 
 function driver_json(array $payload, int $status = 200): void
 {
@@ -162,13 +159,6 @@ if ($action === '') {
         'message' => 'Page controller moved to /driver.php.',
         'moved_to' => '/driver.php'
     ], 400);
-}
-
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
-    exit;
 }
 
 try {

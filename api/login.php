@@ -1,9 +1,13 @@
 <?php
-session_start();
-header('Content-Type: application/json');
+require_once __DIR__ . '/bootstrap.php';
 
-require_once '../Database/db.php';
-require_once '../sql/AuthRepository.php';
+$input = api_init(['allow_origin' => '*']);
+if (empty($_POST) && is_array($input)) {
+    $_POST = $input;
+}
+
+require_once __DIR__ . '/../Database/db.php';
+require_once __DIR__ . '/../sql/AuthRepository.php';
 
 function isAjaxRequest(): bool {
     $requestedWith = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';

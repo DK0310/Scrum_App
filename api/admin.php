@@ -91,33 +91,20 @@ if ($action === 'hero-slides-public') {
 }
 
 // ===== PARSE ACTION EARLY =====
-session_start();
+require_once __DIR__ . '/bootstrap.php';
+
+$input = api_init(['allow_origin' => '*']);
+$action = api_action($input);
+
 require_once __DIR__ . '/../Database/db.php';
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-    $input = $_POST;
-}
-$action = $input['action'] ?? $_GET['action'] ?? '';
-
 if (empty($action)) {
-    header('Content-Type: application/json');
-    echo json_encode([
+    api_json([
         'success' => false,
         'message' => 'Page controller moved to /admin.php.',
         'moved_to' => '/admin.php'
     ]);
     exit;
-}
-
-// ===== JSON API from here =====
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
 }
 
 require_once __DIR__ . '/notification-helpers.php';
@@ -139,20 +126,12 @@ try {
     $heroSlideRepo->ensureStoragePathColumnExists();
 } catch (Exception $e) { /* column may already exist */ }
 
-// Helper: require login
-function requireAuth() {
-    if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
-        echo json_encode(['success' => false, 'message' => 'Authentication required.', 'require_login' => true]);
-        exit;
-    }
-}
-
 // Helper: require admin role
 function requireAdmin() {
-    requireAuth();
+    api_require_auth();
     if (($_SESSION['role'] ?? '') !== 'admin') {
         http_response_code(403);
-        echo json_encode(['success' => false, 'message' => 'Admin access required.']);
+        api_json(['success' => false, 'message' => 'Admin access required.'], 403);
         exit;
     }
 }
@@ -680,5 +659,5 @@ if ($action === 'admin-delete-user') {
     exit;
 }
 
-echo json_encode(['success' => false, 'message' => 'Unknown admin action: ' . $action]);
+api_json(['success' => false, 'message' => 'Unknown admin action: ' . $action]);
 

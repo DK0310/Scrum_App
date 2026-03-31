@@ -1,26 +1,18 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+require_once __DIR__ . '/bootstrap.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
-
-session_start();
+$input = api_init(['allow_origin' => '*']);
+$action = api_action($input);
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../sql/UserRepository.php';
 require_once __DIR__ . '/notification-helpers.php';
 
 $userRepo = new UserRepository($pdo);
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-    $input = $_POST;
+if ($action === '') {
+    api_json(['success' => false, 'message' => 'Unknown action: ' . $action]);
+    exit;
 }
-
-$action = $input['action'] ?? '';
 
 if ($action === 'enable-faceid') {
     if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {

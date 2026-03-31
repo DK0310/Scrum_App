@@ -4,23 +4,10 @@
  * JSON-only endpoint for order-related actions.
  */
 
-session_start();
+require_once __DIR__ . '/bootstrap.php';
 
-// Parse action payload for API routing
-$input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-    $input = $_POST;
-}
-$action = $input['action'] ?? $_GET['action'] ?? '';
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
-    exit(0);
-}
+$input = api_init(['allow_origin' => '*']);
+$action = api_action($input);
 
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
@@ -33,13 +20,6 @@ $bookingRepo = new BookingRepository($pdo);
 $vehicleRepo = new VehicleRepository($pdo);
 $vehicleImageRepo = new VehicleImageRepository($pdo);
 $paypalGateway = new PayPalGateway();
-
-function requireAuthOrders(): void {
-    if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
-        echo json_encode(['success' => false, 'message' => 'Authentication required.', 'require_login' => true]);
-        exit;
-    }
-}
 
 function parseOrderPickupDateTime(array $booking): ?DateTimeImmutable {
     $pickupDateRaw = trim((string)($booking['pickup_date'] ?? ''));
@@ -110,7 +90,7 @@ function countAvailableVehiclesForTierAndSeats(PDO $pdo, string $tier, int $seat
 }
 
 if ($action === 'my-orders') {
-    requireAuthOrders();
+    api_require_auth();
     $userId = $_SESSION['user_id'];
 
     try {
