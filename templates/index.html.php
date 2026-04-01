@@ -12,8 +12,7 @@
                     Book minicabs or hire cars with professional drivers. Local journeys, airport transfers, hotel pickups — your ride starts here.
                 </p>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                    <a href="/cars.php" class="btn btn-primary btn-lg">🔍 Browse Cars</a>
-                    <a href="/booking.php?mode=minicab" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(4px);">🚕 Book a Minicab</a>
+                    <a href="/booking.php?mode=minicab" class="btn btn-lg" style="background:var(--primary);color:white;border:1px solid var(--primary-100);box-shadow:0 10px 30px rgba(15,118,110,0.35);">🚕 Book a Minicab</a>
                     <a href="#how-it-works" class="btn btn-outline btn-lg" style="border-color:rgba(255,255,255,0.3);color:white;">Learn More →</a>
                 </div>
                 <div class="hero-stats">
@@ -65,25 +64,81 @@
         </div>
     </section>
 
+    <!-- ===== MINICAB SPOTLIGHT ===== -->
+    <section class="section spotlight-section">
+        <div class="section-container">
+            <div class="spotlight-grid">
+                <div class="spotlight-content">
+                    <div class="spotlight-label">
+                        <span class="spotlight-pill">Spotlight</span>
+                        <span class="spotlight-rule"></span>
+                    </div>
+                    <h2 class="spotlight-title">Need A Ride <span>In Minutes?</span></h2>
+                    <p class="spotlight-subtitle">Choose pickup point, destination, and ride tier. Our system auto-matches an available driver and confirms instantly.</p>
+                    <div class="spotlight-actions">
+                        <a href="/booking.php?mode=minicab" class="btn btn-lg spotlight-primary">Start Booking Now</a>
+                        <a href="/customer-enquiry.php" class="btn btn-lg spotlight-secondary">Ask For Assistance</a>
+                    </div>
+                </div>
+                <div class="spotlight-cards">
+                    <div class="spotlight-card">
+                        <div>
+                            <div class="spotlight-metric">~3 min</div>
+                            <div class="spotlight-label-text">Average Dispatch Time</div>
+                        </div>
+                        <div class="spotlight-icon">⏱</div>
+                    </div>
+                    <div class="spotlight-card">
+                        <div>
+                            <div class="spotlight-metric">24/7</div>
+                            <div class="spotlight-label-text">Service Availability</div>
+                        </div>
+                        <div class="spotlight-icon">📅</div>
+                    </div>
+                    <div class="spotlight-card spotlight-card-dark">
+                        <div class="spotlight-card-head">
+                            <span class="spotlight-card-title">Ride Tiers</span>
+                            <span class="spotlight-card-icon">🚗</span>
+                        </div>
+                        <div class="spotlight-tier-row">
+                            <span class="spotlight-tier">Eco</span>
+                            <span class="spotlight-tier">Standard</span>
+                            <span class="spotlight-tier spotlight-tier-strong">Luxury</span>
+                        </div>
+                        <p class="spotlight-card-note">Precision matched vehicles for every journey profile.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- ===== CAR CATEGORIES ===== -->
     <section class="section">
         <div class="section-container">
-            <div class="section-header">
+            <div class="section-header section-header-centered">
                 <div>
                     <h2 class="section-title">Browse by Category</h2>
-                    <p class="section-subtitle">Choose from a wide range of vehicle categories</p>
+                    <p class="section-subtitle">Select your experience</p>
                 </div>
-                <a href="/cars.php" class="section-link">All Categories →</a>
             </div>
-            <div class="category-grid">
-                <div class="category-card" onclick="filterByCategory('eco')">
+            <div class="category-grid category-grid-redesign">
+                <div class="category-card category-card-redesign" onclick="filterByCategory('eco')">
+                    <div class="category-icon"><img src="/resources/images/logo/piggy-bank.png" alt="Eco"></div>
                     <div class="category-name">Eco</div>
+                    <p class="category-desc">Sustainable luxury for the modern commuter.</p>
+                    <span class="category-link">Explore Collection →</span>
                 </div>
-                <div class="category-card" onclick="filterByCategory('standard')">
+                <div class="category-card category-card-redesign" onclick="filterByCategory('standard')">
+                    <div class="category-icon"><img src="/resources/images/logo/car.png" alt="Standard"></div>
                     <div class="category-name">Standard</div>
+                    <p class="category-desc">Versatile reliability without compromise.</p>
+                    <span class="category-link">Explore Collection →</span>
                 </div>
-                <div class="category-card" onclick="filterByCategory('luxury')">
+                <div class="category-card category-card-redesign" onclick="filterByCategory('luxury')">
+                    <div class="category-icon"><img src="/resources/images/logo/crown.png" alt="Luxury"></div>
                     <div class="category-name">Luxury</div>
+                    <p class="category-desc">Unrivaled prestige for special journeys.</p>
+                    <span class="category-link">Explore Collection →</span>
                 </div>
             </div>
         </div>
@@ -92,17 +147,17 @@
     <!-- ===== FEATURED CARS (loaded from DB) ===== -->
     <section class="section featured-section" id="cars">
         <div class="section-container">
-            <div class="section-header">
+            <div class="section-header section-header-vehicles section-header-centered">
                 <div>
-                    <h2 class="section-title"> Available Vehicles</h2>
-                    <p class="section-subtitle">See what’s currently available — photo, name, daily price, and plate number</p>
+                    <h2 class="section-title">Available Vehicles</h2>
+                    <p class="section-subtitle">Instant booking available for our premium fleet across your city.</p>
                 </div>
             </div>
 
-            <div class="car-grid" id="availableVehiclesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;">
-                <div style="grid-column:1/-1;text-align:center;padding:40px 20px;">
-                    <div style="width:36px;height:36px;border:3px solid var(--gray-200);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
-                    <p style="color:var(--gray-500);font-size:0.875rem;">Loading available vehicles...</p>
+            <div class="car-grid car-grid-redesign" id="availableVehiclesGrid">
+                <div class="vehicles-loading">
+                    <div class="vehicles-spinner"></div>
+                    <p>Loading available vehicles...</p>
                 </div>
             </div>
         </div>
@@ -155,124 +210,371 @@
         .suggestion-text { flex: 1; }
         .suggestion-label { font-size: 0.938rem; font-weight: 600; color: var(--gray-800); }
         .suggestion-sub { font-size: 0.75rem; color: var(--gray-500); margin-top: 2px; }
+
+        .spotlight-section { padding-top: 30px; padding-bottom: 30px; }
+        .spotlight-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+            gap: 28px;
+            align-items: center;
+        }
+        .spotlight-label { display: flex; align-items: center; gap: 12px; }
+        .spotlight-pill {
+            background: var(--primary-50);
+            color: var(--primary-dark);
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            padding: 6px 12px;
+            border-radius: 999px;
+        }
+        .spotlight-rule { flex: 1; height: 1px; background: var(--gray-200); }
+        .spotlight-title {
+            font-size: clamp(2.2rem, 4vw, 3.4rem);
+            font-weight: 900;
+            line-height: 1.1;
+            margin: 14px 0 10px;
+        }
+        .spotlight-title span { color: var(--primary); font-style: italic; }
+        .spotlight-subtitle { font-size: 1rem; color: var(--gray-600); max-width: 520px; }
+        .spotlight-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+        .spotlight-primary {
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            color: white;
+            border: none;
+            font-weight: 800;
+            box-shadow: 0 12px 30px rgba(15, 118, 110, 0.25);
+        }
+        .spotlight-secondary { background: white; color: var(--primary-dark); border: 1px solid var(--gray-200); }
+        .spotlight-cards { display: grid; gap: 16px; }
+        .spotlight-card {
+            background: white;
+            border: 1px solid var(--gray-100);
+            border-radius: 18px;
+            padding: 20px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            box-shadow: var(--shadow-md);
+        }
+        .spotlight-card-dark {
+            background: var(--primary);
+            color: white;
+            border-color: transparent;
+            display: block;
+        }
+        .spotlight-metric { font-size: 2rem; font-weight: 900; color: var(--primary-dark); }
+        .spotlight-label-text { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--gray-500); font-weight: 700; }
+        .spotlight-icon {
+            width: 44px; height: 44px; border-radius: 12px;
+            background: var(--primary-50); display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+        }
+        .spotlight-card-head { display: flex; justify-content: space-between; align-items: center; }
+        .spotlight-card-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.18em; opacity: 0.8; font-weight: 700; }
+        .spotlight-card-icon { font-size: 1.3rem; }
+        .spotlight-tier-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 8px; }
+        .spotlight-tier {
+            padding: 6px 14px; border-radius: 10px; background: rgba(255,255,255,0.15);
+            font-size: 0.8rem; font-weight: 700; color: white;
+        }
+        .spotlight-tier-strong { background: white; color: var(--primary-dark); }
+        .spotlight-card-note { font-size: 0.75rem; opacity: 0.8; }
+
+        .category-grid-redesign {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+        }
+        .category-card-redesign {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-100);
+            border-radius: 28px;
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 10px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .category-card-redesign:hover { transform: translateY(-6px); box-shadow: var(--shadow-lg); }
+        .category-icon {
+            width: 56px; height: 56px; border-radius: 16px; background: white;
+            display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+            box-shadow: var(--shadow-sm);
+        }
+        .category-icon img {
+            width: 30px;
+            height: 30px;
+            object-fit: contain;
+            display: block;
+        }
+        .category-desc { color: var(--gray-500); font-size: 0.9rem; }
+        .category-link { color: var(--primary); font-weight: 700; font-size: 0.85rem; }
+
+        .car-grid-redesign {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 22px;
+        }
+        .vehicles-loading {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--gray-500);
+        }
+        .vehicles-spinner {
+            width: 36px; height: 36px; border: 3px solid var(--gray-200);
+            border-top-color: var(--primary); border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+        }
+
+        .section-header-centered { text-align: center; justify-content: center; }
+        .section-header-centered .section-subtitle { margin: 0 auto; max-width: 620px; }
+        .section-header-space { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .section-header-space > div { text-align: center; margin: 0 auto; }
+        .section-eyebrow { display: block; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin-bottom: 8px; }
+
+        .steps-grid-redesign {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+        }
+        .step-card-redesign {
+            position: relative;
+            padding: 26px;
+            border-radius: 18px;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-100);
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .step-card-redesign:hover { transform: translateY(-6px); box-shadow: var(--shadow-lg); }
+        .step-card-redesign .step-icon {
+            width: 56px; height: 56px; border-radius: 16px;
+            background: var(--primary-50); color: var(--primary-dark);
+            display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+            margin-bottom: 18px;
+        }
+        .step-card-redesign .step-index {
+            position: absolute; top: 18px; right: 18px;
+            font-size: 2.5rem; font-weight: 900; color: rgba(15, 118, 110, 0.08);
+        }
+
+        .section-promotions { background: var(--gray-100); }
+        .promo-grid-redesign {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+        }
+        .promo-card-redesign {
+            position: relative;
+            border-radius: 28px;
+            overflow: hidden;
+            min-height: 320px;
+            display: flex;
+            align-items: flex-end;
+            background: var(--primary);
+            color: white;
+        }
+        .promo-weekend { background: linear-gradient(140deg, #004f45, #0f766e); }
+        .promo-welcome { background: linear-gradient(140deg, #3b1d6a, #7b2cbf); }
+        .promo-longterm { background: linear-gradient(140deg, #0f172a, #1e293b); }
+        .promo-overlay {
+            position: absolute; inset: 0;
+            background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.65) 100%);
+        }
+        .promo-content {
+            position: relative;
+            padding: 26px;
+            background: rgba(255,255,255,0.1);
+            margin: 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+            width: calc(100% - 32px);
+        }
+        .promo-pill {
+            display: inline-block; padding: 6px 12px; border-radius: 999px;
+            background: rgba(255,255,255,0.2); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+        .promo-pill-alt { background: rgba(225, 190, 231, 0.9); color: #4a148c; }
+        .promo-pill-neutral { background: rgba(226, 232, 240, 0.9); color: #0f172a; }
+        .promo-btn { width: 100%; margin-top: 14px; border: none; }
+
+        .reviews-section { background: var(--gray-50); }
+        .review-grid-redesign {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+            margin-top: 30px;
+        }
+        .review-card-redesign {
+            background: white;
+            border-radius: 28px;
+            padding: 28px;
+            box-shadow: var(--shadow-md);
+        }
+        .review-card-highlight {
+            background: var(--primary);
+            color: white;
+            border-radius: 28px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(15, 118, 110, 0.25);
+        }
+        .review-card-highlight .review-stars { color: var(--primary-50); }
+        .review-card-highlight .review-author-trip { color: rgba(255,255,255,0.7); }
+        .review-metrics {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            border-top: 1px solid var(--gray-200);
+            padding-top: 20px;
+        }
+        .review-metric { text-align: center; }
+        .review-metric-value { font-size: 1.5rem; font-weight: 900; color: var(--primary); }
+        .review-metric-label { font-size: 0.8rem; color: var(--gray-500); }
+
+        @media (max-width: 900px) {
+            .spotlight-grid { grid-template-columns: 1fr; }
+        }
     </style>
 
     <!-- ===== HOW IT WORKS ===== -->
     <section class="section" id="how-it-works">
         <div class="section-container">
-            <div class="section-header">
+            <div class="section-header section-header-centered">
                 <div>
-                    <h2 class="section-title">How It Works</h2>
-                    <p class="section-subtitle">Rent a car in 4 simple steps — online or by phone</p>
+                    <h2 class="section-title">Precision Workflow</h2>
+                    <p class="section-subtitle">Experience a seamless transition from selection to the driver's seat with our curated 4-step process.</p>
                 </div>
             </div>
-            <div class="steps-grid">
-                <div class="step-card">
-                    <div class="step-number">1</div>
+            <div class="steps-grid steps-grid-redesign">
+                <div class="step-card step-card-redesign">
                     <div class="step-icon">🔍</div>
                     <h3 class="step-title">Search & Filter</h3>
-                    <p class="step-description">Browse thousands of cars. Filter by type, price, location, brand, and more.</p>
+                    <p class="step-description">Browse our elite fleet with granular filters for performance, luxury, and utility.</p>
+                    <div class="step-index">01</div>
                 </div>
-                <div class="step-card">
-                    <div class="step-number">2</div>
-                    <div class="step-icon">📋</div>
+                <div class="step-card step-card-redesign">
+                    <div class="step-icon">📅</div>
                     <h3 class="step-title">Book Online or Call</h3>
-                    <p class="step-description">Book instantly online, via phone, or enquire with our customer service team.</p>
+                    <p class="step-description">Instant confirmation through our digital concierge or a dedicated personal agent.</p>
+                    <div class="step-index">02</div>
                 </div>
-                <div class="step-card">
-                    <div class="step-number">3</div>
-                    <div class="step-icon">💳</div>
+                <div class="step-card step-card-redesign">
+                    <div class="step-icon">🔒</div>
                     <h3 class="step-title">Pay Securely</h3>
-                    <p class="step-description">Pay with cash, bank transfer, credit card, or digital wallet. All payments secured.</p>
+                    <p class="step-description">Encrypted transactional layer supporting all major premium credit providers.</p>
+                    <div class="step-index">03</div>
                 </div>
-                <div class="step-card">
-                    <div class="step-number">4</div>
-                    <div class="step-icon">🚗</div>
+                <div class="step-card step-card-redesign">
+                    <div class="step-icon">🔑</div>
                     <h3 class="step-title">Pick Up & Drive</h3>
-                    <p class="step-description">Pick up your car and enjoy your ride. GPS tracking available for car owners.</p>
+                    <p class="step-description">Your vehicle awaits at your chosen location, detailed and ready for departure.</p>
+                    <div class="step-index">04</div>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- ===== PROMOTIONS PREVIEW ===== -->
-    <section class="section" style="background:var(--gray-100);">
+    <section class="section section-promotions">
         <div class="section-container">
-            <div class="section-header">
+            <div class="section-header section-header-space">
                 <div>
-                    <h2 class="section-title">🎉 Promotions & Deals</h2>
-                    <p class="section-subtitle">Save big with our exclusive offers and promo codes</p>
+                    <span class="section-eyebrow">Exclusive Access</span>
+                    <h2 class="section-title">Seasonal Privileges</h2>
                 </div>
                 <a href="/promotions.php" class="section-link">All Promotions →</a>
             </div>
-            <div class="promo-grid">
-                <div class="promo-card" onclick="applyPromo('WEEKEND20')">
-                    <div class="promo-discount">20% OFF</div>
-                    <div class="promo-title">Weekend Special</div>
-                    <div class="promo-description">Book any car for the weekend and save 20%. Valid until March 31.</div>
-                    <div class="promo-code">WEEKEND20</div>
+            <div class="promo-grid promo-grid-redesign">
+                <div class="promo-card promo-card-redesign promo-weekend" onclick="applyPromo('WEEKEND20')">
+                    <div class="promo-overlay"></div>
+                    <div class="promo-content">
+                        <span class="promo-pill">Limited Offer</span>
+                        <h3 class="promo-title">20% OFF Weekend Special</h3>
+                        <p class="promo-description">Elevate your weekend escape with our curated performance collection.</p>
+                        <button class="btn btn-primary promo-btn">Claim Privilege</button>
+                    </div>
                 </div>
-                <div class="promo-card accent" onclick="applyPromo('FIRST50')">
-                    <div class="promo-discount">$50 OFF</div>
-                    <div class="promo-title">First Ride Bonus</div>
-                    <div class="promo-description">New users get $50 off their first booking. Sign up today!</div>
-                    <div class="promo-code">FIRST50</div>
+                <div class="promo-card promo-card-redesign promo-welcome" onclick="applyPromo('FIRST50')">
+                    <div class="promo-overlay"></div>
+                    <div class="promo-content">
+                        <span class="promo-pill promo-pill-alt">Welcome Gift</span>
+                        <h3 class="promo-title">$50 OFF First Ride Bonus</h3>
+                        <p class="promo-description">A sophisticated introduction to EliteDrive. Applied at checkout.</p>
+                        <button class="btn btn-primary promo-btn">Unlock Bonus</button>
+                    </div>
                 </div>
-                <div class="promo-card dark" onclick="applyPromo('LONGTERM30')">
-                    <div class="promo-discount">30% OFF</div>
-                    <div class="promo-title">Long-term Rental</div>
-                    <div class="promo-description">Book for 30+ days and get 30% discount. Perfect for corporate use.</div>
-                    <div class="promo-code">LONGTERM30</div>
+                <div class="promo-card promo-card-redesign promo-longterm" onclick="applyPromo('LONGTERM30')">
+                    <div class="promo-overlay"></div>
+                    <div class="promo-content">
+                        <span class="promo-pill promo-pill-neutral">Executive Tier</span>
+                        <h3 class="promo-title">30% OFF Long-term Rental</h3>
+                        <p class="promo-description">Extended excellence for journeys that require more than a moment.</p>
+                        <button class="btn btn-primary promo-btn">Inquire Now</button>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- ===== REVIEWS PREVIEW ===== -->
-    <section class="section">
+    <section class="section reviews-section">
         <div class="section-container">
-            <div class="section-header">
+            <div class="section-header section-header-centered">
                 <div>
-                    <h2 class="section-title">⭐ Customer Reviews</h2>
-                    <p class="section-subtitle">See what our customers are saying about their experience</p>
+                    <span class="section-eyebrow">Trust & Excellence</span>
+                    <h2 class="section-title">Experience Refined Precision</h2>
+                    <p class="section-subtitle">Join thousands of discerning travelers who trust our concierge for their most critical journeys.</p>
                 </div>
-                <a href="reviews.php" class="section-link">All Reviews →</a>
             </div>
-            <div class="review-grid" id="homeReviewGrid">
+            <div class="review-grid review-grid-redesign" id="homeReviewGrid">
                 <!-- Fallback static reviews (replaced dynamically if DB reviews exist) -->
-                <div class="review-card">
+                <div class="review-card review-card-redesign">
                     <div class="review-stars">★★★★★</div>
-                    <p class="review-text">"Best car rental experience ever! The booking process was seamless, and the car was in perfect condition."</p>
+                    <p class="review-text">"The precision of service is unmatched. From the flight tracking to the pristine vehicle state, every detail was handled with elite care."</p>
                     <div class="review-author">
                         <div class="review-avatar">JD</div>
                         <div class="review-author-info">
-                            <div class="review-author-name">James Davis</div>
-                            <div class="review-author-trip">BMW 5 Series • New York → Boston</div>
+                            <div class="review-author-name">James D.</div>
+                            <div class="review-author-trip">Corporate Executive</div>
                         </div>
                     </div>
                 </div>
-                <div class="review-card">
+                <div class="review-card review-card-highlight">
                     <div class="review-stars">★★★★★</div>
-                    <p class="review-text">"The face recognition login is super cool! And the AI chatbot helped me find the perfect car for my family trip."</p>
+                    <p class="review-text">"The chauffeurs aren't just drivers; they are logistical specialists. My commute has become my most productive hour of the day."</p>
                     <div class="review-author">
-                        <div class="review-avatar">AL</div>
+                        <div class="review-avatar">SM</div>
                         <div class="review-author-info">
-                            <div class="review-author-name">Anna Lee</div>
-                            <div class="review-author-trip">Honda CR-V • Tokyo → Osaka</div>
+                            <div class="review-author-name">Sarah M.</div>
+                            <div class="review-author-trip">Tech Entrepreneur</div>
                         </div>
                     </div>
                 </div>
-                <div class="review-card">
-                    <div class="review-stars">★★★★☆</div>
-                    <p class="review-text">"Great selection of electric vehicles. The GPS tracking feature gave me peace of mind when renting out my car."</p>
+                <div class="review-card review-card-redesign">
+                    <div class="review-stars">★★★★★</div>
+                    <p class="review-text">"Flawless long-distance booking. The app is intuitive and the car was waiting exactly where specified. Real luxury is simplicity."</p>
                     <div class="review-author">
-                        <div class="review-avatar">MP</div>
+                        <div class="review-avatar">RK</div>
                         <div class="review-author-info">
-                            <div class="review-author-name">Marco Polo</div>
-                            <div class="review-author-trip">Tesla Model Y • Milan → Rome</div>
+                            <div class="review-author-name">Robert K.</div>
+                            <div class="review-author-trip">Frequent Traveler</div>
                         </div>
                     </div>
                 </div>
+            </div>
+            <div class="review-metrics">
+                <div class="review-metric"><div class="review-metric-value">99.8%</div><div class="review-metric-label">On-time Arrival</div></div>
+                <div class="review-metric"><div class="review-metric-value">15k+</div><div class="review-metric-label">Monthly Journeys</div></div>
+                <div class="review-metric"><div class="review-metric-value">4.9/5</div><div class="review-metric-label">Customer Rating</div></div>
+                <div class="review-metric"><div class="review-metric-value">24/7</div><div class="review-metric-label">Concierge Support</div></div>
             </div>
         </div>
     </section>

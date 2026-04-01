@@ -21,9 +21,9 @@
   let pickupMapObj = null, returnMapObj = null;
   let pickupMarker = null, returnMarker = null;
   let selectedRideTier = null; // 'eco', 'standard', 'luxury'
+  let autoAssignedRideTier = false;
   let selectedSeatCapacity = 4;
   let rideFare = null;
-  let selectedRideTiming = 'schedule'; // schedule only
   let lockedBookingType = null;
 
   // Location tracking
@@ -76,6 +76,42 @@
   function getOnlineRatePerMile(tier, seatCapacity) {
     const seatRates = ONLINE_RATE_TABLE[seatCapacity] || ONLINE_RATE_TABLE[4];
     return seatRates[tier] || 0;
+  }
+
+  function getMinicabSeatLogo(seatCapacity) {
+    return seatCapacity === 7
+      ? '/resources/images/logo/SUV.png'
+      : '/resources/images/logo/sedan.png';
+  }
+
+  function requiresManualRideTierSelection() {
+    return selectedBookingType === 'minicab';
+  }
+
+  function updateRideTierVisibility() {
+    const rideTierGroup = document.getElementById('rideTierGroup');
+    if (!rideTierGroup) return;
+
+    if (selectedBookingType !== 'minicab') {
+      rideTierGroup.style.display = 'none';
+      autoAssignedRideTier = false;
+      return;
+    }
+
+    const shouldShowTier = requiresManualRideTierSelection();
+    rideTierGroup.style.display = shouldShowTier ? 'block' : 'none';
+
+    if (shouldShowTier) {
+      if (autoAssignedRideTier) {
+        selectedRideTier = null;
+        rideFare = null;
+      }
+      autoAssignedRideTier = false;
+      return;
+    }
+
+    selectedRideTier = 'standard';
+    autoAssignedRideTier = true;
   }
 
   function updateSeatCapacityInfo() {
@@ -357,7 +393,24 @@
     if (scheduledDTGroup) scheduledDTGroup.style.display = 'none';
     
     if (isMinicab) {
-      selectRideTiming('schedule');
+      const pickupDateGroup = document.getElementById('pickupDateGroup');
+      const returnDateGroup = document.getElementById('returnDateGroup');
+      const scheduledDateTimeGroup = document.getElementById('scheduledDateTimeGroup');
+
+      if (pickupDateGroup) pickupDateGroup.style.display = 'none';
+      if (returnDateGroup) returnDateGroup.style.display = 'none';
+      if (scheduledDateTimeGroup) scheduledDateTimeGroup.style.display = 'block';
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const minDT = `${year}-${month}-${day}T${hours}:${minutes}`;
+
+      const scheduledDateTime = document.getElementById('scheduledDateTime');
+      if (scheduledDateTime) scheduledDateTime.min = minDT;
     }
 
     // Pickup label
@@ -385,23 +438,20 @@
     const serviceTypeGroup = document.getElementById('serviceTypeGroup');
     if (serviceTypeGroup) serviceTypeGroup.style.display = isMinicab ? 'block' : 'none';
 
-    // Ride timing — only for minicab
-    const rideTimingGroup = document.getElementById('rideTimingGroup');
-    if (rideTimingGroup) rideTimingGroup.style.display = isMinicab ? 'block' : 'none';
-
     // Reset airport selector state
     if (isMinicab) {
       onServiceTypeChange();
     } else {
       const returnLocationInputWrapper = document.getElementById('returnLocationInputWrapper');
       const airportSelectWrapper = document.getElementById('airportSelectWrapper');
+      const hotelSelectWrapper = document.getElementById('hotelSelectWrapper');
       if (returnLocationInputWrapper) returnLocationInputWrapper.style.display = 'flex';
       if (airportSelectWrapper) airportSelectWrapper.style.display = 'none';
+      if (hotelSelectWrapper) hotelSelectWrapper.style.display = 'none';
     }
 
     // Ride tier selection — only for minicab
-    const rideTierGroup = document.getElementById('rideTierGroup');
-    if (rideTierGroup) rideTierGroup.style.display = isMinicab ? 'block' : 'none';
+    updateRideTierVisibility();
 
     // Seat capacity — only for minicab
     const seatCapacityGroup = document.getElementById('seatCapacityGroup');
@@ -413,11 +463,12 @@
     }
 
     // Car card visibility
-    const carCard = document.querySelector('.booking-car-card');
-    const bookingGrid = document.querySelector('.booking-grid');
+    const carCard = document.querySelector('#step1Content .booking-car-card');
+    const bookingGrid = document.querySelector('#step1Content .booking-grid');
     if (isMinicab) {
-      if (carCard) carCard.style.display = 'none';
-      if (bookingGrid) bookingGrid.style.gridTemplateColumns = '1fr';
+      const lockToMinicabLayout = BOOKING_MODE === 'minicab';
+      if (carCard) carCard.style.display = lockToMinicabLayout ? '' : 'none';
+      if (bookingGrid) bookingGrid.style.gridTemplateColumns = lockToMinicabLayout ? '' : '1fr';
     } else {
       if (carCard && carData) carCard.style.display = '';
       if (bookingGrid && carData) bookingGrid.style.gridTemplateColumns = '380px 1fr';
@@ -433,67 +484,64 @@
     updateTripSummary();
   }
 
-  // ===== RIDE TIMING (minicab only) =====
-  function selectRideTiming(timing) {
-    if (timing !== 'schedule') {
-      timing = 'schedule';
-    }
-    selectedRideTiming = timing;
-    document.querySelectorAll('[data-timing]').forEach(el => {
-      el.classList.toggle('active', el.dataset.timing === timing);
-    });
-
-    const pickupDateGroup = document.getElementById('pickupDateGroup');
-    const returnDateGroup = document.getElementById('returnDateGroup');
-    const scheduledDateTimeGroup = document.getElementById('scheduledDateTimeGroup');
-
-    if (pickupDateGroup) pickupDateGroup.style.display = 'none';
-    if (returnDateGroup) returnDateGroup.style.display = 'none';
-    if (scheduledDateTimeGroup) scheduledDateTimeGroup.style.display = 'block';
-
-    // Allow picking from now onwards
-    // Calculate min time correctly for datetime-local (which uses LOCAL time, not UTC)
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const minDT = `${year}-${month}-${day}T${hours}:${minutes}`;
-    
-    const scheduledDateTime = document.getElementById('scheduledDateTime');
-    if (scheduledDateTime) scheduledDateTime.min = minDT;
-    updateTripSummary();
-  }
-
   // ===== SERVICE TYPE CHANGE =====
   function onServiceTypeChange() {
     const serviceType = document.getElementById('serviceType');
     if (!serviceType) return;
+
+    syncServiceTypeCards(serviceType.value);
     
     const isAirport = serviceType.value === 'airport-transfer';
+    const isHotel = serviceType.value === 'hotel-transfer';
     const returnInputWrapper = document.getElementById('returnLocationInputWrapper');
-    const airportSelect = document.getElementById('airportSelectWrapper');
+    const airportSelectWrapper = document.getElementById('airportSelectWrapper');
+    const hotelSelectWrapper = document.getElementById('hotelSelectWrapper');
 
     if (isAirport) {
       if (returnInputWrapper) returnInputWrapper.style.display = 'none';
-      if (airportSelect) airportSelect.style.display = 'block';
+      if (airportSelectWrapper) airportSelectWrapper.style.display = 'block';
+      if (hotelSelectWrapper) hotelSelectWrapper.style.display = 'none';
       const returnLocationLabel = document.getElementById('returnLocationLabel');
-      if (returnLocationLabel) returnLocationLabel.textContent = '✈️ Select Airport';
+      if (returnLocationLabel) returnLocationLabel.textContent = 'Select Airport';
+      const returnLocation = document.getElementById('returnLocation');
+      if (returnLocation) returnLocation.value = '';
+      selectedAddresses['return'] = null;
+    } else if (isHotel) {
+      if (returnInputWrapper) returnInputWrapper.style.display = 'none';
+      if (airportSelectWrapper) airportSelectWrapper.style.display = 'none';
+      if (hotelSelectWrapper) hotelSelectWrapper.style.display = 'block';
+      const returnLocationLabel = document.getElementById('returnLocationLabel');
+      if (returnLocationLabel) returnLocationLabel.textContent = 'Select Hotel';
       const returnLocation = document.getElementById('returnLocation');
       if (returnLocation) returnLocation.value = '';
       selectedAddresses['return'] = null;
     } else {
       if (returnInputWrapper) returnInputWrapper.style.display = 'flex';
-      if (airportSelect) airportSelect.style.display = 'none';
+      if (airportSelectWrapper) airportSelectWrapper.style.display = 'none';
+      if (hotelSelectWrapper) hotelSelectWrapper.style.display = 'none';
       const returnLocationLabel = document.getElementById('returnLocationLabel');
       if (returnLocationLabel) returnLocationLabel.textContent = 'Destination';
       const returnLocation = document.getElementById('returnLocation');
       if (returnLocation) returnLocation.placeholder = 'Where do you want to go?';
     }
 
+    updateRideTierVisibility();
+
     calculateRouteDistance();
     updateTripSummary();
+  }
+
+  function syncServiceTypeCards(activeType) {
+    document.querySelectorAll('.service-purpose-card').forEach(card => {
+      card.classList.toggle('active', card.dataset.service === activeType);
+    });
+  }
+
+  function selectServiceTypeCard(type) {
+    const serviceType = document.getElementById('serviceType');
+    if (!serviceType) return;
+    serviceType.value = type;
+    onServiceTypeChange();
   }
 
   // ===== AIRPORT SELECT =====
@@ -507,28 +555,75 @@
     if (!selected) {
       if (returnLocation) returnLocation.value = '';
       selectedAddresses['return'] = null;
+      updateRideTierVisibility();
       calculateRouteDistance();
       return;
     }
     
     if (returnLocation) returnLocation.value = selected;
-    searchAirportLocation(selected);
+    updateRideTierVisibility();
+
+    const selectedOption = airportSelect.options[airportSelect.selectedIndex];
+    const optionLat = selectedOption ? Number(selectedOption.dataset.lat) : NaN;
+    const optionLon = selectedOption ? Number(selectedOption.dataset.lon) : NaN;
+    if (!Number.isNaN(optionLat) && !Number.isNaN(optionLon)) {
+      selectedAddresses['return'] = { lat: optionLat, lon: optionLon, name: selected };
+      calculateRouteDistance();
+      updateTripSummary();
+      return;
+    }
+
+    searchDestinationLocation(selected, 'Airport geocode error:');
   }
 
-  async function searchAirportLocation(airportName) {
+  function onHotelSelect() {
+    const hotelSelect = document.getElementById('hotelSelect');
+    if (!hotelSelect) return;
+
+    const selected = hotelSelect.value;
+    const returnLocation = document.getElementById('returnLocation');
+
+    if (!selected) {
+      if (returnLocation) returnLocation.value = '';
+      selectedAddresses['return'] = null;
+      updateRideTierVisibility();
+      calculateRouteDistance();
+      return;
+    }
+
+    if (returnLocation) returnLocation.value = selected;
+    updateRideTierVisibility();
+
+    const selectedOption = hotelSelect.options[hotelSelect.selectedIndex];
+    const optionLat = selectedOption ? Number(selectedOption.dataset.lat) : NaN;
+    const optionLon = selectedOption ? Number(selectedOption.dataset.lon) : NaN;
+    if (!Number.isNaN(optionLat) && !Number.isNaN(optionLon)) {
+      selectedAddresses['return'] = { lat: optionLat, lon: optionLon, name: selected };
+      calculateRouteDistance();
+      updateTripSummary();
+      return;
+    }
+
+    searchDestinationLocation(selected, 'Hotel geocode error:');
+  }
+
+  async function searchDestinationLocation(destinationName, errorPrefix) {
     try {
-      const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(airportName) + '&limit=1&countrycodes=gb', {
+      const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(destinationName) + '&limit=1&countrycodes=gb', {
         headers: { 'Accept-Language': 'en' }
       });
       const results = await res.json();
       if (results.length > 0) {
         const r = results[0];
-        selectedAddresses['return'] = { lat: parseFloat(r.lat), lon: parseFloat(r.lon), name: airportName };
+        selectedAddresses['return'] = { lat: parseFloat(r.lat), lon: parseFloat(r.lon), name: destinationName };
         calculateRouteDistance();
         updateTripSummary();
+      } else {
+        selectedAddresses['return'] = null;
+        calculateRouteDistance();
       }
     } catch (err) {
-      console.error('Airport geocode error:', err);
+      console.error(errorPrefix, err);
     }
   }
 
@@ -641,7 +736,8 @@
   // ===== TRIP SUMMARY =====
   function updateTripSummary() {
     const summaryDiv = document.getElementById('tripSummary');
-    if (!summaryDiv) return;
+    const isMinicab = selectedBookingType === 'minicab';
+    if (!summaryDiv && !isMinicab) return;
     
     const pickup = document.getElementById('pickupDate');
     const ret = document.getElementById('returnDate');
@@ -653,10 +749,23 @@
     if (summaryTierRow) summaryTierRow.style.display = 'none';
     if (summaryFareRow) summaryFareRow.style.display = 'none';
 
-    if (selectedBookingType === 'minicab') {
+    if (isMinicab) {
+      const serviceTypeEl = document.getElementById('serviceType');
+      const serviceLabels = {
+        'local': 'Local Journey',
+        'long-distance': 'Long Journey',
+        'airport-transfer': 'Airport Transfer',
+        'hotel-transfer': 'Hotel Transfer'
+      };
+      const activeService = serviceTypeEl ? serviceTypeEl.value : 'local';
+      const miniService = document.getElementById('miniSummaryService');
+      if (miniService) miniService.textContent = serviceLabels[activeService] || 'Local Journey';
+
+      if (summaryDiv) summaryDiv.style.display = 'none';
+
       const hasPickupTime = !!document.getElementById('scheduledDateTime').value;
       if (hasPickupTime) {
-        summaryDiv.style.display = 'block';
+        if (summaryDiv) summaryDiv.style.display = 'block';
         const summaryDurationRow = document.getElementById('summaryDurationRow');
         const summaryRateRow = document.getElementById('summaryRateRow');
         if (summaryDurationRow) summaryDurationRow.style.display = 'none';
@@ -677,6 +786,13 @@
           if (summaryFareRow) summaryFareRow.style.display = '';
           const summaryFare = document.getElementById('summaryFare');
           if (summaryFare) summaryFare.textContent = '£' + rideFare.toFixed(2);
+
+          const miniTier = document.getElementById('miniSummaryTier');
+          if (miniTier) miniTier.textContent = tierLabels[selectedRideTier] || 'Select tier';
+          const miniFare = document.getElementById('miniSummaryFare');
+          if (miniFare) miniFare.textContent = '£' + rideFare.toFixed(2);
+          const miniDistance = document.getElementById('miniSummaryDistance');
+          if (miniDistance) miniDistance.textContent = distanceMiles.toFixed(1) + ' miles';
           
           const summaryTotal = document.getElementById('summaryTotal');
           if (summaryTotal) summaryTotal.textContent = '£' + rideFare.toFixed(2);
@@ -686,9 +802,21 @@
           if (summaryTotal) {
             summaryTotal.textContent = calculatedDistance !== null ? 'Select a ride tier' : 'Set locations first';
           }
+          const miniTier = document.getElementById('miniSummaryTier');
+          if (miniTier) miniTier.textContent = 'Select tier';
+          const miniFare = document.getElementById('miniSummaryFare');
+          if (miniFare) miniFare.textContent = calculatedDistance !== null ? 'Select tier' : 'Set locations first';
+          const miniDistance = document.getElementById('miniSummaryDistance');
+          if (miniDistance) miniDistance.textContent = calculatedDistance !== null ? (calculatedDistance * 0.621371).toFixed(1) + ' miles' : 'Set locations first';
         }
       } else {
-        summaryDiv.style.display = 'none';
+        if (summaryDiv) summaryDiv.style.display = 'none';
+        const miniTier = document.getElementById('miniSummaryTier');
+        if (miniTier) miniTier.textContent = 'Select tier';
+        const miniFare = document.getElementById('miniSummaryFare');
+        if (miniFare) miniFare.textContent = 'Pick date & time first';
+        const miniDistance = document.getElementById('miniSummaryDistance');
+        if (miniDistance) miniDistance.textContent = calculatedDistance !== null ? (calculatedDistance * 0.621371).toFixed(1) + ' miles' : 'Set locations first';
       }
       return;
     }
@@ -756,39 +884,33 @@
         return;
       }
     } else if (selectedBookingType === 'minicab') {
-      if (selectedRideTiming === 'schedule') {
-        const scheduledDT = document.getElementById('scheduledDateTime');
-        const scheduledVal = scheduledDT ? scheduledDT.value : '';
-        if (!scheduledVal) {
-          if (typeof showToast === 'function') showToast('Please select a scheduled pick-up date and time.', 'warning');
-          return;
-        }
-        // Validate scheduled time is in the future
-        try {
-          // Parse datetime-local value as LOCAL time (NOT UTC)
-          // datetime-local format: "2026-03-23T14:32" must be parsed as local time, not UTC
-          const [datePart, timePart] = scheduledVal.split('T');
-          const [year, month, day] = datePart.split('-');
-          const [hours, minutes] = timePart.split(':');
-          const scheduledTime = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
-          
-          const now = new Date();
-          
-          // Add 1 minute tolerance to avoid boundary issues
-          // (e.g., if user selects "now" it should be rejected, but "now + 1 min" is okay)
-          const minAllowedTime = new Date(now.getTime() + 60 * 1000);
-          
-          if (scheduledTime < minAllowedTime) {
-            if (typeof showToast === 'function') showToast('⚠️ Scheduled pick-up time must be at least 1 minute in the future. Please select a later time.', 'warning');
-            return;
-          }
-        } catch (e) {
-          if (typeof showToast === 'function') showToast('Invalid date and time format. Please check your input.', 'warning');
-          return;
-        }
-        const pickupDate = document.getElementById('pickupDate');
-        if (pickupDate) pickupDate.value = scheduledVal.split('T')[0];
+      const scheduledDT = document.getElementById('scheduledDateTime');
+      const scheduledVal = scheduledDT ? scheduledDT.value : '';
+      if (!scheduledVal) {
+        if (typeof showToast === 'function') showToast('Please select a scheduled pick-up date and time.', 'warning');
+        return;
       }
+      // Validate scheduled time is in the future
+      try {
+        // Parse datetime-local value as LOCAL time (NOT UTC)
+        const [datePart, timePart] = scheduledVal.split('T');
+        const [year, month, day] = datePart.split('-');
+        const [hours, minutes] = timePart.split(':');
+        const scheduledTime = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
+
+        const now = new Date();
+        const minAllowedTime = new Date(now.getTime() + 60 * 1000);
+
+        if (scheduledTime < minAllowedTime) {
+          if (typeof showToast === 'function') showToast('⚠️ Scheduled pick-up time must be at least 1 minute in the future. Please select a later time.', 'warning');
+          return;
+        }
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Invalid date and time format. Please check your input.', 'warning');
+        return;
+      }
+      const pickupDate = document.getElementById('pickupDate');
+      if (pickupDate) pickupDate.value = scheduledVal.split('T')[0];
 
       const returnLocation = document.getElementById('returnLocation');
       const destLoc = returnLocation ? returnLocation.value.trim() : '';
@@ -796,7 +918,7 @@
         if (typeof showToast === 'function') showToast('Please enter a destination.', 'warning');
         return;
       }
-      if (!selectedRideTier) {
+      if (requiresManualRideTierSelection() && !selectedRideTier) {
         if (typeof showToast === 'function') showToast('Please select a ride tier (Eco, Standard, or Luxury).', 'warning');
         return;
       }
@@ -884,9 +1006,9 @@
       if (paymentBookingType) paymentBookingType.textContent = 'Minicab – ' + (tierLabels[selectedRideTier] || '');
 
       const thumb = document.getElementById('paymentCarThumb');
-      const tierIcons = { eco: '🌿', standard: '⭐', luxury: '👑' };
       if (thumb) {
-        thumb.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;background:var(--primary-50);">' + (tierIcons[selectedRideTier] || '🚕') + '</div>';
+        const logoUrl = getMinicabSeatLogo(selectedSeatCapacity);
+        thumb.innerHTML = '<img src="' + logoUrl + '" alt="Minicab ' + selectedSeatCapacity + '-seat" style="width:100%;height:100%;object-fit:contain;background:white;padding:6px;" onerror="this.parentElement.innerHTML=\'<div class=no-image-placeholder style=height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:0.8rem>Logo unavailable</div>\'">';
       }
 
       const paymentPickupDate = document.getElementById('paymentPickupDate');
@@ -1046,6 +1168,9 @@
 
   // ===== PAYMENT METHOD =====
   function selectPaymentMethod(method) {
+    if (method !== 'cash' && method !== 'paypal') {
+      return;
+    }
     selectedPaymentMethod = method;
     document.querySelectorAll('.payment-method-card').forEach(el => {
       el.classList.toggle('active', el.dataset.method === method);
@@ -1319,7 +1444,7 @@
     let html = '<div class="sb-row"><span>Vehicle</span><span>' + escapeHtml(vehicleName) + '</span></div>';
     html += '<div class="sb-row"><span>Type</span><span>' + (tl[bookingType] || bookingType) + '</span></div>';
     if (bookingType === 'minicab') {
-      html += '<div class="sb-row"><span>Distance</span><span>' + (distanceValue ? distanceValue.toFixed(1) + ' km' : '-') + '</span></div>';
+      html += '<div class="sb-row"><span>Distance</span><span>' + (distanceValue ? (distanceValue * 0.621371).toFixed(1) + ' miles' : '-') + '</span></div>';
     } else {
       html += '<div class="sb-row"><span>Duration</span><span>' + totalDays + ' day' + (totalDays > 1 ? 's' : '') + '</span></div>';
     }
@@ -1351,6 +1476,7 @@
   function selectRideTier(tier) {
     const tierConfig = RIDE_TIER_CONFIG[tier];
     if (!tierConfig) return;
+    autoAssignedRideTier = false;
     selectedRideTier = tier;
     document.querySelectorAll('.ride-tier-card').forEach(el => {
       el.classList.toggle('active', el.dataset.tier === tier);
@@ -1414,7 +1540,7 @@
 
     if (summaryDistanceRow) summaryDistanceRow.style.display = '';
     const summaryDistance = document.getElementById('summaryDistance');
-    if (summaryDistance) summaryDistance.textContent = calculatedDistance.toFixed(1) + ' km ≈ ' + (calculatedDistance * 0.621371).toFixed(1) + ' miles (est.)';
+    if (summaryDistance) summaryDistance.textContent = (calculatedDistance * 0.621371).toFixed(1) + ' miles (est.)';
 
     if (selectedBookingType === 'minicab') {
       renderRideTierOptions();
@@ -1653,9 +1779,10 @@
 
   // ===== EXPORT FUNCTIONS =====
   window.selectBookingType = selectBookingType;
-  window.selectRideTiming = selectRideTiming;
   window.onServiceTypeChange = onServiceTypeChange;
+  window.selectServiceTypeCard = selectServiceTypeCard;
   window.onAirportSelect = onAirportSelect;
+  window.onHotelSelect = onHotelSelect;
   window.updateTierRecommendation = updateTierRecommendation;
   window.goToStep2 = goToStep2;
   window.goToStep1 = goToStep1;

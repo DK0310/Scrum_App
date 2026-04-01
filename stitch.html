@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "inverse-primary": "#84d5c5",
+            "outline": "#6e7976",
+            "surface-container-lowest": "#ffffff",
+            "surface-variant": "#e1e3e3",
+            "surface": "#f8fafa",
+            "surface-bright": "#f8fafa",
+            "on-tertiary-fixed": "#3a0b01",
+            "secondary-fixed": "#dde4e2",
+            "on-error-container": "#93000a",
+            "tertiary": "#703321",
+            "error-container": "#ffdad6",
+            "tertiary-container": "#8d4a36",
+            "background": "#f8fafa",
+            "on-error": "#ffffff",
+            "secondary": "#59605f",
+            "tertiary-fixed-dim": "#ffb59f",
+            "surface-container-low": "#f2f4f4",
+            "primary": "#004f45",
+            "on-primary-container": "#94e5d5",
+            "inverse-surface": "#2e3131",
+            "on-secondary-fixed-variant": "#414847",
+            "on-secondary": "#ffffff",
+            "on-surface": "#191c1d",
+            "error": "#ba1a1a",
+            "on-background": "#191c1d",
+            "on-primary": "#ffffff",
+            "primary-container": "#00695c",
+            "inverse-on-surface": "#eff1f1",
+            "surface-dim": "#d8dada",
+            "primary-fixed": "#a0f2e1",
+            "outline-variant": "#bec9c5",
+            "surface-container": "#eceeee",
+            "surface-container-high": "#e6e8e8",
+            "secondary-fixed-dim": "#c1c8c6",
+            "on-tertiary": "#ffffff",
+            "tertiary-fixed": "#ffdbd1",
+            "on-primary-fixed": "#00201b",
+            "surface-tint": "#046b5e",
+            "on-primary-fixed-variant": "#005046",
+            "secondary-container": "#dde4e2",
+            "surface-container-highest": "#e1e3e3",
+            "on-surface-variant": "#3e4946",
+            "on-secondary-fixed": "#161d1c",
+            "on-tertiary-fixed-variant": "#723522",
+            "on-secondary-container": "#5f6665",
+            "primary-fixed-dim": "#84d5c5",
+            "on-tertiary-container": "#ffcabb"
+          },
+          fontFamily: {
+            "headline": ["Manrope"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .service-card-overlay {
+      background: linear-gradient(to bottom, rgba(0, 79, 69, 0) 20%, rgba(0, 79, 69, 0.8) 100%);
+    }
+    .service-card-active {
+      outline: 3px solid #004f45;
+      outline-offset: 2px;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface selection:bg-primary-fixed selection:text-on-primary-fixed">
+<main class="pt-12 pb-32 px-6 max-w-7xl mx-auto min-h-screen">
+<!-- Stepper Indicator -->
+<div class="mb-12 flex items-center justify-center gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-headline font-bold">1</div>
+<span class="text-on-surface font-headline font-semibold">Trip Details</span>
+</div>
+<div class="w-12 h-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-3 opacity-40">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-headline font-bold">2</div>
+<span class="text-on-surface font-headline font-semibold">Payment</span>
+</div>
+</div>
+<!-- Layout Grid: Bento Style -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- Left Column: Booking Form -->
+<div class="lg:col-span-8 space-y-10">
+<!-- Section: Service Type Selection (Visual Requirement) -->
+<section>
+<div class="mb-6">
+<h2 class="text-2xl font-headline font-bold text-on-surface tracking-tight">Select Service Type</h2>
+<p class="text-on-surface-variant text-sm mt-1">Curated journeys tailored to your destination</p>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<!-- Local Journey -->
+<button class="group relative aspect-[4/5] rounded-xl overflow-hidden service-card-active transition-all active:scale-95">
+<img alt="Local Journey" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Modern high-density city street with skyscrapers under clear sky, soft cinematic lighting, urban morning atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIBzpYH-GP4zQjujs-tPw1lP_fpgdxZacfvxhp7zGinhTTFLhD3KFzfAdWcdYVBvt5Zj2SCRnKANFRttsZTGJGhh3AsDhJUZXFEoEsg9AgeCU5rzF3VAr-qPNy3m4YfMhM3f--JIxOS3SMXsJB2o0ghmYCY0Kwjd7WFzck4gqQia9M79Ida0fSc__HolKhS1aHEAyZNuuWXMOpdwdM7C2jAAIrDenQHZaEV7ij1TaxVwX6Eewww3piYWAc8PAjsKGL3TGNMa9fgdQ"/>
+<div class="absolute inset-0 service-card-overlay"></div>
+<div class="absolute bottom-4 left-4 right-4 text-left">
+<span class="block text-white font-headline font-bold text-lg leading-tight">Local Journey</span>
+<span class="block text-white/70 text-[10px] uppercase tracking-widest mt-1">Within City</span>
+</div>
+<div class="absolute top-3 right-3 bg-primary rounded-full p-1 text-on-primary">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</button>
+<!-- Outstation Trip -->
+<button class="group relative aspect-[4/5] rounded-xl overflow-hidden bg-surface-container-highest hover:ring-2 hover:ring-primary/50 transition-all active:scale-95">
+<img alt="Outstation Trip" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A scenic empty winding highway passing through lush green mountain landscapes with majestic peaks in the distance" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDK750UcKh110brkx5bHnyeWENgpTey8Sn8icVlOAunAXZ6r_4FBfcFR29j24583P6DO4a163k1YE3PIszoaYMEaXGA_FldW939I8Wiaj-oZyA4mdyRW2luv0x2WS40lKojrZAPuE7hu6xNgFQTEEyE3ozCzkN0aI3W90nnSM8H1ykYMvLr10keLeueNl8SPqyOVDHS9JVE7ttQbnW475Zfc_m3amgYkc3LF404T2j9uHfHUnLPLI2Bz1xYQyS2DuY3qK4esUzNTNg"/>
+<div class="absolute inset-0 service-card-overlay"></div>
+<div class="absolute bottom-4 left-4 right-4 text-left">
+<span class="block text-white font-headline font-bold text-lg leading-tight">Long Journey</span>
+<span class="block text-white/70 text-[10px] uppercase tracking-widest mt-1">Intercity travel</span>
+</div>
+</button>
+<!-- Airport Transfer -->
+<button class="group relative aspect-[4/5] rounded-xl overflow-hidden bg-surface-container-highest hover:ring-2 hover:ring-primary/50 transition-all active:scale-95">
+<img alt="Airport Transfer" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Clean minimalist modern airport terminal with large windows, bright white interiors, and sleek architectural lines at sunrise" src="https://lh3.googleusercontent.com/aida-public/AB6AXuClRiG7AvzoK9gbAipOqiRrEtjqLH5bTNMQbkJKK_o2T-k-0k7Bo0ztKoFhq44WUOnL5lewiAH31HbNDpkebI3t_q_qGoWegq8qET2u1VDX1M-GSjCv1nzQyhQQPffLyycBpCi5ulZBJfC5P7tfzcEFBkBY24fiYxljz2sUhVBpJnfg9gvV37nmNTRTvrWRSa-blWk4xCsK48KuS0JHKm3M6zMCxrH0Iz2F6NJklUgz0s4VQBgMC8JGHl6XFmf4NTHMcBU_9W23e2s"/>
+<div class="absolute inset-0 service-card-overlay"></div>
+<div class="absolute bottom-4 left-4 right-4 text-left">
+<span class="block text-white font-headline font-bold text-lg leading-tight">Airport Transfer</span>
+<span class="block text-white/70 text-[10px] uppercase tracking-widest mt-1">Reliable pickups</span>
+</div>
+</button>
+<!-- Corporate Travel -->
+<button class="group relative aspect-[4/5] rounded-xl overflow-hidden bg-surface-container-highest hover:ring-2 hover:ring-primary/50 transition-all active:scale-95">
+<img alt="Corporate Travel" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Sleek glass-facade business district building reflecting a deep blue sky with modern steel architectural details" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8d6bFHqQxKNssBsKE8cbbZ30OpRhsnUhr_R9D33s2NmcWxyj2p1YxByLaGcMOD_Uk8vWQMMfpamHpJNtuDLvnOC6pAebnikAsnFNq_kY_nT59zR5XJEiy2mvZmaE0SHbegxNYuGJ7qD869NIFdmes_9UepJeq-Epm986umZmFGae8rzfG-DsoKnQYdQ27hkx5_8NOg3QWlx_ZhSC0T8U3GoVQIWR5ub6YiCoKR8sP0XR18Q-TTEgDDRE_JP60wetWKStK02HarPQ"/>
+<div class="absolute inset-0 service-card-overlay"></div>
+<div class="absolute bottom-4 left-4 right-4 text-left">
+<span class="block text-white font-headline font-bold text-lg leading-tight">Hotel Transfer</span>
+<span class="block text-white/70 text-[10px] uppercase tracking-widest mt-1">Executive premium</span>
+</div>
+</button>
+</div>
+</section>
+<!-- Section: Trip Details Inputs -->
+<section class="bg-surface-container-low rounded-3xl p-8 space-y-8">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<!-- Pickup Location -->
+<div class="space-y-2">
+<label class="block text-on-surface-variant text-sm font-medium ml-1">Pickup Location</label>
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-primary">location_on</span>
+<input class="w-full h-14 pl-12 pr-4 bg-surface-container rounded-xl border-none focus:ring-2 focus:ring-primary/40 font-body transition-all" placeholder="Enter pickup address..." type="text" value="452 West 20th St, New York"/>
+</div>
+</div>
+<!-- Destination Location -->
+<div class="space-y-2">
+<label class="block text-on-surface-variant text-sm font-medium ml-1">Destination Location</label>
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-primary">near_me</span>
+<input class="w-full h-14 pl-12 pr-4 bg-surface-container rounded-xl border-none focus:ring-2 focus:ring-primary/40 font-body transition-all" placeholder="Where are you going?" type="text" value="JFK International Airport"/>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Pickup Date -->
+<div class="space-y-2">
+<label class="block text-on-surface-variant text-sm font-medium ml-1">Pickup Date</label>
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-primary">calendar_month</span>
+<input class="w-full h-14 pl-12 pr-4 bg-surface-container rounded-xl border-none focus:ring-2 focus:ring-primary/40 font-body transition-all" type="date" value="2023-10-24"/>
+</div>
+</div>
+<!-- Pickup Time -->
+<div class="space-y-2">
+<label class="block text-on-surface-variant text-sm font-medium ml-1">Pickup Time</label>
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-primary">schedule</span>
+<input class="w-full h-14 pl-12 pr-4 bg-surface-container rounded-xl border-none focus:ring-2 focus:ring-primary/40 font-body transition-all" type="time" value="10:30"/>
+</div>
+</div>
+<!-- Seat Capacity -->
+<div class="space-y-2">
+<label class="block text-on-surface-variant text-sm font-medium ml-1">Seat Capacity</label>
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-primary">group</span>
+<select class="w-full h-14 pl-12 pr-4 bg-surface-container rounded-xl border-none focus:ring-2 focus:ring-primary/40 font-body transition-all appearance-none">
+<option>2 Seats (Luxury)</option>
+<option selected="">4 Seats (Standard)</option>
+<option>6 Seats (SUV)</option>
+<option>8+ Seats (Van)</option>
+</select>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Summary Card -->
+<div class="lg:col-span-4 sticky top-12">
+<div class="bg-surface-container-lowest rounded-3xl p-8 shadow-[0_12px_40px_rgba(0,79,69,0.06)] border border-outline-variant/10">
+<h3 class="text-xl font-headline font-bold text-on-surface mb-6">Booking Summary</h3>
+<div class="space-y-6">
+<!-- Vehicle Highlight (Nested pedestal) -->
+<div class="bg-surface-container-highest p-4 rounded-2xl flex gap-4 items-center">
+<div class="w-20 h-20 bg-white rounded-xl flex items-center justify-center p-2">
+<img alt="Car Model" class="w-full h-auto object-contain" data-alt="High-end black luxury sedan on a studio pedestal with soft white lighting and premium metallic finish" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB81hrcSpVSPZDW_GMmAHE0uEIY8jiBtdWYWytMAdvl7_edx2Uvswzymc3wpE2i3YFOmAZKojiRbunsbYofVvDcxQj3d1oBSDWbWaQddB2WpxByXDtKMHrQFpjIA0yBMkSlXeLbjpwZwwhRjpLtQ9QiUj6_vDpTAZq16qLtsq5fP0XX4NOeZsIHq3Ztwb6ui1NebmpVP_rG5tcelYsgHOzj52WJ7eeq-Cg0YiKozlcLS9EN_zhNdWSs7cBAaAJltJEVI9hxlTxFfdM"/>
+</div>
+<div>
+<span class="block text-on-surface font-headline font-bold">Mercedes S-Class</span>
+<span class="text-on-surface-variant text-sm">Luxury Executive</span>
+</div>
+</div>
+<!-- Price Breakdown -->
+<div class="space-y-4 pt-2">
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Base Rate (4h)</span>
+<span class="text-on-surface font-medium">$120.00</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Airport Surcharge</span>
+<span class="text-on-surface font-medium">$15.00</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Taxes &amp; Fees (12%)</span>
+<span class="text-on-surface font-medium">$16.20</span>
+</div>
+<div class="h-px bg-outline-variant/20 my-4"></div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface font-bold">Total Price</span>
+<span class="text-2xl font-headline font-extrabold text-primary">$151.20</span>
+</div>
+</div>
+<!-- CTA -->
+<button class="w-full h-14 bg-gradient-to-br from-primary to-primary-container text-on-primary font-headline font-bold rounded-xl shadow-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4">
+              Proceed to Payment
+              <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+<p class="text-[11px] text-center text-on-surface-variant px-4 leading-relaxed">
+              By proceeding, you agree to EliteDrive's Terms of Service and Privacy Policy. Cancellation is free up to 2 hours before pickup.
+            </p>
+</div>
+</div>
+<!-- Trust Indicators -->
+<div class="mt-6 flex justify-around items-center px-4">
+<div class="flex flex-col items-center gap-1 opacity-60">
+<span class="material-symbols-outlined text-primary">verified_user</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Secure Payment</span>
+</div>
+<div class="flex flex-col items-center gap-1 opacity-60">
+<span class="material-symbols-outlined text-primary">support_agent</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">24/7 Support</span>
+</div>
+<div class="flex flex-col items-center gap-1 opacity-60">
+<span class="material-symbols-outlined text-primary">eco</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Carbon Neutral</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Shell (Mobile Only) -->
+<footer class="md:hidden fixed bottom-0 left-0 w-full h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl flex justify-around items-center px-4 pb-safe border-t border-emerald-100/10 dark:border-slate-800/50 shadow-[0_-12px_40px_rgba(0,79,69,0.06)] z-50">
+<button class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-6 py-2 active:scale-90 transition-transform duration-300 ease-out">
+<span class="material-symbols-outlined">search</span>
+<span class="font-manrope text-[10px] uppercase tracking-widest font-semibold mt-1">Search</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-emerald-900 dark:bg-emerald-500 text-white dark:text-emerald-950 rounded-2xl px-6 py-2 active:scale-90 transition-transform duration-300 ease-out">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-manrope text-[10px] uppercase tracking-widest font-semibold mt-1">Bookings</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-6 py-2 active:scale-90 transition-transform duration-300 ease-out">
+<span class="material-symbols-outlined">military_tech</span>
+<span class="font-manrope text-[10px] uppercase tracking-widest font-semibold mt-1">Rewards</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-6 py-2 active:scale-90 transition-transform duration-300 ease-out">
+<span class="material-symbols-outlined">person</span>
+<span class="font-manrope text-[10px] uppercase tracking-widest font-semibold mt-1">Profile</span>
+</button>
+</footer>
+</body></html>

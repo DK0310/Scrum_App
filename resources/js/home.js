@@ -98,15 +98,32 @@ let heroSlidesData = [];
 let heroSlideIndex = 0;
 let heroAutoRotateInterval = null;
 
+function showHeroFallback() {
+    const slideshow = document.getElementById('heroSlideshow');
+    const wrapper = document.getElementById('heroSlidesWrapper');
+    const fallback = document.getElementById('heroFallbackSlide');
+    const captionDiv = document.getElementById('heroCaption');
+
+    clearInterval(heroAutoRotateInterval);
+
+    if (slideshow) slideshow.style.display = '';
+    if (wrapper && fallback) {
+        wrapper.innerHTML = '';
+        wrapper.appendChild(fallback);
+        fallback.classList.add('active');
+        fallback.style.opacity = '1';
+    }
+    if (captionDiv) captionDiv.style.display = 'none';
+}
+
 async function loadHeroSlides() {
     try {
         const res = await fetch('/api/admin.php?action=hero-slides-public');
         const data = await res.json();
 
         if (!data.success || !Array.isArray(data.slides) || data.slides.length === 0) {
-            // No slides available, hide slideshow
-            const slideshow = document.getElementById('heroSlideshow');
-            if (slideshow) slideshow.style.display = 'none';
+            // No slides available: keep fallback slide from template visible
+            showHeroFallback();
             return;
         }
 
@@ -144,6 +161,7 @@ async function loadHeroSlides() {
         }
     } catch (e) {
         console.error('Failed to load hero slides:', e);
+        showHeroFallback();
     }
 }
 
@@ -228,7 +246,7 @@ function applyPromo(code) {
         showToast('🎟️ Promo "' + code + '" saved to your wallet! Redirecting to booking...', 'success');
     }
     setTimeout(() => {
-        window.location.href = '/booking.php?promo=' + encodeURIComponent(code);
+        window.location.href = '/booking.php?mode=minicab&promo=' + encodeURIComponent(code);
     }, 1000);
 }
 
@@ -263,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.applyPromo = applyPromo;
     window.bookCar = bookCar;
     window.loadHomeVehicles = loadAvailableVehicles;
+    window.heroSlideNav = heroSlideNav;
     
     // Listen for vehicle availability updates from booking completion
     window.addEventListener('vehicleAvailabilityUpdated', function(e) {

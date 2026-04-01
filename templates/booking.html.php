@@ -1,19 +1,24 @@
 <?php include __DIR__ . '/layout/header.html.php'; ?>
+<?php $isMinicabPage = isset($bookingMode) && $bookingMode === 'minicab'; ?>
 
     <!-- ===== BOOKING PAGE ===== -->
-    <section class="section" style="padding-top:100px;min-height:100vh;background:var(--gray-50);" id="booking">
-        <div class="section-container" style="max-width:1100px;">
+    <section class="section booking-shell <?= $isMinicabPage ? 'booking-shell-minicab' : '' ?>" style="padding-top:100px;min-height:100vh;background:var(--gray-50);" id="booking">
+        <div class="section-container" style="max-width:<?= $isMinicabPage ? '1240px' : '1100px' ?>;">
             
             <!-- Step Indicator -->
             <div class="booking-steps" id="bookingSteps">
                 <div class="booking-step active" id="step1Indicator">
-                    <div class="step-number">1</div>
-                    <div class="step-label">Trip Details</div>
+                    <span class="step-meta">
+                        <span class="step-kicker">Step One</span>
+                        <span class="step-label">Trip Details</span>
+                    </span>
                 </div>
                 <div class="step-line" id="stepLine"></div>
                 <div class="booking-step" id="step2Indicator">
-                    <div class="step-number">2</div>
-                    <div class="step-label">Payment</div>
+                    <span class="step-meta">
+                        <span class="step-kicker">Step Two</span>
+                        <span class="step-label">Payment</span>
+                    </span>
                 </div>
             </div>
 
@@ -34,373 +39,8 @@
                 </div>
             </div>
 
-            <!-- ===== STEP 1: TRIP DETAILS ===== -->
-            <div id="step1Content" style="display:none;">
-                <div class="booking-grid">
-                    <!-- Left: Car Info Card -->
-                    <div class="booking-car-card">
-                        <div class="booking-car-image" id="bookingCarImage">
-                            <div class="no-image-placeholder" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);">No Photo</div>
-                        </div>
-                        <div class="booking-car-details">
-                            <h3 id="bookingCarTitle" style="font-size:1.25rem;font-weight:800;color:var(--gray-900);margin-bottom:4px;"></h3>
-                            <p id="bookingCarSub" style="font-size:0.85rem;color:var(--gray-500);margin-bottom:16px;"></p>
-                            <div class="booking-car-specs" id="bookingCarSpecs"></div>
-                            <div class="booking-car-price">
-                                <span style="font-size:1.5rem;font-weight:800;color:var(--primary);" id="bookingCarPrice"></span>
-                                <span style="font-size:0.85rem;color:var(--gray-500);">/day</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Right: Trip Form -->
-                    <div class="booking-form-card">
-                        <h3 style="font-size:1.125rem;font-weight:700;color:var(--gray-900);margin-bottom:20px;">📋 Trip Details</h3>
-
-                        <!-- Booking Type -->
-                        <div class="form-group" id="bookingTypeGroup">
-                            <label class="form-label">Booking Type</label>
-                            <div class="booking-type-grid" style="grid-template-columns: repeat(2, 1fr);">
-                                <label class="booking-type-option" data-type="minicab" onclick="selectBookingType('minicab')">
-                                    <span class="booking-type-icon">🚕</span>
-                                    <span class="booking-type-name">Book a Minicab</span>
-                                    <span class="booking-type-desc">Instant ride, like Uber/Grab</span>
-                                </label>
-                                <label class="booking-type-option active" data-type="with-driver" onclick="selectBookingType('with-driver')">
-                                    <span class="booking-type-icon">🚗</span>
-                                    <span class="booking-type-name">With Driver</span>
-                                    <span class="booking-type-desc">Choose a car + assigned driver</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Service Type (minicab only) -->
-                        <div class="form-group" id="serviceTypeGroup" style="display:none;">
-                            <label class="form-label">Service Type</label>
-                            <select class="form-input" id="serviceType" onchange="onServiceTypeChange()">
-                                <option value="local">🏙️ Local Journey (under 30km)</option>
-                                <option value="long-distance">🛣️ Long Distance Journey (over 30km)</option>
-                                <option value="airport-transfer">✈️ Airport Transfer</option>
-                                <option value="hotel-transfer">🏨 Hotel Transfer</option>
-                            </select>
-                            <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">Available seat classes for every service type: 4-seat and 7-seat.</small>
-                        </div>
-
-                        <!-- Ride Timing (minicab only) -->
-                        <div class="form-group" id="rideTimingGroup" style="display:none;">
-                            <label class="form-label">Ride Timing</label>
-                            <div class="booking-type-grid" style="grid-template-columns: 1fr;">
-                                <label class="booking-type-option active" data-timing="schedule" onclick="selectRideTiming('schedule')">
-                                    <span class="booking-type-icon">📅</span>
-                                    <span class="booking-type-name">Schedule</span>
-                                    <span class="booking-type-desc">Pre-book your trip</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Date Fields -->
-                        <div id="dateFields">
-                            <div class="form-row">
-                                <div class="form-group" id="pickupDateGroup">
-                                    <label class="form-label" id="pickupDateLabel">Pick-up Date</label>
-                                    <input type="date" class="form-input" id="pickupDate" min="">
-                                </div>
-                                <div class="form-group" id="returnDateGroup">
-                                    <label class="form-label">Return Date</label>
-                                    <input type="date" class="form-input" id="returnDate" min="">
-                                </div>
-                            </div>
-                            <!-- Scheduled datetime for minicab (hidden by default) -->
-                            <div class="form-group" id="scheduledDateTimeGroup" style="display:none;">
-                                <label class="form-label">📅 Scheduled Pick-up Date & Time</label>
-                                <input type="datetime-local" class="form-input" id="scheduledDateTime" min="">
-                                <div id="pickupDateTimeError" style="display:none;margin-top:8px;padding:10px 12px;background:#fee;border-radius:6px;border-left:3px solid #d32f2f;color:#d32f2f;font-size:0.85rem;"></div>
-                                <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">📌 <strong>Cancellation Policy:</strong> Free cancellation and booking modifications are available only if pickup is at least 24 hours away.</small>
-                            </div>
-                        </div>
-
-                        <!-- Pickup Location (all types) -->
-                        <div class="form-group" id="pickupLocationGroup">
-                            <label class="form-label" id="pickupLocationLabel">Pick-up Location</label>
-                            <div class="location-input-wrapper">
-                                <input type="text" class="form-input" id="pickupLocation" placeholder="Search for a location..." autocomplete="off">
-                                <button type="button" class="location-map-btn" onclick="openMapPicker('pickup')" title="Choose on map">📍</button>
-                            </div>
-                            <div id="pickupMapContainer" class="map-picker-container" style="display:none;">
-                                <div class="map-picker-wrapper">
-                                    <div id="pickupMap" class="map-picker"></div>
-                                    <button type="button" class="map-expand-btn" onclick="toggleMapExpand('pickup')" title="Expand map">⛶</button>
-                                </div>
-                                <div class="map-picker-footer">
-                                    <span class="map-coords" id="pickupMapCoords">Drag marker or click to select location</span>
-                                    <button type="button" class="btn btn-sm btn-primary" onclick="confirmMapLocation('pickup')">✓ Confirm Location</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Destination Location (minicab only — hidden for with-driver) -->
-                        <div class="form-group" id="returnLocationGroup" style="display:none;">
-                            <label class="form-label" id="returnLocationLabel">Destination</label>
-                            <div class="location-input-wrapper" id="returnLocationInputWrapper">
-                                <input type="text" class="form-input" id="returnLocation" placeholder="Where do you want to go?" autocomplete="off">
-                                <button type="button" class="location-map-btn" onclick="openMapPicker('return')" title="Choose on map">📍</button>
-                            </div>
-                            <!-- Airport selector (shown only for airport-transfer) -->
-                            <div id="airportSelectWrapper" style="display:none;">
-                                <select class="form-input" id="airportSelect" onchange="onAirportSelect()">
-                                    <option value="">-- Select Airport --</option>
-                                    <option value="Heathrow Airport, London, United Kingdom">✈️ Heathrow (LHR) — London</option>
-                                    <option value="Gatwick Airport, London, United Kingdom">✈️ Gatwick (LGW) — London</option>
-                                    <option value="Stansted Airport, London, United Kingdom">✈️ Stansted (STN) — London</option>
-                                    <option value="Luton Airport, London, United Kingdom">✈️ Luton (LTN) — London</option>
-                                    <option value="London City Airport, London, United Kingdom">✈️ London City (LCY) — London</option>
-                                    <option value="Manchester Airport, Manchester, United Kingdom">✈️ Manchester (MAN) — Manchester</option>
-                                    <option value="Birmingham Airport, Birmingham, United Kingdom">✈️ Birmingham (BHX) — Birmingham</option>
-                                    <option value="Edinburgh Airport, Edinburgh, United Kingdom">✈️ Edinburgh (EDI) — Edinburgh</option>
-                                    <option value="Glasgow Airport, Glasgow, United Kingdom">✈️ Glasgow (GLA) — Glasgow</option>
-                                    <option value="Bristol Airport, Bristol, United Kingdom">✈️ Bristol (BRS) — Bristol</option>
-                                </select>
-                            </div>
-                            <div id="returnMapContainer" class="map-picker-container" style="display:none;">
-                                <div class="map-picker-wrapper">
-                                    <div id="returnMap" class="map-picker"></div>
-                                    <button type="button" class="map-expand-btn" onclick="toggleMapExpand('return')" title="Expand map">⛶</button>
-                                </div>
-                                <div class="map-picker-footer">
-                                    <span class="map-coords" id="returnMapCoords">Drag marker or click to select location</span>
-                                    <button type="button" class="btn btn-sm btn-primary" onclick="confirmMapLocation('return')">✓ Confirm Location</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Seat Capacity (minicab only) -->
-                        <div class="form-group" id="seatCapacityGroup" style="display:none;">
-                            <label class="form-label">Choose Seat Capacity</label>
-                            <div class="seat-capacity-grid" id="seatCapacityGrid">
-                                <button type="button" class="seat-capacity-option active" data-seat="4" onclick="selectSeatCapacity(4)">
-                                    <span class="seat-capacity-title">🚕 4 Seats</span>
-                                    <span class="seat-capacity-sub">Compact fare class</span>
-                                </button>
-                                <button type="button" class="seat-capacity-option" data-seat="7" onclick="selectSeatCapacity(7)">
-                                    <span class="seat-capacity-title">🚐 7 Seats</span>
-                                    <span class="seat-capacity-sub">Group fare class</span>
-                                </button>
-                            </div>
-                            <div id="tierRecommendationText" style="margin-top:8px;color:var(--gray-500);font-size:0.85rem;"></div>
-                        </div>
-
-                        <!-- Ride Tier Selection (with-driver only — shown after locations selected) -->
-                        <div class="form-group" id="rideTierGroup" style="display:none;">
-                            <label class="form-label">Choose Your Ride</label>
-                            <div class="ride-tier-grid" id="rideTierGrid">
-                                <!-- Populated dynamically after distance is calculated -->
-                                <div style="text-align:center;padding:20px;color:var(--gray-400);font-size:0.85rem;">
-                                    Select pickup & destination to see ride options
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Special Requests -->
-                        <div class="form-group">
-                            <label class="form-label">Special Requests <span style="color:var(--gray-400);font-weight:400;">(optional)</span></label>
-                            <textarea class="form-textarea" id="specialRequests" placeholder="Child seat, luggage, specific pickup instructions..." rows="3"></textarea>
-                        </div>
-
-                        <!-- Trip Summary -->
-                        <div class="trip-summary" id="tripSummary" style="display:none;">
-                            <div class="trip-summary-row" id="summaryDurationRow">
-                                <span>Duration</span>
-                                <span id="summaryDays">-</span>
-                            </div>
-                            <div class="trip-summary-row" id="summaryRateRow">
-                                <span>Rate</span>
-                                <span id="summaryRate">-</span>
-                            </div>
-                            <div class="trip-summary-row" id="summaryDistanceRow" style="display:none;">
-                                <span>📏 Distance</span>
-                                <span id="summaryDistance">-</span>
-                            </div>
-                            <div class="trip-summary-row" id="summaryTierRow" style="display:none;">
-                                <span>� Ride Tier</span>
-                                <span id="summaryTier" style="font-weight:700;color:var(--primary);">-</span>
-                            </div>
-                            <div class="trip-summary-row" id="summaryFareRow" style="display:none;">
-                                <span>💰 Fare</span>
-                                <span id="summaryFare" style="font-weight:700;color:var(--primary);">-</span>
-                            </div>
-                            <div class="trip-summary-row total">
-                                <span>Estimated Total</span>
-                                <span id="summaryTotal">-</span>
-                            </div>
-                        </div>
-
-                        <button class="btn btn-primary btn-lg btn-block" onclick="goToStep2()" id="continueBtn">
-                            Continue to Payment →
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ===== STEP 2: PAYMENT ===== -->
-            <div id="step2Content" style="display:none;">
-                <div class="booking-grid">
-                    <!-- Left: Order Summary with Car Image -->
-                    <div class="payment-summary-card">
-                        <div class="payment-car-header">
-                            <div class="payment-car-thumb" id="paymentCarThumb">
-                                <div class="no-image-placeholder" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:0.8rem;">No Photo</div>
-                            </div>
-                            <div class="payment-car-info">
-                                <h3 id="paymentCarTitle" style="font-size:1.1rem;font-weight:700;color:var(--gray-900);margin-bottom:2px;"></h3>
-                                <p id="paymentCarSub" style="font-size:0.8rem;color:var(--gray-500);margin-bottom:6px;"></p>
-                                <span class="badge" id="paymentBookingType" style="font-size:0.75rem;"></span>
-                            </div>
-                        </div>
-
-                        <div class="payment-details-list">
-                            <div class="payment-detail-row">
-                                <span class="payment-detail-icon">📅</span>
-                                <div>
-                                    <div class="payment-detail-label">Pick-up</div>
-                                    <div class="payment-detail-value" id="paymentPickupDate"></div>
-                                </div>
-                            </div>
-                            <div class="payment-detail-row" id="paymentReturnRow">
-                                <span class="payment-detail-icon">📅</span>
-                                <div>
-                                    <div class="payment-detail-label">Return</div>
-                                    <div class="payment-detail-value" id="paymentReturnDate"></div>
-                                </div>
-                            </div>
-                            <div class="payment-detail-row">
-                                <span class="payment-detail-icon">📍</span>
-                                <div>
-                                    <div class="payment-detail-label">Pick-up Location</div>
-                                    <div class="payment-detail-value" id="paymentPickupLoc"></div>
-                                </div>
-                            </div>
-                            <div class="payment-detail-row" id="paymentReturnLocRow">
-                                <span class="payment-detail-icon">📍</span>
-                                <div>
-                                    <div class="payment-detail-label" id="paymentReturnLocLabel">Return Location</div>
-                                    <div class="payment-detail-value" id="paymentReturnLoc"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Price Breakdown -->
-                        <div class="payment-price-breakdown">
-                            <div class="price-row">
-                                <span>Daily Rate</span>
-                                <span id="paymentDailyRate"></span>
-                            </div>
-                            <div class="price-row" id="paymentDaysRow">
-                                <span id="paymentDaysLabel"></span>
-                                <span id="paymentSubtotal"></span>
-                            </div>
-                            <div class="price-row" id="paymentDistanceRow" style="display:none;">
-                                <span>📏 Distance</span>
-                                <span id="paymentDistance"></span>
-                            </div>
-                            <div class="price-row" id="paymentTransferRow" style="display:none;">
-                                <span>🚗 Transfer Cost</span>
-                                <span id="paymentTransferCost" style="font-weight:700;color:var(--primary);"></span>
-                            </div>
-                            <div class="price-row promo-row" id="paymentPromoRow" style="display:none;">
-                                <span style="color:var(--success);">Promo Discount</span>
-                                <span style="color:var(--success);" id="paymentDiscount"></span>
-                            </div>
-                            <div class="price-row total-row">
-                                <span>Total</span>
-                                <span id="paymentTotal"></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Right: Payment Form -->
-                    <div class="booking-form-card">
-                        <h3 style="font-size:1.125rem;font-weight:700;color:var(--gray-900);margin-bottom:20px;">💳 Payment Method</h3>
-
-                        <!-- Payment Methods -->
-                        <div class="payment-methods-grid">
-                            <div class="payment-method-card active" data-method="cash" onclick="selectPaymentMethod('cash')">
-                                <span class="pm-icon">💵</span>
-                                <span class="pm-name">Cash</span>
-                                <span class="pm-desc">Pay on pickup</span>
-                                <span class="pm-check">✓</span>
-                            </div>
-                            <div class="payment-method-card" data-method="bank_transfer" onclick="selectPaymentMethod('bank_transfer')">
-                                <span class="pm-icon">🏦</span>
-                                <span class="pm-name">Banking</span>
-                                <span class="pm-desc">Bank transfer</span>
-                                <span class="pm-check">✓</span>
-                            </div>
-                            <div class="payment-method-card" data-method="paypal" onclick="selectPaymentMethod('paypal')">
-                                <span class="pm-icon">🅿️</span>
-                                <span class="pm-name">PayPal</span>
-                                <span class="pm-desc">Online payment</span>
-                                <span class="pm-check">✓</span>
-                            </div>
-                            <div class="payment-method-card" data-method="credit_card" onclick="selectPaymentMethod('credit_card')">
-                                <span class="pm-icon">💳</span>
-                                <span class="pm-name">Card</span>
-                                <span class="pm-desc">Credit / Debit</span>
-                                <span class="pm-check">✓</span>
-                            </div>
-                        </div>
-
-                        <!-- Promo Code Section -->
-                        <div class="promo-section" id="promoSection">
-                            <h4 style="font-size:0.95rem;font-weight:600;color:var(--gray-800);margin-bottom:12px;">🎟️ Promo Code</h4>
-                            
-                            <div class="promo-input-row" id="promoInputRow">
-                                <input type="text" class="form-input" id="promoCodeInput" placeholder="Enter promo code" style="flex:1;">
-                                <button class="btn btn-secondary" onclick="applyPromoCode()" id="promoApplyBtn">Apply</button>
-                            </div>
-
-                            <!-- Applied promo indicator -->
-                            <div class="promo-applied" id="promoApplied" style="display:none;">
-                                <div class="promo-applied-inner">
-                                    <span class="promo-applied-icon">🎉</span>
-                                    <div>
-                                        <div class="promo-applied-code" id="promoAppliedCode"></div>
-                                        <div class="promo-applied-desc" id="promoAppliedDesc"></div>
-                                    </div>
-                                    <button class="promo-remove-btn" onclick="removePromo()">✕</button>
-                                </div>
-                            </div>
-
-                            <!-- Saved promos wallet -->
-                            <div id="savedPromosSection" style="display:none;margin-top:12px;">
-                                <div style="font-size:0.8rem;color:var(--gray-500);margin-bottom:8px;">Your saved promos:</div>
-                                <div class="saved-promos-list" id="savedPromosList"></div>
-                            </div>
-                        </div>
-
-                        <!-- Secure Notice -->
-                        <div style="background:var(--success-light);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:20px;">
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <span>🔒</span>
-                                <div>
-                                    <div style="font-size:0.85rem;font-weight:600;color:var(--success);">Secure Payment</div>
-                                    <div style="font-size:0.78rem;color:var(--gray-600);">All transactions are encrypted. Your data is safe.</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Actions -->
-                        <div style="display:flex;gap:12px;">
-                            <button class="btn btn-outline" onclick="goToStep1()" style="flex:1;">← Back</button>
-                            <button class="btn btn-primary btn-lg" onclick="confirmBooking()" style="flex:2;" id="confirmBtn">
-                                Confirm & Book
-                            </button>
-                        </div>
-                        <p style="text-align:center;margin-top:12px;font-size:0.78rem;color:var(--gray-400);">
-                            Pickup/delivery time will be notified via email after confirmation.
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <?php include __DIR__ . '/booking/step1-trip-details.html.php'; ?>
+            <?php include __DIR__ . '/booking/step2-payment.html.php'; ?>
 
             <!-- ===== BOOKING SUCCESS ===== -->
             <div id="bookingSuccess" style="display:none;">
@@ -410,9 +50,9 @@
                     <p style="color:var(--gray-500);margin-bottom:24px;line-height:1.7;" id="successMessage">Your payment has been received. Please check your email for booking details or view your orders to track the status.</p>
                     <div class="success-booking-summary" id="successSummary"></div>
                     <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;flex-wrap:wrap;">
-                        <a href="/orders.php" class="btn btn-primary">📋 View My Orders</a>
+                        <a href="/orders.php" class="btn btn-primary">View My Orders</a>
                         <a href="/cars.php" class="btn btn-outline">Browse More Cars</a>
-                    </div>
+                    </div> 
                 </div>
             </div>
 
@@ -445,32 +85,256 @@
     <style>
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        .booking-grid.booking-grid-minicab {
+            grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.9fr);
+            gap: 22px;
+        }
+        .booking-grid-minicab .booking-form-card {
+            order: 1;
+            border-radius: 24px;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+            padding: 28px;
+        }
+        .booking-grid-minicab .booking-car-card {
+            order: 2;
+            border-radius: 20px;
+            max-width: 360px;
+            justify-self: end;
+        }
+
+        .minicab-summary-card {
+            background: white;
+            border: 1px solid var(--primary-100);
+            position: sticky;
+            top: 96px;
+            overflow: hidden;
+            box-shadow: 0 14px 32px rgba(15, 118, 110, 0.14);
+        }
+        .minicab-summary-hero {
+            padding: 18px 18px 16px;
+            background: var(--primary);
+            color: white;
+        }
+        .minicab-summary-badge {
+            display: inline-block;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.2);
+            margin-bottom: 10px;
+        }
+        .minicab-summary-title {
+            font-size: 1.12rem;
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 6px;
+        }
+        .minicab-summary-sub {
+            font-size: 0.78rem;
+            opacity: 0.9;
+        }
+        .minicab-summary-body {
+            padding: 12px 18px 6px;
+        }
+        .minicab-summary-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 0;
+            border-bottom: 1px dashed var(--gray-200);
+            font-size: 0.79rem;
+            color: var(--gray-500);
+        }
+        .minicab-summary-row strong {
+            color: var(--gray-800);
+            text-align: right;
+            max-width: 60%;
+            font-size: 0.84rem;
+        }
+        .minicab-summary-footer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 10px 18px 12px;
+        }
+        .minicab-trust-pill {
+            border: 1px solid var(--primary-100);
+            background: var(--primary-50);
+            color: var(--primary-dark);
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 5px 9px;
+            border-radius: 999px;
+        }
+        .minicab-summary-actions {
+            padding: 0 18px 18px;
+        }
+        .minicab-summary-actions .btn {
+            box-shadow: 0 10px 24px rgba(15, 118, 110, 0.25);
+        }
+
+        .service-purpose-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .service-purpose-card {
+            position: relative;
+            aspect-ratio: 16 / 7;
+            border: none;
+            border-radius: 14px;
+            overflow: hidden;
+            cursor: pointer;
+            padding: 0;
+            text-align: left;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            background: var(--gray-200);
+            background-size: cover;
+            background-position: center;
+        }
+        .service-purpose-card[data-service="local"] {
+            background-image: linear-gradient(145deg, rgba(15,118,110,0.25), rgba(15,118,110,0.75)), url('https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=900&q=80');
+        }
+        .service-purpose-card[data-service="long-distance"] {
+            background-image: linear-gradient(145deg, rgba(17,94,89,0.25), rgba(17,94,89,0.75)), url('https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=900&q=80');
+        }
+        .service-purpose-card[data-service="airport-transfer"] {
+            background-image: linear-gradient(145deg, rgba(15,118,110,0.25), rgba(20,184,166,0.75)), url('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=900&q=80');
+        }
+        .service-purpose-card[data-service="hotel-transfer"] {
+            background-image: linear-gradient(145deg, rgba(17,94,89,0.25), rgba(15,118,110,0.75)), url('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=900&q=80');
+        }
+        .service-purpose-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(0,0,0,0) 10%, rgba(0,0,0,0.62) 100%);
+        }
+        .service-purpose-content {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            z-index: 2;
+        }
+        .service-purpose-content strong {
+            font-size: 0.88rem;
+            line-height: 1.15;
+        }
+        .service-purpose-content small {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            opacity: 0.82;
+        }
+        .service-purpose-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        .service-purpose-card.active {
+            outline: 3px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        @media (max-width: 900px) {
+            .booking-grid-minicab { grid-template-columns: 1fr; }
+            .booking-grid-minicab .booking-form-card,
+            .booking-grid-minicab .booking-car-card { order: initial; }
+            .booking-grid-minicab .booking-car-card { max-width: none; justify-self: stretch; }
+            .minicab-summary-card { position: static; }
+        }
+        @media (max-width: 560px) {
+            .service-purpose-grid { grid-template-columns: 1fr; }
+        }
+
         .booking-steps {
-            display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 40px;
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 34px;
         }
         .booking-step {
-            display: inline-flex; align-items: center; gap: 10px; padding: 10px 20px;
-            border-radius: 999px; background: var(--gray-100); color: var(--gray-400);
-            font-size: 0.875rem; font-weight: 600; transition: all 0.3s;
-            line-height: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 190px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid var(--gray-200);
+            background: white;
+            color: var(--gray-500);
+            box-shadow: var(--shadow-sm);
+            transition: all 0.25s ease;
         }
-        .booking-step.active { background: var(--primary); color: white; }
-        .booking-step.completed { background: var(--success-light); color: var(--success); }
-        .step-number {
-            width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.2);
-            display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;
-            line-height: 1; flex-shrink: 0;
+        .step-meta {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.15;
+            gap: 3px;
+        }
+        .step-kicker {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--gray-400);
+            font-weight: 700;
         }
         .step-label {
-            line-height: 28px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--gray-700);
         }
-        .booking-step.active .step-number { background: rgba(255,255,255,0.3); }
-        .booking-step.completed .step-number { background: var(--success); color: white; }
+        .booking-step.active {
+            border-color: var(--primary-200);
+            box-shadow: 0 10px 22px rgba(15, 118, 110, 0.16);
+            background: linear-gradient(135deg, white 0%, var(--primary-50) 100%);
+        }
+        .booking-step.active .step-kicker,
+        .booking-step.active .step-label {
+            color: var(--primary-dark);
+        }
+        .booking-step.completed {
+            border-color: #86efac;
+            background: #f0fdf4;
+        }
+        .booking-step.completed .step-kicker,
+        .booking-step.completed .step-label {
+            color: #166534;
+        }
         .step-line {
-            width: 60px; height: 3px; background: var(--gray-200); margin: 0 8px; border-radius: 2px;
-            transition: background 0.3s;
+            width: 56px;
+            align-self: center;
+            height: 4px;
+            border-radius: 999px;
+            background: var(--gray-200);
+            transition: background 0.25s ease;
         }
-        .step-line.active { background: var(--primary); }
+        .step-line.active {
+            background: linear-gradient(90deg, var(--primary-300), var(--primary));
+        }
+        @media (max-width: 640px) {
+            .booking-steps {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+                margin-bottom: 24px;
+            }
+            .booking-step {
+                min-width: 0;
+            }
+            .step-line {
+                width: 4px;
+                height: 22px;
+                margin: 0 auto;
+            }
+        }
 
         .booking-grid {
             display: grid; grid-template-columns: 380px 1fr; gap: 28px; align-items: flex-start;
@@ -558,6 +422,17 @@
         }
         .seat-capacity-option:hover { border-color: var(--primary-300); background: var(--primary-50); }
         .seat-capacity-option.active { border-color: var(--primary); background: var(--primary-50); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+        .seat-capacity-logo-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 30px;
+        }
+        .seat-capacity-logo {
+            max-height: 24px;
+            width: auto;
+            object-fit: contain;
+        }
         .seat-capacity-title { font-size: 0.9rem; font-weight: 700; color: var(--gray-800); }
         .seat-capacity-sub { font-size: 0.75rem; color: var(--gray-500); }
         @media (max-width: 480px) { .ride-tier-grid { grid-template-columns: 1fr; } }
@@ -671,6 +546,144 @@
             align-items: center; justify-content: center; font-weight: 700;
         }
         .payment-method-card.active .pm-check { display: flex; }
+
+        .payment-grid-modern {
+            grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+            gap: 24px;
+        }
+        .payment-form-modern {
+            border-radius: 20px;
+            box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+        }
+        .payment-heading {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--primary-dark);
+            margin-bottom: 18px;
+        }
+        .pm-chip {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            background: var(--gray-100);
+            margin-bottom: 8px;
+        }
+        .pm-chip-logo {
+            width: auto;
+            height: auto;
+            background: transparent;
+            border-radius: 0;
+            margin-bottom: 10px;
+        }
+        .pm-chip-logo img {
+            display: block;
+            height: 26px;
+            width: auto;
+            object-fit: contain;
+        }
+        .payment-method-card {
+            align-items: flex-start;
+            text-align: left;
+            padding: 14px;
+            border-radius: 14px;
+            background: var(--gray-50);
+        }
+        .payment-method-card.active {
+            background: white;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(15,118,110,0.15);
+        }
+        .promo-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--gray-800);
+        }
+        .payment-security-note {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--success-light);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+        }
+        .payment-security-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--success);
+        }
+        .payment-security-sub {
+            font-size: 0.78rem;
+            color: var(--gray-600);
+        }
+
+        .payment-summary-modern {
+            border-radius: 20px;
+            box-shadow: 0 16px 42px rgba(15, 23, 42, 0.1);
+            top: 88px;
+        }
+        .payment-summary-inner {
+            padding: 22px;
+        }
+        .payment-summary-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--gray-900);
+            margin-bottom: 14px;
+        }
+        .payment-route-list {
+            position: relative;
+            margin-bottom: 14px;
+        }
+        .payment-route-list::before {
+            content: '';
+            position: absolute;
+            left: 7px;
+            top: 26px;
+            bottom: 26px;
+            width: 2px;
+            background: var(--gray-200);
+        }
+        .payment-route-list .payment-detail-icon {
+            width: 16px;
+            text-align: center;
+            color: var(--primary);
+            font-size: 0.8rem;
+            margin-top: 3px;
+            z-index: 1;
+            background: white;
+        }
+        .payment-detail-sub {
+            font-size: 0.75rem;
+            color: var(--gray-500);
+            margin-top: 2px;
+        }
+        .payment-price-breakdown {
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+        .payment-terms-text {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.75rem;
+            color: var(--gray-500);
+            line-height: 1.45;
+        }
+
+        @media (max-width: 900px) {
+            .payment-grid-modern {
+                grid-template-columns: 1fr;
+            }
+            .payment-summary-modern {
+                position: static;
+            }
+        }
 
         .promo-section {
             background: var(--gray-50); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px;

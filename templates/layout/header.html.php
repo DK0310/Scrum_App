@@ -30,24 +30,19 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
         <div class="navbar-inner">
             <a href="/" class="navbar-brand">PrivateHire</a>
 
-            <!-- ===== NAVBAR SEARCH BAR (center) ===== -->
-            <div class="navbar-search-wrapper" id="navbarSearchWrapper">
-                <div class="navbar-search-bar">
-                    <span class="navbar-search-icon">🔍</span>
-                    <input type="text" 
-                           id="navbarSearchInput" 
-                           class="navbar-search-input" 
-                           placeholder="Search cars... e.g. Mercedes, BMW X5" 
-                           autocomplete="off"
-                           value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
-                    <button class="navbar-search-clear" id="navbarSearchClear" onclick="navbarClearSearch()" style="display:none;">✕</button>
-                </div>
-                <div class="navbar-suggestions" id="navbarSuggestions"></div>
+            <div class="navbar-nav">
+                <a href="/cars.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">Cars</a>
+                <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
+                <a href="/booking.php?mode=minicab" class="navbar-nav-link <?= ($currentPage ?? '') === 'booking' ? 'active' : '' ?>">Book a Minicab</a>
+                <?php endif; ?>
+                <a href="/#how-it-works" class="navbar-nav-link <?= ($currentPage ?? '') === 'how-it-works' ? 'active' : '' ?>">How It Works</a>
+                <a href="/promotions.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'promotions' ? 'active' : '' ?>">Promotions</a>
+                <a href="/customer-enquiry.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'customer-enquiry' ? 'active' : '' ?>">Customer Enquiry</a>
+                <a href="/membership.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'membership' ? 'active' : '' ?>">Membership</a>
+                <a href="/support.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'support' ? 'active' : '' ?>">Support</a>
             </div>
 
             <div class="navbar-actions">
-                <button class="navbar-lang" onclick="toggleLanguageMenu()" id="langBtn">🌐 EN</button>
-                
                 <?php if (isset($isLoggedIn) && $isLoggedIn): ?>
                     <button class="navbar-notification" onclick="toggleNotifications()" id="notifBtn">
                         🔔
@@ -57,6 +52,18 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                     <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
                     <a href="/orders.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'orders' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">📋 My Orders</a>
                     <?php endif; ?>
+                    
+                    <!-- Dashboard Link by Role -->
+                    <?php if ($isAdminRole): ?>
+                    <a href="/admin.php" class="btn btn-primary btn-sm" style="<?= ($currentPage ?? '') === 'admin' ? 'background:var(--primary-dark);' : '' ?>">⚙️ Admin Dashboard</a>
+                    <?php elseif ($isControlStaffRole): ?>
+                    <a href="/control-staff.php" class="btn btn-primary btn-sm" style="<?= ($currentPage ?? '') === 'control-staff' ? 'background:var(--primary-dark);' : '' ?>">🧭 Control Staff</a>
+                    <?php elseif ($isCallCenterStaffRole): ?>
+                    <a href="/call-center-staff.php" class="btn btn-primary btn-sm" style="<?= ($currentPage ?? '') === 'call-center-staff' ? 'background:var(--primary-dark);' : '' ?>">📞 Call Center</a>
+                    <?php elseif (($userRole ?? '') === 'driver'): ?>
+                    <a href="/driver.php" class="btn btn-primary btn-sm" style="<?= ($currentPage ?? '') === 'driver' ? 'background:var(--primary-dark);' : '' ?>">🚗 Driver Dashboard</a>
+                    <?php endif; ?>
+                    
                     <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
                 <?php else: ?>
                     <button class="btn btn-outline btn-sm" onclick="showAuthModal('login'); return false;">Sign In</button>
@@ -111,7 +118,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             </a>
             <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
             <a href="/orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
-                <span class="side-menu-icon">📋</span> My Orders
+                <span class="side-menu-icon">�</span> My Orders
             </a>
             <?php endif; ?>
             <?php endif; ?>

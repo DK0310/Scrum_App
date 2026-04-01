@@ -86,12 +86,24 @@ img { max-width: 100%; height: auto; }
 .navbar-inner {
     max-width: 1400px; margin: 0 auto; padding: 0 24px;
     display: flex; align-items: center; justify-content: space-between; height: 72px;
+    gap: 20px;
 }
 .navbar-brand {
     display: flex; align-items: center; gap: 10px;
     font-size: 1.5rem; font-weight: 800; color: var(--primary);
 }
-.navbar-nav { display: none; } /* Removed — nav items moved to side menu */
+.navbar-nav { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.navbar-nav-link {
+    padding: 8px 12px;
+    border-radius: var(--radius-full);
+    font-size: 0.813rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    transition: var(--transition);
+    white-space: nowrap;
+}
+.navbar-nav-link:hover { background: var(--primary-50); color: var(--primary); }
+.navbar-nav-link.active { background: var(--primary); color: white; }
 
 /* ===== NAVBAR SEARCH BAR ===== */
 .navbar-search-wrapper {
@@ -159,7 +171,7 @@ img { max-width: 100%; height: auto; }
 
 /* ===== SIDE MENU TOGGLE BUTTON (always visible) ===== */
 .side-menu-toggle {
-    display: flex; flex-direction: column; gap: 5px; cursor: pointer;
+    display: none; flex-direction: column; gap: 5px; cursor: pointer;
     background: none; border: 1px solid var(--gray-200); padding: 8px;
     border-radius: var(--radius); transition: var(--transition);
 }
@@ -627,8 +639,9 @@ img { max-width: 100%; height: auto; }
 }
 
 @media (max-width: 768px) {
+    .navbar-nav { display: none; }
+    .side-menu-toggle { display: flex; }
     .side-menu { width: 280px; right: -290px; }
-    .navbar-search-wrapper { display: none; }
     .navbar-actions .navbar-lang { display: none; }
     .navbar-actions .btn-danger { padding: 5px 10px; font-size: 0.75rem; }
     .navbar-actions .navbar-action-link { display: none; }
@@ -716,7 +729,7 @@ img { max-width: 100%; height: auto; }
     align-items: center;
     z-index: 10000;
     padding: 20px;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .modal-overlay.active,

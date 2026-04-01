@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#3e4946",
+              "on-primary-container": "#94e5d5",
+              "primary-fixed": "#a0f2e1",
+              "surface-dim": "#d8dada",
+              "outline": "#6e7976",
+              "error": "#ba1a1a",
+              "outline-variant": "#bec9c5",
+              "secondary": "#59605f",
+              "on-secondary-fixed-variant": "#414847",
+              "on-tertiary-fixed-variant": "#723522",
+              "secondary-fixed-dim": "#c1c8c6",
+              "surface-bright": "#f8fafa",
+              "inverse-surface": "#2e3131",
+              "surface-container-lowest": "#ffffff",
+              "on-error-container": "#93000a",
+              "inverse-primary": "#84d5c5",
+              "on-error": "#ffffff",
+              "on-primary-fixed-variant": "#005046",
+              "on-background": "#191c1d",
+              "primary": "#004f45",
+              "primary-fixed-dim": "#84d5c5",
+              "on-primary-fixed": "#00201b",
+              "inverse-on-surface": "#eff1f1",
+              "on-secondary-container": "#5f6665",
+              "surface-container": "#eceeee",
+              "tertiary-fixed-dim": "#ffb59f",
+              "on-tertiary": "#ffffff",
+              "on-surface": "#191c1d",
+              "on-primary": "#ffffff",
+              "surface-variant": "#e1e3e3",
+              "primary-container": "#00695c",
+              "error-container": "#ffdad6",
+              "surface-container-highest": "#e1e3e3",
+              "on-secondary-fixed": "#161d1c",
+              "on-tertiary-fixed": "#3a0b01",
+              "tertiary-fixed": "#ffdbd1",
+              "surface-container-high": "#e6e8e8",
+              "surface": "#f8fafa",
+              "on-tertiary-container": "#ffcabb",
+              "background": "#f8fafa",
+              "tertiary": "#703321",
+              "surface-container-low": "#f2f4f4",
+              "on-secondary": "#ffffff",
+              "surface-tint": "#046b5e",
+              "secondary-container": "#dde4e2",
+              "tertiary-container": "#8d4a36",
+              "secondary-fixed": "#dde4e2"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .bg-emerald-gradient {
+        background: linear-gradient(135deg, #004f45 0%, #00695c 100%);
+      }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body min-h-screen">
+<main class="max-w-4xl mx-auto px-6 pt-12 pb-32">
+<div class="mb-10">
+<h1 class="font-headline text-4xl font-extrabold tracking-tight text-primary">Secure Checkout</h1>
+<p class="text-on-surface-variant mt-2 text-lg">Review your journey and select a payment method.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-5 gap-8">
+<!-- Left Column: Payment Methods & Promo -->
+<div class="md:col-span-3 space-y-8">
+<!-- Payment Methods Section -->
+<section>
+<h2 class="font-headline text-xl font-bold mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">payments</span>
+                        Payment Method
+                    </h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<!-- Cash Option -->
+<div class="relative group cursor-pointer border-2 border-transparent hover:border-primary/20 bg-surface-container-low rounded-xl p-5 transition-all active:scale-[0.98]">
+<input checked="" class="absolute top-4 right-4 text-primary focus:ring-primary/40 h-5 w-5" id="cash" name="payment" type="radio"/>
+<label class="cursor-pointer block" for="cash">
+<div class="w-12 h-12 bg-surface-container-highest rounded-lg flex items-center justify-center mb-4 text-primary">
+<span class="material-symbols-outlined text-3xl">payments</span>
+</div>
+<div class="font-headline font-bold text-lg">Cash</div>
+<div class="text-on-surface-variant text-sm mt-1">Pay at destination</div>
+</label>
+</div>
+<!-- PayPal Option -->
+<div class="relative group cursor-pointer border-2 border-transparent hover:border-primary/20 bg-surface-container-low rounded-xl p-5 transition-all active:scale-[0.98]">
+<input class="absolute top-4 right-4 text-primary focus:ring-primary/40 h-5 w-5" id="paypal" name="payment" type="radio"/>
+<label class="cursor-pointer block" for="paypal">
+<div class="mb-4 flex items-center h-12">
+<img alt="PayPal Logo" class="h-8" data-alt="Official PayPal brand logo with blue lettering on a transparent background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBU4sSgahwkKMnCEomLWind84lM-UT7qYIEvSrSltS75tTWEF7My1wXzNKkIvW32YmhTdOBE_nhb_1mnk0Oga0OH9ezDqPGl4zwJijm34ExlToAl-aYQXOzZaC3cvFuIHG6DYFWtNkD9HPLHJrBvveBiuoyI9Bkas5WqqCUPpp6N_Ud5eIEXvSBp2mZ-qMA3JrRwDn1IulQr_10prTVRIX2eTHQv1t8HmOvCYKQ6GAnnGNwdV5kEJ3ubZ3aLr6AX1aTW0s-1otamc"/>
+</div>
+<div class="font-headline font-bold text-lg">PayPal</div>
+<div class="text-on-surface-variant text-sm mt-1">Faster checkout experience</div>
+</label>
+</div>
+</div>
+</section>
+<!-- Promo Code Section -->
+<section class="bg-surface-container-low p-6 rounded-xl">
+<h3 class="font-headline font-bold mb-4">Promo Code</h3>
+<div class="flex gap-3">
+<div class="relative flex-grow">
+<input class="w-full bg-surface-container border-none rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary/40 placeholder:text-on-surface-variant/50" placeholder="Enter code" type="text"/>
+</div>
+<button class="px-6 py-3 bg-surface-container-high text-primary font-bold rounded-lg hover:bg-surface-container-highest transition-colors">
+                            Apply
+                        </button>
+</div>
+</section>
+</div>
+<!-- Right Column: Summary Card -->
+<div class="md:col-span-2">
+<div class="sticky top-12 bg-surface-container-lowest shadow-[0_12px_40px_rgba(0,79,69,0.06)] rounded-2xl overflow-hidden">
+<div class="p-6">
+<h2 class="font-headline text-xl font-bold mb-6">Booking Summary</h2>
+<!-- Route Details -->
+<div class="relative space-y-8 mb-8">
+<div class="absolute left-[11px] top-[24px] bottom-[24px] w-[2px] bg-outline-variant/30"></div>
+<div class="flex gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center ring-4 ring-white">
+<span class="w-2 h-2 rounded-full bg-white"></span>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Pick-up Location</p>
+<p class="font-medium text-on-surface">452 West 20th St, New York</p>
+</div>
+</div>
+<div class="flex gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-primary-container flex items-center justify-center ring-4 ring-white">
+<span class="material-symbols-outlined text-[14px] text-white" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Destination</p>
+<p class="font-medium text-on-surface">JFK International Airport</p>
+</div>
+</div>
+</div>
+<!-- Price Breakdown -->
+<div class="space-y-4 pt-6 border-t border-outline-variant/15">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span>Base Fare</span>
+<span class="font-medium">$124.00</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span>Airport Tax</span>
+<span class="font-medium">$12.50</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span>Insurance</span>
+<span class="font-medium">$15.00</span>
+</div>
+<div class="flex justify-between items-center text-primary font-bold text-xl pt-4">
+<span>Total Price</span>
+<span>$151.50</span>
+</div>
+</div>
+<button class="w-full mt-8 py-4 bg-emerald-gradient text-white rounded-xl font-headline font-bold text-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-all">
+                            Confirm &amp; Book
+                        </button>
+<p class="text-center text-xs text-on-surface-variant mt-4 px-4">
+                            By clicking "Confirm &amp; Book", you agree to our Terms of Service and Privacy Policy.
+                        </p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>
