@@ -36,6 +36,9 @@ function redirectBackWithFlash(string $type, string $message): void {
     session_write_close();
 
     $returnTo = getReturnTo();
+    if ($type === 'success' && (($_SESSION['role'] ?? '') === 'driver')) {
+        $returnTo = '/driver.php';
+    }
     header('Location: ' . $returnTo);
     exit;
 }
@@ -134,6 +137,7 @@ try {
             'role' => $user['role'],
             'full_name' => $user['full_name']
         ];
+        $response['redirect_to'] = (($user['role'] ?? '') === 'driver') ? '/driver.php' : getReturnTo();
 
         if (!$wantsJson) {
             redirectBackWithFlash('success', $response['message']);

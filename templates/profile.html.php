@@ -1,38 +1,49 @@
 <?php include __DIR__ . '/layout/header.html.php'; ?>
 
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+
     <!-- ===== PROFILE PAGE ===== -->
-    <section class="section" style="padding-top:100px;min-height:100vh;background:var(--gray-50);" id="profile">
-        <div class="section-container" style="max-width:800px;">
-
-            <!-- Profile Header -->
-            <div style="text-align:center;margin-bottom:32px;">
-                <div class="profile-avatar-wrapper" style="position:relative;width:110px;height:110px;margin:0 auto 16px;">
-                    <div class="profile-avatar" id="profileAvatar" style="width:110px;height:110px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:800;overflow:hidden;border:4px solid white;box-shadow:var(--shadow-md);">
-                        <span id="avatarInitial">?</span>
+    <section class="section" style="padding-top:96px;min-height:100vh;background:#f8fafa;" id="profile">
+        <div class="section-container" style="max-width:1180px;">
+            <div class="profile-layout">
+                <aside class="profile-sidebar-card">
+                    <div class="profile-sidebar-head">
+                        <div class="profile-avatar-wrapper" style="position:relative;width:56px;height:56px;margin:0;">
+                            <div class="profile-avatar" id="profileAvatar" style="width:56px;height:56px;border-radius:999px;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:800;overflow:hidden;box-shadow:0 8px 18px rgba(0,79,69,0.18);">
+                                <span id="avatarInitial">?</span>
+                            </div>
+                            <label for="avatarUpload" style="position:absolute;bottom:-4px;right:-6px;width:22px;height:22px;border-radius:999px;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow-md);font-size:0.68rem;border:2px solid white;transition:var(--transition);" title="Change avatar">
+                                <span class="material-symbols-outlined" style="font-size:12px;line-height:1;">photo_camera</span>
+                            </label>
+                            <input type="file" id="avatarUpload" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="uploadAvatar(this)">
+                        </div>
+                        <div class="profile-user-copy">
+                            <h2 id="profileName" class="profile-user-name">My Profile</h2>
+                            <p id="profileRole" class="profile-user-role">Loading...</p>
+                        </div>
                     </div>
-                    <label for="avatarUpload" style="position:absolute;bottom:2px;right:2px;width:34px;height:34px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow-sm);font-size:0.9rem;border:2px solid white;transition:var(--transition);" title="Change avatar">
-                        📷
-                    </label>
-                    <input type="file" id="avatarUpload" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="uploadAvatar(this)">
-                </div>
-                <h1 style="font-size:1.75rem;font-weight:800;color:var(--gray-900);" id="profileName">My Profile</h1>
-                <p style="color:var(--gray-500);margin-top:4px;" id="profileRole">Loading...</p>
-            </div>
 
-            <!-- Profile Card -->
-            <div style="background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden;">
+                    <button type="button" class="profile-upgrade-btn">Upgrade Plan</button>
 
-                <!-- Tab Navigation -->
-                <div style="display:flex;border-bottom:2px solid var(--gray-100);padding:0 24px;">
-                    <button class="profile-tab active" onclick="switchProfileTab('info')" id="tab-info">👤 Personal Info</button>
-                    <button class="profile-tab" onclick="switchProfileTab('security')" id="tab-security">🔒 Security</button>
-                    <button class="profile-tab" onclick="switchProfileTab('preferences')" id="tab-preferences">⚙️ Preferences</button>
-                </div>
+                    <nav class="profile-side-nav">
+                        <button class="profile-tab active" onclick="switchProfileTab('info')" id="tab-info"><span class="material-symbols-outlined" aria-hidden="true">person</span><span>Profile Details</span></button>
+                        <button class="profile-tab" onclick="switchProfileTab('security')" id="tab-security"><span class="material-symbols-outlined" aria-hidden="true">lock</span><span>Security</span></button>
+                        <button class="profile-tab" onclick="switchProfileTab('preferences')" id="tab-preferences"><span class="material-symbols-outlined" aria-hidden="true">settings</span><span>App Settings</span></button>
+                    </nav>
+                </aside>
 
-                <!-- ===== PERSONAL INFO TAB ===== -->
-                <div class="profile-panel" id="panel-info" style="padding:24px;">
-                    <form id="profileForm" onsubmit="return saveProfile(event)">
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="profile-main-content">
+                    <header class="profile-page-head">
+                        <h1 class="profile-page-title">Personal Information</h1>
+                        <p class="profile-page-subtitle">Manage your account details and preferences.</p>
+                    </header>
+
+                    <div class="profile-content-card">
+                        <!-- ===== PERSONAL INFO TAB ===== -->
+                        <div class="profile-panel" id="panel-info" style="padding:28px;">
+                            <form id="profileForm" onsubmit="return saveProfile(event)">
+                                <div class="profile-field-grid">
 
                             <!-- Full Name -->
                             <div class="form-group">
@@ -59,76 +70,39 @@
                                 <input type="date" id="pDob" class="form-input">
                             </div>
 
-                            <!-- Role -->
-                            <div class="form-group">
-                                <label class="form-label">Account Type</label>
-                                <select id="pRole" class="form-input">
-                                    <option value="user">👤 User — I want to book rides</option>
-                                    <option value="driver">🚗 Driver — I operate assigned trips</option>
-                                    <option value="callcenterstaff">📞 Call Center Staff — create requests for customers</option>
-                                    <option value="controlstaff">🧭 Control Staff — approve requests and manage vehicles</option>
-                                </select>
-                            </div>
-
                             <!-- Membership -->
                             <div class="form-group">
                                 <label class="form-label">Membership</label>
                                 <input type="text" id="pMembership" class="form-input" readonly style="background:var(--gray-50);cursor:not-allowed;text-transform:capitalize;">
                             </div>
 
-                            <!-- Address -->
-                            <div class="form-group" style="grid-column:1/-1;">
-                                <label class="form-label">Address</label>
-                                <input type="text" id="pAddress" class="form-input">
-                            </div>
-
-                            <!-- City -->
-                            <div class="form-group">
-                                <label class="form-label">City</label>
-                                <input type="text" id="pCity" class="form-input">
-                            </div>
-
-                            <!-- Country -->
-                            <div class="form-group">
-                                <label class="form-label">Country</label>
-                                <input type="text" id="pCountry" class="form-input">
-                            </div>
-
-                            <!-- Driving License -->
-                            <div class="form-group">
-                                <label class="form-label">Driving License No.</label>
-                                <input type="text" id="pLicense" class="form-input">
-                            </div>
-
-                            <!-- License Expiry -->
-                            <div class="form-group">
-                                <label class="form-label">License Expiry Date</label>
-                                <input type="date" id="pLicenseExpiry" class="form-input">
-                            </div>
-
-                            <!-- ID Card -->
-                            <div class="form-group">
-                                <label class="form-label">ID Card / Passport No.</label>
-                                <input type="text" id="pIdCard" class="form-input">
-                            </div>
-
                             <!-- Bio -->
                             <div class="form-group" style="grid-column:1/-1;">
-                                <label class="form-label">Bio</label>
+                                <label class="form-label">Professional Bio</label>
                                 <textarea id="pBio" class="form-input" rows="3" style="resize:vertical;"></textarea>
                             </div>
                         </div>
 
-                        <!-- Save Button -->
-                        <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid var(--gray-100);">
-                            <button type="button" class="btn btn-outline" onclick="loadProfile()">↩️ Reset</button>
-                            <button type="submit" class="btn btn-primary" id="saveProfileBtn">💾 Save Changes</button>
-                        </div>
-                    </form>
-                </div>
+                                <div class="profile-accent-card">
+                                    <div class="profile-accent-thumb">
+                                        <span class="material-symbols-outlined" aria-hidden="true">apartment</span>
+                                    </div>
+                                    <div>
+                                        <h3 class="profile-accent-title">Membership</h3>
+                                        <p class="profile-accent-text">Your account is currently on the <strong id="pMembershipText">standard</strong> plan. Upgrade to unlock advanced mobility features.</p>
+                                    </div>
+                                </div>
 
-                <!-- ===== SECURITY TAB ===== -->
-                <div class="profile-panel" id="panel-security" style="padding:24px;display:none;">
+                                <!-- Save Button -->
+                                <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid var(--gray-100);">
+                                    <button type="button" class="btn btn-outline" onclick="loadProfile()">↩️ Reset</button>
+                                    <button type="submit" class="btn btn-primary" id="saveProfileBtn">💾 Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+
+                    <!-- ===== SECURITY TAB ===== -->
+                    <div class="profile-panel" id="panel-security" style="padding:28px;display:none;">
                     <div style="max-width:400px;">
                         <h3 style="font-weight:700;margin-bottom:16px;color:var(--gray-800);">Account Security</h3>
 
@@ -195,10 +169,10 @@
                             <button type="button" id="sendResetEmailBtn" class="btn btn-outline" onclick="sendMyPasswordResetLink(this)" style="padding:8px 14px;font-size:0.82rem;">Send Reset Email</button>
                         </div>
                     </div>
-                </div>
+                    </div>
 
-                <!-- ===== PREFERENCES TAB ===== -->
-                <div class="profile-panel" id="panel-preferences" style="padding:24px;display:none;">
+                    <!-- ===== PREFERENCES TAB ===== -->
+                    <div class="profile-panel" id="panel-preferences" style="padding:28px;display:none;">
                     <h3 style="font-weight:700;margin-bottom:16px;color:var(--gray-800);">Preferences</h3>
                     <div style="max-width:400px;">
                         <div class="security-item">
@@ -207,8 +181,7 @@
                                 <small style="color:var(--gray-500);">Display language</small>
                             </div>
                             <select style="padding:6px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:0.875rem;">
-                                <option>English</option>
-                                <option>Tiếng Việt</option>
+                                <option selected>English</option>
                             </select>
                         </div>
                         <div class="security-item" style="border-bottom:none;">
@@ -222,8 +195,9 @@
                             </label>
                         </div>
                     </div>
+                        </div>
+                    </div>
                 </div>
-
             </div>
         </div>
     </section>
@@ -359,22 +333,223 @@
     </div>
 
     <style>
-        .profile-tab {
-            padding: 14px 20px; font-weight: 600; font-size: 0.875rem; cursor: pointer;
-            border: none; background: transparent; color: var(--gray-500);
-            border-bottom: 3px solid transparent; transition: var(--transition);
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
         }
-        .profile-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-        .profile-tab:hover:not(.active) { color: var(--gray-700); }
+
+        .profile-layout {
+            display: grid;
+            grid-template-columns: 290px minmax(0, 1fr);
+            gap: 30px;
+            align-items: start;
+        }
+
+        .profile-sidebar-card {
+            position: sticky;
+            top: 102px;
+            background: #f8fafb;
+            border: 1px solid #dce4e2;
+            border-radius: 24px;
+            padding: 22px 16px 16px;
+            box-shadow: 0 12px 30px rgba(0, 79, 69, 0.06);
+        }
+
+        .profile-brand {
+            color: #05584e;
+            font-family: 'Manrope', sans-serif;
+            font-size: 1rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            margin: 2px 8px 16px;
+        }
+
+        .profile-sidebar-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 8px 14px;
+            border-bottom: 1px solid var(--gray-200);
+            margin-bottom: 12px;
+        }
+
+        .profile-user-name {
+            margin: 0;
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: #134e4a;
+            letter-spacing: 0.01em;
+            font-family: 'Manrope', sans-serif;
+        }
+
+        .profile-user-role {
+            margin: 4px 0 0;
+            font-size: 0.74rem;
+            color: var(--gray-500);
+            font-weight: 600;
+        }
+
+        .profile-upgrade-btn {
+            width: 100%;
+            border: none;
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin: 6px 0 12px;
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+            background: linear-gradient(135deg, #004f45 0%, #00695c 100%);
+            box-shadow: 0 12px 18px rgba(0, 79, 69, 0.18);
+        }
+
+        .profile-side-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .profile-tab {
+            width: 100%;
+            text-align: left;
+            padding: 11px 12px;
+            border: none;
+            border-right: 4px solid transparent;
+            border-radius: 10px;
+            background: transparent;
+            color: #66737b;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.84rem;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Manrope', sans-serif;
+        }
+
+        .profile-tab .material-symbols-outlined {
+            font-size: 19px;
+            line-height: 1;
+        }
+
+        .profile-tab.active {
+            color: #0f766e;
+            background: #eaf6f2;
+            border-right-color: #0f766e;
+        }
+
+        .profile-tab:hover:not(.active) {
+            color: #0f766e;
+            background: #edf7f4;
+        }
+
+        .profile-main-content {
+            min-width: 0;
+        }
+
+        .profile-page-head {
+            margin-bottom: 18px;
+            padding: 8px 4px;
+        }
+
+        .profile-page-title {
+            margin: 0 0 6px;
+            font-size: 2.35rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: #1a2020;
+            font-family: 'Manrope', 'Inter', sans-serif;
+        }
+
+        .profile-page-subtitle {
+            margin: 0;
+            color: #556260;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .profile-content-card {
+            background: white;
+            border-radius: 26px;
+            border: 1px solid #dde5e3;
+            box-shadow: 0 14px 40px rgba(0, 79, 69, 0.06);
+            overflow: hidden;
+        }
+
+        .profile-field-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 22px;
+        }
 
         .form-group { display: flex; flex-direction: column; gap: 4px; }
-        .form-label { font-size: 0.8rem; font-weight: 600; color: var(--gray-600); }
-        .form-input {
-            padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--radius);
-            font-size: 0.875rem; font-family: inherit; transition: var(--transition);
-            color: var(--gray-800);
+        .form-label {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #4a5956;
+            margin-left: 2px;
+            font-family: 'Inter', sans-serif;
         }
-        .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+        .form-input {
+            padding: 12px 14px;
+            border: 1px solid #dbe3e1;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            transition: var(--transition);
+            color: #1f2e2b;
+            background: #f3f6f6;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #8abbb1;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(4, 107, 94, 0.12);
+        }
+
+        .profile-accent-card {
+            margin-top: 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: #f2f4f4;
+            border: 1px solid #e0e5e4;
+            border-radius: 16px;
+            padding: 16px;
+        }
+
+        .profile-accent-thumb {
+            width: 64px;
+            height: 64px;
+            border-radius: 14px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e4e9e8;
+            color: #0e5c52;
+        }
+
+        .profile-accent-thumb .material-symbols-outlined {
+            font-size: 30px;
+        }
+
+        .profile-accent-title {
+            margin: 0 0 4px;
+            color: #0e5b52;
+            font-size: 0.92rem;
+            font-weight: 800;
+            font-family: 'Manrope', sans-serif;
+        }
+
+        .profile-accent-text {
+            margin: 0;
+            color: #51615d;
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
 
         .security-item {
             display: flex; justify-content: space-between; align-items: center;
@@ -412,9 +587,26 @@
 
         .faceid-scanning .faceIdScanOverlay { border-color: #22c55e !important; animation: pulse-ring 1.5s infinite; }
 
+        @media (max-width: 980px) {
+            .profile-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .profile-sidebar-card {
+                position: static;
+            }
+        }
+
         @media (max-width: 640px) {
+            .profile-page-title {
+                font-size: 1.9rem;
+            }
+
+            .profile-field-grid {
+                grid-template-columns: 1fr;
+            }
+
             #panel-info .form-group { grid-column: 1 / -1 !important; }
-            #panel-info form > div:first-child { grid-template-columns: 1fr !important; }
         }
     </style>
 

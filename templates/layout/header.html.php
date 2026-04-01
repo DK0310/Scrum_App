@@ -9,7 +9,14 @@ $normalizedRole = $normalizedRole === 'staff' ? 'controlstaff' : $normalizedRole
 $isAdminRole = ($normalizedRole === 'admin');
 $isControlStaffRole = ($normalizedRole === 'controlstaff');
 $isCallCenterStaffRole = ($normalizedRole === 'callcenterstaff');
+$isDriverRole = ($normalizedRole === 'driver');
 $isAnyStaffRole = $isControlStaffRole || $isCallCenterStaffRole;
+$sessionRoleNormalized = strtolower(str_replace(['-', ' ', '_'], '', (string)($sessionData['role'] ?? '')));
+$showMyOrders = $isLoggedIn
+    && !$isAdminRole
+    && !$isAnyStaffRole
+    && !$isDriverRole
+    && $sessionRoleNormalized !== 'driver';
 $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['username'] ?? $sessionData['email'] ?? 'User');
 ?>
 
@@ -30,9 +37,9 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
         <div class="navbar-inner">
             <a href="/" class="navbar-brand">PrivateHire</a>
 
-            <div class="navbar-nav">
+            <div class="navbar-nav" <?= $isDriverRole ? 'style="display:none;"' : '' ?>>
                 <a href="/cars.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">Cars</a>
-                <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
+                <?php if (!$isAdminRole && !$isAnyStaffRole && !$isDriverRole): ?>
                 <a href="/booking.php?mode=minicab" class="navbar-nav-link <?= ($currentPage ?? '') === 'booking' ? 'active' : '' ?>">Book a Minicab</a>
                 <?php endif; ?>
                 <a href="/#how-it-works" class="navbar-nav-link <?= ($currentPage ?? '') === 'how-it-works' ? 'active' : '' ?>">How It Works</a>
@@ -49,7 +56,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                         <span class="notification-badge" id="notifCount" style="display:none;">0</span>
                     </button>
                     <a href="/profile.php" class="navbar-profile-link" <?= ($currentPage ?? '') === 'profile' ? 'style="background:var(--primary-50);color:var(--primary);"' : '' ?>>👤 <?= htmlspecialchars($currentUser) ?></a>
-                    <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
+                    <?php if ($showMyOrders): ?>
                     <a href="/orders.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'orders' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">📋 My Orders</a>
                     <?php endif; ?>
                     
@@ -60,8 +67,6 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                     <a href="/control-staff.php" class="btn btn-primary btn-sm" style="<?= ($currentPage ?? '') === 'control-staff' ? 'background:var(--primary-dark);' : '' ?>">🧭 Control Staff</a>
                     <?php elseif ($isCallCenterStaffRole): ?>
                     <a href="/call-center-staff.php" class="btn btn-primary btn-sm" style="<?= ($currentPage ?? '') === 'call-center-staff' ? 'background:var(--primary-dark);' : '' ?>">📞 Call Center</a>
-                    <?php elseif (($userRole ?? '') === 'driver'): ?>
-                    <a href="/driver.php" class="btn btn-primary btn-sm" style="<?= ($currentPage ?? '') === 'driver' ? 'background:var(--primary-dark);' : '' ?>">🚗 Driver Dashboard</a>
                     <?php endif; ?>
                     
                     <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
@@ -71,7 +76,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                 <?php endif; ?>
 
                 <!-- Side Menu Toggle Button -->
-                <button class="side-menu-toggle" onclick="toggleSideMenu()" id="sideMenuToggle" title="Menu">
+                <button class="side-menu-toggle" onclick="toggleSideMenu()" id="sideMenuToggle" title="Menu" <?= $isDriverRole ? 'style="display:none;"' : '' ?>>
                     <span></span><span></span><span></span>
                 </button>
             </div>
@@ -79,6 +84,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
     </nav>
 
     <!-- Side Menu Overlay -->
+    <?php if (!$isDriverRole): ?>
     <div class="side-menu-overlay" id="sideMenuOverlay" onclick="closeSideMenu()"></div>
 
     <!-- ===== SIDE MENU (slides from right) ===== -->
@@ -91,7 +97,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             <a href="/cars.php" class="side-menu-item <?= ($currentPage ?? '') === 'cars' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚗</span> Cars
             </a>
-            <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
+            <?php if (!$isAdminRole && !$isAnyStaffRole && !$isDriverRole): ?>
             <a href="/booking.php?mode=minicab" class="side-menu-item <?= ($currentPage ?? '') === 'booking' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🚕</span> Book a Minicab
             </a>
@@ -116,7 +122,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             <a href="/profile.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'profile' ? 'active' : '' ?>">
                 <span class="side-menu-icon">👤</span> My Profile
             </a>
-            <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
+            <?php if ($showMyOrders): ?>
             <a href="/orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
                 <span class="side-menu-icon">�</span> My Orders
             </a>
@@ -155,6 +161,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             <p>© <?= date('Y') ?> Private Hire</p>
         </div>
     </aside>
+    <?php endif; ?>
 
     <!-- ===== NOTIFICATION PANEL ===== -->
     <div class="notification-panel" id="notificationPanel">

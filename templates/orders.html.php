@@ -1,8 +1,8 @@
 <?php include __DIR__ . '/layout/header.html.php'; ?>
 
     <!-- ===== MY ORDERS PAGE ===== -->
-    <section class="section" style="padding-top:100px;min-height:100vh;background:var(--gray-50);" id="orders">
-        <div class="section-container" style="max-width:1000px;">
+    <section class="section" style="padding-top:110px;min-height:100vh;background:var(--gray-50);" id="orders">
+        <div class="section-container" style="max-width:1200px;">
             <div class="section-header" style="margin-bottom:32px;">
                 <div>
                     <h2 class="section-title">📋 My Orders</h2>
@@ -13,11 +13,10 @@
             <!-- Filter Tabs -->
             <div class="order-tabs" id="orderTabs">
                 <button class="order-tab active" data-status="all" onclick="filterOrders('all')">All</button>
-                <button class="order-tab" data-status="pending" onclick="filterOrders('pending')">⏳ Pending</button>
-                <button class="order-tab" data-status="confirmed" onclick="filterOrders('confirmed')">✅ Confirmed</button>
-                <button class="order-tab" data-status="in_progress" onclick="filterOrders('in_progress')">🚗 In Progress</button>
-                <button class="order-tab" data-status="completed" onclick="filterOrders('completed')">✔️ Completed</button>
-                <button class="order-tab" data-status="cancelled" onclick="filterOrders('cancelled')">❌ Cancelled</button>
+                <button class="order-tab" data-status="pending" onclick="filterOrders('pending')">Pending</button>
+                <button class="order-tab" data-status="in_progress" onclick="filterOrders('in_progress')">In Progress</button>
+                <button class="order-tab" data-status="completed" onclick="filterOrders('completed')">Completed</button>
+                <button class="order-tab" data-status="cancelled" onclick="filterOrders('cancelled')">Cancelled</button>
             </div>
 
             <!-- Loading -->
@@ -43,27 +42,47 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         .order-tabs {
-            display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;
-            padding: 4px; background: white; border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-sm); border: 1px solid var(--gray-200);
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 28px;
+            padding: 6px;
+            background: white;
+            border-radius: 999px;
+            border: 1px solid var(--gray-200);
         }
         .order-tab {
-            padding: 10px 18px; border: none; border-radius: var(--radius-md);
-            background: transparent; font-size: 0.85rem; font-weight: 600;
-            color: var(--gray-500); cursor: pointer; transition: all 0.2s;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--gray-500);
+            cursor: pointer;
+            transition: all 0.2s;
             font-family: 'Inter', sans-serif;
         }
         .order-tab:hover { background: var(--gray-100); color: var(--gray-700); }
         .order-tab.active { background: var(--primary); color: white; }
 
-        .order-card {
-            background: white; border-radius: var(--radius-lg); overflow: hidden;
-            box-shadow: var(--shadow-sm); border: 1px solid var(--gray-200);
-            margin-bottom: 16px; transition: all 0.2s;
+        .orders-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 18px;
         }
-        .order-card:hover { box-shadow: var(--shadow-md); }
+
+        .order-card {
+            background: #fff;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #d5dfdc;
+            box-shadow: 0 12px 40px rgba(0, 79, 69, 0.06);
+            transition: all 0.2s;
+        }
+        .order-card:hover { transform: translateY(-1px); box-shadow: 0 16px 50px rgba(0, 79, 69, 0.09); }
+        .order-card.status-in_progress { border-left: 4px solid #00695c; background: #f3fbf9; }
         .order-card.can-open { cursor: pointer; }
-        .order-card.can-open:hover { transform: translateY(-1px); }
 
         .trip-vehicle-spotlight {
             display: flex; align-items: center; gap: 12px;
@@ -86,8 +105,12 @@
         }
 
         .order-card-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 20px 24px; border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 20px 22px;
+            border-bottom: 1px solid var(--gray-100);
         }
         .order-card-left { display: flex; align-items: center; gap: 16px; }
         .order-car-thumb {
@@ -100,30 +123,45 @@
 
         .order-status-badge {
             display: inline-flex; align-items: center; gap: 6px;
-            padding: 6px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 700;
+            padding: 6px 12px; border-radius: 10px; font-size: 0.72rem; font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
         .status-pending { background: #fef3c7; color: #92400e; }
-        .status-confirmed { background: #dbeafe; color: #1e40af; }
-        .status-in_progress { background: #e0e7ff; color: #3730a3; }
-        .status-completed { background: #dcfce7; color: #166534; }
+        .status-confirmed { background: #ecfdf5; color: #065f46; }
+        .status-in_progress { background: #ecfdf5; color: #065f46; }
+        .status-completed { background: #f0f9ff; color: #075985; }
         .status-cancelled { background: #fee2e2; color: #991b1b; }
 
         .order-card-body {
-            padding: 16px 24px;
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;
+            padding: 18px 22px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 16px;
         }
         .order-detail-item {
             display: flex; flex-direction: column; gap: 2px;
         }
-        .order-detail-label { font-size: 0.75rem; color: var(--gray-400); font-weight: 500; }
-        .order-detail-value { font-size: 0.875rem; font-weight: 600; color: var(--gray-800); }
+        .order-detail-label {
+            font-size: 0.66rem;
+            color: var(--gray-400);
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .order-detail-value { font-size: 0.84rem; font-weight: 700; color: var(--gray-800); }
+        .order-detail-item.is-wide { grid-column: 1 / -1; }
 
         .order-card-footer {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 14px 24px; background: var(--gray-50); border-top: 1px solid var(--gray-100);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 22px;
+            background: var(--gray-50);
+            border-top: 1px solid var(--gray-100);
         }
-        .order-total { font-size: 1.1rem; font-weight: 800; color: var(--gray-900); }
-        .order-actions { display: flex; gap: 8px; }
+        .order-total { font-size: 1.45rem; font-weight: 900; color: var(--primary); }
+        .order-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
         /* Owner section */
         .owner-renter-info {
@@ -133,9 +171,17 @@
         }
         .owner-renter-info span { font-weight: 600; color: var(--primary); }
 
-        @media (max-width: 600px) {
+        @media (min-width: 1024px) {
+            .orders-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 700px) {
             .order-card-header { flex-direction: column; gap: 12px; align-items: flex-start; }
-            .order-card-body { grid-template-columns: 1fr 1fr; }
+            .order-card-body { grid-template-columns: 1fr; }
+            .order-card-footer { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .order-actions { width: 100%; }
         }
     </style>
 

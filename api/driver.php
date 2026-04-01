@@ -12,6 +12,7 @@ require_once __DIR__ . '/../config/env.php';
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../sql/UserRepository.php';
 require_once __DIR__ . '/../sql/VehicleRepository.php';
+require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
 require_once __DIR__ . '/../sql/TripRepository.php';
 require_once __DIR__ . '/../sql/NotificationRepository.php';
@@ -25,6 +26,7 @@ if (!isset($_SESSION['user_id'])) {
 $userId = (string)$_SESSION['user_id'];
 $userRepo = new UserRepository($pdo);
 $vehicleRepo = new VehicleRepository($pdo);
+$vehicleImageRepo = new VehicleImageRepository($pdo);
 $bookingRepo = new BookingRepository($pdo);
 $tripRepo = new TripRepository($pdo);
 $notificationRepo = new NotificationRepository($pdo);
@@ -88,6 +90,25 @@ function driver_next_status(string $current): ?string
     };
 }
 
+function driver_booking_has_column(PDO $pdo, string $columnName): bool
+{
+    static $cache = null;
+    if (!is_array($cache)) {
+        $cache = [];
+        try {
+            $stmt = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'bookings'");
+            $cols = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+            foreach ($cols as $col) {
+                $cache[(string)$col] = true;
+            }
+        } catch (Throwable $e) {
+            $cache = [];
+        }
+    }
+
+    return isset($cache[$columnName]);
+}
+
 function driver_build_vehicle_name(array $booking): string
 {
     $parts = [];
@@ -103,6 +124,33 @@ function driver_build_vehicle_name(array $booking): string
 
     $name = trim(implode(' ', $parts));
     return $name !== '' ? $name : 'Assigned vehicle';
+}
+
+function driver_get_vehicle_image_url(VehicleImageRepository $vehicleImageRepo, string $vehicleId): string
+{
+    $vehicleId = trim($vehicleId);
+    if ($vehicleId === '') {
+        return '';
+    }
+
+    try {
+        $images = $vehicleImageRepo->listByVehicleId($vehicleId);
+        if (!$images) {
+            return '';
+        }
+
+        $first = $images[0];
+        $storagePath = trim((string)($first['storage_path'] ?? ''));
+        if ($storagePath === '') {
+            return '';
+        }
+
+        require_once __DIR__ . '/supabase-storage.php';
+        $storage = new SupabaseStorage();
+        return (string)$storage->getPublicUrl($storagePath);
+    } catch (Throwable $e) {
+        return '';
+    }
 }
 
 function driver_send_dispatch_email(array $booking, string $driverNameFallback = '', string $driverPhoneFallback = ''): void
@@ -168,6 +216,9 @@ try {
             driver_json(['success' => true, 'vehicle' => null]);
         }
 
+        $vehicleId = (string)($vehicle['id'] ?? '');
+        $vehicleImageUrl = driver_get_vehicle_image_url($vehicleImageRepo, $vehicleId);
+
         driver_json([
             'success' => true,
             'vehicle' => [
@@ -177,7 +228,13 @@ try {
                 'brand' => $vehicle['brand'] ?? '',
                 'model' => $vehicle['model'] ?? '',
                 'year' => $vehicle['year'] ?? '',
+                'color' => $vehicle['color'] ?? '',
+                'seats' => $vehicle['seats'] ?? null,
+                'fuel_type' => $vehicle['fuel_type'] ?? '',
+                'service_tier' => $vehicle['service_tier'] ?? '',
+                'tier' => $vehicle['service_tier'] ?? '',
                 'assigned_date' => $vehicle['assigned_date'] ?? null,
+                'image_url' => $vehicleImageUrl,
             ]
         ]);
     }
@@ -197,6 +254,10 @@ try {
             ? "(COALESCE(at.status, '') <> 'completed' AND b.status <> 'completed')"
             : "(COALESCE(at.status, '') = 'completed' OR b.status = 'completed')";
 
+        $pickupTimeExpr = driver_booking_has_column($pdo, 'pickup_time')
+            ? 'b.pickup_time'
+            : 'NULL::text AS pickup_time';
+
         $sql = "
             SELECT
                 b.id AS booking_id,
@@ -204,10 +265,12 @@ try {
                 b.pickup_location,
                 b.return_location,
                 b.pickup_date,
+                {$pickupTimeExpr},
                 b.total_amount,
                 b.ride_started_at,
                 b.ride_completed_at,
                 u.full_name AS passenger_name,
+                u.avatar_url AS passenger_avatar,
                 at.id AS trip_id,
                 at.status AS trip_status
             FROM bookings b
@@ -245,9 +308,11 @@ try {
                 'booking_id' => $row['booking_id'],
                 'trip_id' => $row['trip_id'] ?? null,
                 'passenger_name' => $row['passenger_name'] ?? 'Passenger',
+                'passenger_avatar' => $row['passenger_avatar'] ?? '',
                 'pickup_location' => $row['pickup_location'] ?? '',
                 'destination' => $row['return_location'] ?? '',
-                'pickup_time' => $row['pickup_date'] ?? null,
+                'pickup_date' => $row['pickup_date'] ?? null,
+                'pickup_time' => $row['pickup_time'] ?? null,
                 'price' => (float)($row['total_amount'] ?? 0),
                 'status' => $canonicalStatus,
                 'next_status' => driver_next_status($canonicalStatus),
@@ -307,6 +372,36 @@ try {
                 driver_json(['success' => false, 'message' => 'Duplicate action is not allowed'], 409);
             }
             driver_json(['success' => false, 'message' => 'Invalid status transition'], 409);
+        }
+
+        // Enforce one active started trip per driver at a time.
+        if ($nextStatus === 'on_trip') {
+            $lockSql = "
+                SELECT b.id
+                FROM bookings b
+                LEFT JOIN active_trips at ON at.booking_id = b.id
+                WHERE b.id <> :booking_id
+                  AND b.driver_id = :driver_id
+                  AND (
+                    b.status = 'in_progress'
+                    OR COALESCE(at.status, '') IN ('on_trip', 'journey_started')
+                  )
+                  AND COALESCE(b.ride_completed_at::text, '') = ''
+                LIMIT 1
+            ";
+
+            $lockStmt = $pdo->prepare($lockSql);
+            $lockStmt->execute([
+                ':booking_id' => $bookingId,
+                ':driver_id' => $userId,
+            ]);
+            $conflict = $lockStmt->fetch(PDO::FETCH_ASSOC);
+            if ($conflict) {
+                driver_json([
+                    'success' => false,
+                    'message' => 'You already have a trip in progress. Complete it before starting another trip.'
+                ], 409);
+            }
         }
 
         $shouldSendDispatchEmail = false;

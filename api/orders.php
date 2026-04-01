@@ -116,16 +116,21 @@ if ($action === 'my-orders') {
 
             if (!$hideVehicleForRenter) {
                 try {
-                    $imgs = $vehicleImageRepo->listByVehicleId($order['vehicle_id']);
-                    if ($imgs) {
-                        $img = $imgs[0];
-                        if (!empty($img['storage_path'])) {
-                            require_once __DIR__ . '/supabase-storage.php';
-                            $storageHelper = new SupabaseStorage();
-                            $order['thumbnail_url'] = $storageHelper->getPublicUrl($img['storage_path']);
-                        } elseif ($img['image_data']) {
-                            $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
-                            $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
+                    $vehicleId = trim((string)($order['vehicle_id'] ?? ''));
+                    if ($vehicleId !== '') {
+                        $imgs = $vehicleImageRepo->listByVehicleId($vehicleId);
+                        if ($imgs) {
+                            $img = $imgs[0];
+                            if (!empty($img['storage_path'])) {
+                                require_once __DIR__ . '/supabase-storage.php';
+                                $storageHelper = new SupabaseStorage();
+                                $order['thumbnail_url'] = $storageHelper->getPublicUrl($img['storage_path']);
+                            } elseif (!empty($img['image_data'])) {
+                                $imgData = is_resource($img['image_data']) ? stream_get_contents($img['image_data']) : $img['image_data'];
+                                $order['thumbnail_url'] = 'data:' . $img['mime_type'] . ';base64,' . base64_encode($imgData);
+                            } else {
+                                $order['thumbnail_url'] = '';
+                            }
                         } else {
                             $order['thumbnail_url'] = '';
                         }

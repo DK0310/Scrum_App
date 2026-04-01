@@ -1,26 +1,45 @@
 <?php include __DIR__ . '/layout/header.html.php'; ?>
 
 <section class="driver-shell">
-    <div class="driver-hero">
-        <div>
-            <h1>Driver Operations Center</h1>
-            <p>Manage your assigned orders and update trip progress in real time.</p>
+    <header class="driver-hero">
+        <div class="driver-hero-left">
+            <p class="driver-eyebrow">Fleet Command</p>
+            <h1>Driver Performance</h1>
+            <p>Handle active queue updates and complete trips with live dispatch sync.</p>
         </div>
-        <div id="driverAssignedVehicle" class="assigned-vehicle-card">
-            <div class="av-label">Assigned Vehicle</div>
-            <div class="av-value">Loading...</div>
+        <div class="driver-hero-rating">
+            <div class="driver-rate-icon">★</div>
+            <div>
+                <div class="driver-rate-label">Driver Rating</div>
+                <div class="driver-rate-value">4.98 / 5.0</div>
+            </div>
         </div>
-    </div>
+    </header>
 
-    <div class="driver-summary">
-        <article>
-            <span>Current Orders</span>
-            <strong id="currentOrderCount">0</strong>
+    <div class="driver-top-grid">
+        <article id="driverAssignedVehicle" class="assigned-vehicle-card">
+            <div class="assigned-vehicle-content">
+                <div class="av-label">Current Assignment</div>
+                <h2 class="av-title">Assigned Vehicle</h2>
+                <div class="av-value">Loading...</div>
+                <div class="av-meta" id="driverAssignedVehicleMeta">Waiting for vehicle data...</div>
+            </div>
+            <div class="assigned-vehicle-image-wrap">
+                <img id="driverAssignedVehicleImg" class="assigned-vehicle-image" src="" alt="Assigned vehicle" style="display:none;">
+                <div id="driverAssignedVehicleImgFallback" class="assigned-vehicle-image-fallback">No Image</div>
+            </div>
         </article>
-        <article>
-            <span>Completed Orders</span>
-            <strong id="pastOrderCount">0</strong>
-        </article>
+
+        <div class="driver-summary">
+            <article>
+                <span>Current Orders</span>
+                <strong id="currentOrderCount">0</strong>
+            </article>
+            <article>
+                <span>Completed Orders</span>
+                <strong id="pastOrderCount">0</strong>
+            </article>
+        </div>
     </div>
 
     <div class="driver-tabs">
@@ -38,9 +57,8 @@
                 <thead>
                     <tr>
                         <th>Passenger</th>
-                        <th>Pickup</th>
-                        <th>Destination</th>
-                        <th>Pickup Time</th>
+                        <th>Route</th>
+                        <th>Time Schedule</th>
                         <th>Price</th>
                         <th>Status</th>
                         <th>Action</th>
@@ -59,8 +77,7 @@
                 <thead>
                     <tr>
                         <th>Passenger</th>
-                        <th>Pickup</th>
-                        <th>Destination</th>
+                        <th>Route</th>
                         <th>Pickup Time</th>
                         <th>Price</th>
                         <th>Status</th>
@@ -74,84 +91,170 @@
 
 <style>
 .driver-shell {
-    max-width: 1200px;
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 96px 20px 36px;
+    padding: 96px 20px 40px;
+    color: #191c1d;
 }
 .driver-hero {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
-    align-items: stretch;
-    margin-bottom: 18px;
+    gap: 20px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+.driver-hero-left {
+    max-width: 700px;
+}
+.driver-eyebrow {
+    margin: 0 0 6px;
+    font-size: 0.73rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 800;
+    color: #005046;
 }
 .driver-hero h1 {
     margin: 0;
-    font-size: 2rem;
-    color: #0f172a;
+    font-size: 2.2rem;
+    color: #191c1d;
 }
 .driver-hero p {
     margin: 8px 0 0;
-    color: #475569;
+    color: #3e4946;
+}
+.driver-hero-rating {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f2f4f4;
+    border: 1px solid #d9e0de;
+    border-radius: 14px;
+    padding: 12px 14px;
+}
+.driver-rate-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #004f45;
+    color: #fff;
+    font-weight: 800;
+}
+.driver-rate-label {
+    font-size: 0.72rem;
+    color: #59605f;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+}
+.driver-rate-value {
+    font-weight: 800;
+    font-size: 1rem;
+}
+
+.driver-top-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
 }
 .assigned-vehicle-card {
-    min-width: 280px;
-    background: linear-gradient(135deg, #1d4ed8, #0ea5e9);
-    color: #fff;
-    border-radius: 12px;
-    padding: 16px;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    min-height: 220px;
+    background: #ffffff;
+    border: 1px solid #dce6e2;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 79, 69, 0.06);
+}
+.assigned-vehicle-content {
+    padding: 18px;
+}
+.assigned-vehicle-image-wrap {
+    position: relative;
+    background: #e6ebea;
+}
+.assigned-vehicle-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.assigned-vehicle-image-fallback {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: #64748b;
+    font-weight: 700;
 }
 .av-label {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    opacity: 0.9;
+    color: #005046;
+    font-weight: 800;
+}
+.av-title {
+    margin: 8px 0 4px;
+    font-size: 1.55rem;
+    color: #191c1d;
 }
 .av-value {
-    margin-top: 8px;
-    font-size: 1.02rem;
+    margin-top: 2px;
+    font-size: 0.98rem;
     font-weight: 700;
+    color: #1f2937;
+}
+.av-meta {
+    margin-top: 10px;
+    color: #5f6665;
+    font-size: 0.82rem;
 }
 .driver-summary {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 12px;
-    margin-bottom: 20px;
 }
 .driver-summary article {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 12px 14px;
+    background: #ffffff;
+    border: 1px solid #dce6e2;
+    border-radius: 14px;
+    padding: 16px;
 }
 .driver-summary span {
     display: block;
-    color: #64748b;
+    color: #5f6665;
     font-size: 0.78rem;
     margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
 }
 .driver-summary strong {
-    font-size: 1.5rem;
-    color: #0f172a;
+    font-size: 2.2rem;
+    color: #191c1d;
 }
 .driver-tabs {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     margin-bottom: 14px;
 }
 .driver-tabs button {
-    border: 1px solid #cbd5e1;
+    border: 1px solid #c5cfcc;
     background: #fff;
-    color: #334155;
-    padding: 10px 16px;
+    color: #27413c;
+    padding: 11px 16px;
     border-radius: 999px;
     cursor: pointer;
-    font-weight: 600;
+    font-weight: 700;
 }
 .driver-tabs button.active {
-    background: #0f172a;
+    background: #004f45;
     color: #fff;
-    border-color: #0f172a;
+    border-color: #004f45;
 }
 .driver-status-bar {
     margin-bottom: 12px;
@@ -173,9 +276,10 @@
 }
 .driver-table-wrap {
     background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border: 1px solid #dce6e2;
+    border-radius: 16px;
     overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 79, 69, 0.06);
 }
 .driver-table-wrap table {
     width: 100%;
@@ -189,11 +293,59 @@
     font-size: 0.87rem;
 }
 .driver-table-wrap th {
-    background: #f8fafc;
-    color: #334155;
-    font-size: 0.78rem;
+    background: #f2f4f4;
+    color: #44514e;
+    font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
+}
+.driver-passenger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.driver-passenger-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    object-fit: cover;
+    background: #e2e8f0;
+}
+.driver-passenger-fallback {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: #dde4e2;
+    color: #005046;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+.driver-route-main {
+    font-weight: 700;
+    color: #1f2937;
+}
+.driver-route-sub {
+    color: #64748b;
+    font-size: 0.76rem;
+}
+.driver-route-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.driver-route-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex: 0 0 8px;
+}
+.driver-route-dot-main {
+    background: #84d5c5;
+}
+.driver-route-dot-sub {
+    background: #004f45;
 }
 .status-chip {
     display: inline-flex;
@@ -205,7 +357,7 @@
     text-transform: uppercase;
 }
 .status-on_route { background: #e0f2fe; color: #075985; }
-.status-on_trip { background: #ede9fe; color: #5b21b6; }
+.status-on_trip { background: #dbf8e8; color: #00695c; }
 .status-completed { background: #dcfce7; color: #166534; }
 .order-action-btn {
     border: 0;
@@ -221,231 +373,16 @@
     opacity: 0.6;
 }
 @media (max-width: 980px) {
-    .driver-hero { flex-direction: column; }
+    .driver-hero { flex-direction: column; align-items: flex-start; }
+    .driver-top-grid { grid-template-columns: 1fr; }
+    .assigned-vehicle-card { grid-template-columns: 1fr; }
+    .assigned-vehicle-image-wrap { min-height: 180px; }
     .assigned-vehicle-card { min-width: 0; }
     .driver-table-wrap { overflow-x: auto; }
-    .driver-table-wrap table { min-width: 920px; }
+    .driver-table-wrap table { min-width: 980px; }
 }
 </style>
 
-<script>
-const DRIVER_API = '/api/driver.php';
-let currentOrders = [];
-let historyOrders = [];
-let activeTab = 'current';
-
-function driverSwitchTab(tab) {
-    activeTab = tab;
-    document.getElementById('tabCurrent').classList.toggle('active', tab === 'current');
-    document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
-    document.getElementById('panelCurrent').classList.toggle('active', tab === 'current');
-    document.getElementById('panelHistory').classList.toggle('active', tab === 'history');
-}
-
-function driverShowStatus(message, type) {
-    const bar = document.getElementById('driverStatusBar');
-    bar.style.display = 'block';
-    bar.className = 'driver-status-bar ' + type;
-    bar.textContent = message;
-    setTimeout(() => {
-        bar.style.display = 'none';
-    }, 3500);
-}
-
-function formatDateTime(input) {
-    if (!input) return '-';
-    const date = new Date(input);
-    if (Number.isNaN(date.getTime())) return input;
-    return date.toLocaleString('en-GB', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-    });
-}
-
-function formatMoney(value) {
-    const n = Number(value || 0);
-    return '$' + n.toFixed(2);
-}
-
-function escapeHtml(v) {
-    return String(v ?? '').replace(/[&<>"]/g, function(c) {
-        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
-    });
-}
-
-function nextActionLabel(status) {
-    if (status === 'on_route') return 'Start Trip';
-    if (status === 'on_trip') return 'Complete Trip';
-    return '';
-}
-
-function nextActionStatus(status) {
-    if (status === 'on_route') return 'on_trip';
-    if (status === 'on_trip') return 'completed';
-    return null;
-}
-
-async function driverRequest(action, payload = null) {
-    if (payload) {
-        const res = await fetch(DRIVER_API, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(Object.assign({action}, payload))
-        });
-        return res.json();
-    }
-
-    const res = await fetch(DRIVER_API + '?action=' + encodeURIComponent(action));
-    return res.json();
-}
-
-async function loadAssignedVehicle() {
-    const box = document.getElementById('driverAssignedVehicle');
-    try {
-        const data = await driverRequest('get_assigned_vehicle');
-        if (!data.success || !data.vehicle) {
-            box.querySelector('.av-value').textContent = 'No vehicle assigned';
-            return;
-        }
-        const vehicle = data.vehicle;
-        const label = (vehicle.name || 'Assigned vehicle') + ' | ' + (vehicle.license_plate || '-');
-        box.querySelector('.av-value').textContent = label;
-    } catch (e) {
-        box.querySelector('.av-value').textContent = 'Unable to load vehicle';
-    }
-}
-
-function renderCurrentOrders() {
-    const loading = document.getElementById('currentOrdersLoading');
-    const empty = document.getElementById('currentOrdersEmpty');
-    const table = document.getElementById('currentOrdersTable');
-    const body = document.getElementById('currentOrdersBody');
-
-    loading.style.display = 'none';
-    if (!currentOrders.length) {
-        empty.style.display = 'block';
-        table.style.display = 'none';
-        return;
-    }
-
-    empty.style.display = 'none';
-    table.style.display = 'table';
-
-    body.innerHTML = currentOrders.map(function(order) {
-        const status = order.status || 'on_route';
-        const next = nextActionStatus(status);
-        const actionBtn = next
-            ? '<button class="order-action-btn" data-booking-id="' + escapeHtml(order.booking_id) + '" data-target-status="' + escapeHtml(next) + '">' + escapeHtml(nextActionLabel(status)) + '</button>'
-            : '-';
-
-        return '<tr>' +
-            '<td>' + escapeHtml(order.passenger_name) + '</td>' +
-            '<td>' + escapeHtml(order.pickup_location) + '</td>' +
-            '<td>' + escapeHtml(order.destination) + '</td>' +
-            '<td>' + escapeHtml(formatDateTime(order.pickup_time)) + '</td>' +
-            '<td>' + escapeHtml(formatMoney(order.price)) + '</td>' +
-            '<td><span class="status-chip status-' + escapeHtml(status) + '">' + escapeHtml(status.replace('_', ' ')) + '</span></td>' +
-            '<td>' + actionBtn + '</td>' +
-        '</tr>';
-    }).join('');
-
-    document.querySelectorAll('.order-action-btn').forEach(function(btn) {
-        btn.addEventListener('click', async function() {
-            if (btn.disabled) return;
-            btn.disabled = true;
-            const bookingId = btn.getAttribute('data-booking-id');
-            const targetStatus = btn.getAttribute('data-target-status');
-
-            try {
-                const data = await driverRequest('advance_order_status', {
-                    booking_id: bookingId,
-                    target_status: targetStatus
-                });
-
-                if (!data.success) {
-                    driverShowStatus(data.message || 'Unable to update status', 'error');
-                    btn.disabled = false;
-                    return;
-                }
-
-                driverShowStatus('Order updated to ' + data.status.replace('_', ' '), 'success');
-                await Promise.all([loadCurrentOrders(), loadHistoryOrders()]);
-            } catch (e) {
-                driverShowStatus('Network error while updating order', 'error');
-                btn.disabled = false;
-            }
-        });
-    });
-}
-
-function renderHistoryOrders() {
-    const loading = document.getElementById('historyOrdersLoading');
-    const empty = document.getElementById('historyOrdersEmpty');
-    const table = document.getElementById('historyOrdersTable');
-    const body = document.getElementById('historyOrdersBody');
-
-    loading.style.display = 'none';
-    if (!historyOrders.length) {
-        empty.style.display = 'block';
-        table.style.display = 'none';
-        return;
-    }
-
-    empty.style.display = 'none';
-    table.style.display = 'table';
-
-    body.innerHTML = historyOrders.map(function(order) {
-        return '<tr>' +
-            '<td>' + escapeHtml(order.passenger_name) + '</td>' +
-            '<td>' + escapeHtml(order.pickup_location) + '</td>' +
-            '<td>' + escapeHtml(order.destination) + '</td>' +
-            '<td>' + escapeHtml(formatDateTime(order.pickup_time)) + '</td>' +
-            '<td>' + escapeHtml(formatMoney(order.price)) + '</td>' +
-            '<td><span class="status-chip status-completed">completed</span></td>' +
-        '</tr>';
-    }).join('');
-}
-
-async function loadCurrentOrders() {
-    document.getElementById('currentOrdersLoading').style.display = 'block';
-    document.getElementById('currentOrdersEmpty').style.display = 'none';
-    document.getElementById('currentOrdersTable').style.display = 'none';
-
-    try {
-        const data = await driverRequest('get_current_orders');
-        currentOrders = data.success ? (data.orders || []) : [];
-        document.getElementById('currentOrderCount').textContent = String(currentOrders.length);
-        renderCurrentOrders();
-    } catch (e) {
-        currentOrders = [];
-        document.getElementById('currentOrderCount').textContent = '0';
-        renderCurrentOrders();
-        driverShowStatus('Unable to load current orders', 'error');
-    }
-}
-
-async function loadHistoryOrders() {
-    document.getElementById('historyOrdersLoading').style.display = 'block';
-    document.getElementById('historyOrdersEmpty').style.display = 'none';
-    document.getElementById('historyOrdersTable').style.display = 'none';
-
-    try {
-        const data = await driverRequest('get_past_orders');
-        historyOrders = data.success ? (data.orders || []) : [];
-        document.getElementById('pastOrderCount').textContent = String(historyOrders.length);
-        renderHistoryOrders();
-    } catch (e) {
-        historyOrders = [];
-        document.getElementById('pastOrderCount').textContent = '0';
-        renderHistoryOrders();
-        driverShowStatus('Unable to load order history', 'error');
-    }
-}
-
-document.addEventListener('DOMContentLoaded', async function() {
-    await loadAssignedVehicle();
-    await Promise.all([loadCurrentOrders(), loadHistoryOrders()]);
-});
-</script>
+<script src="/resources/js/driver.js"></script>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>

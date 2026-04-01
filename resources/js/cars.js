@@ -15,10 +15,8 @@
   // ===== FILTER STATE =====
   let filterState = {
     brand: '',
-    transmission: '',
-    fuel: '',
+    seats: '',
     max_price: 500,
-    category: '',
     tier: '',
     search: ''
   };
@@ -26,30 +24,16 @@
   // Init from URL params
   function initFromURL() {
     const p = new URLSearchParams(window.location.search);
-    const rawCategory = p.get('category') || '';
-    const rawTier = p.get('tier') || '';
-    const legacyTierValues = ['eco', 'standard', 'luxury', 'premium'];
 
     filterState.brand = p.get('brand') || '';
-    filterState.transmission = p.get('transmission') || '';
-    filterState.fuel = p.get('fuel') || '';
+    filterState.seats = p.get('seats') || '';
     filterState.max_price = parseInt(p.get('max_price')) || 500;
-    if (rawTier) {
-      filterState.tier = rawTier;
-      filterState.category = rawCategory;
-    } else if (legacyTierValues.includes(rawCategory.toLowerCase())) {
-      // Backward compatibility for old links like /cars.php?category=eco
-      filterState.tier = rawCategory;
-      filterState.category = '';
-    } else {
-      filterState.tier = '';
-      filterState.category = rawCategory;
-    }
+    filterState.tier = p.get('tier') || '';
     filterState.search = p.get('search') || '';
 
     // Set active chips from URL (for static filters)
-    setActiveChip('transFilters', filterState.transmission);
-    setActiveChip('fuelFilters', filterState.fuel);
+    setActiveChip('tierFilters', filterState.tier);
+    setActiveChip('seatFilters', filterState.seats);
 
     // Set price range
     const range = document.getElementById('priceRange');
@@ -85,9 +69,9 @@
     }
   }
 
-  // ===== FILTER CHIP CLICK (for static filters: transmission, fuel) =====
+  // ===== FILTER CHIP CLICK (for static filters: tier, seats) =====
   function bindStaticChips() {
-    document.querySelectorAll('#transFilters .filter-chip, #fuelFilters .filter-chip').forEach(chip => {
+    document.querySelectorAll('#tierFilters .filter-chip, #seatFilters .filter-chip').forEach(chip => {
       chip.addEventListener('click', function() {
         const container = this.closest('.filter-options');
         if (container) {
@@ -97,10 +81,19 @@
           // Update filter state
           const containerId = container.id;
           const val = this.dataset.value;
-          if (containerId === 'transFilters') filterState.transmission = val;
-          else if (containerId === 'fuelFilters') filterState.fuel = val;
+          if (containerId === 'tierFilters') filterState.tier = val;
+          else if (containerId === 'seatFilters') filterState.seats = val;
         }
       });
+    });
+  }
+
+  function bindBrandSelect() {
+    const brandSelect = document.getElementById('brandSelect');
+    if (!brandSelect) return;
+
+    brandSelect.addEventListener('change', function() {
+      filterState.brand = this.value || '';
     });
   }
 
@@ -135,64 +128,28 @@
       const data = await res.json();
 
       if (data.success) {
-        // Render brand chips
-        const brandContainer = document.getElementById('brandFilters');
-        if (brandContainer) {
-          const brandLoading = document.getElementById('brandLoading');
-          if (brandLoading) brandLoading.remove();
+        // Render brand options
+        const brandSelect = document.getElementById('brandSelect');
+        if (brandSelect && data.brands && data.brands.length > 0) {
+          const safeBrands = data.brands.filter(Boolean);
+          brandSelect.innerHTML = '<option value="">All Brands</option>' + safeBrands.map(brand =>
+            '<option value="' + escapeHtml(String(brand)) + '">' + escapeHtml(String(brand)) + '</option>'
+          ).join('');
 
-          if (data.brands && data.brands.length > 0) {
-            data.brands.forEach(brand => {
-              const chip = document.createElement('button');
-              chip.className = 'filter-chip';
-              chip.dataset.value = brand;
-              chip.textContent = brand;
-              brandContainer.appendChild(chip);
-            });
+          if (filterState.brand) {
+            brandSelect.value = filterState.brand;
           }
-          // Set active from URL
-          setActiveChip('brandFilters', filterState.brand);
-          bindChipClicks(brandContainer, 'brand');
-        }
-
-        // Render category chips
-        const catContainer = document.getElementById('categoryFilters');
-        if (catContainer) {
-          const catLoading = document.getElementById('categoryLoading');
-          if (catLoading) catLoading.remove();
-
-          if (data.categories && data.categories.length > 0) {
-            data.categories.forEach(cat => {
-              const chip = document.createElement('button');
-              chip.className = 'filter-chip';
-              chip.dataset.value = cat;
-              chip.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
-              catContainer.appendChild(chip);
-            });
-          }
-          // Set active from URL
-          setActiveChip('categoryFilters', filterState.category);
-          bindChipClicks(catContainer, 'category');
         }
       }
     } catch (err) {
-      // Remove loading text on error
-      const bl = document.getElementById('brandLoading');
-      const cl = document.getElementById('categoryLoading');
-      if (bl) bl.textContent = 'Failed to load';
-      if (cl) cl.textContent = 'Failed to load';
+      const brandSelect = document.getElementById('brandSelect');
+      if (brandSelect && brandSelect.options.length <= 1) {
+        const fallback = document.createElement('option');
+        fallback.value = '';
+        fallback.textContent = 'Failed to load brands';
+        brandSelect.appendChild(fallback);
+      }
     }
-  }
-
-  // Bind click events for dynamically created chips
-  function bindChipClicks(container, filterKey) {
-    container.querySelectorAll('.filter-chip').forEach(chip => {
-      chip.addEventListener('click', function() {
-        container.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-        this.classList.add('active');
-        filterState[filterKey] = this.dataset.value;
-      });
-    });
   }
 
   // ===== SEARCH WITH SUGGESTIONS (uses navbar search bar) =====
@@ -291,6 +248,8 @@
         if (type === 'brand') {
           filterState.search = '';
           filterState.brand = text;
+          const brandSelect = document.getElementById('brandSelect');
+          if (brandSelect) brandSelect.value = text;
           applyAllFilters();
         } else {
           filterState.search = text;
@@ -321,11 +280,9 @@
     const params = new URLSearchParams();
     if (filterState.search) params.set('search', filterState.search);
     if (filterState.brand) params.set('brand', filterState.brand);
-    if (filterState.transmission) params.set('transmission', filterState.transmission);
-    if (filterState.fuel) params.set('fuel', filterState.fuel);
-    if (filterState.max_price < 500) params.set('max_price', filterState.max_price);
-    if (filterState.category) params.set('category', filterState.category);
     if (filterState.tier) params.set('tier', filterState.tier);
+    if (filterState.seats) params.set('seats', filterState.seats);
+    if (filterState.max_price < 500) params.set('max_price', filterState.max_price);
     window.location.href = '/cars.php?' + params.toString();
   }
 
@@ -337,19 +294,12 @@
   async function loadCars() {
     try {
       const params = new URLSearchParams(window.location.search);
-      const rawCategory = params.get('category') || '';
-      const rawTier = params.get('tier') || '';
-      const legacyTierValues = ['eco', 'standard', 'luxury', 'premium'];
-      const effectiveTier = rawTier || (legacyTierValues.includes(rawCategory.toLowerCase()) ? rawCategory : '');
-      const effectiveCategory = rawTier ? rawCategory : (legacyTierValues.includes(rawCategory.toLowerCase()) ? '' : rawCategory);
 
       const payload = {
         action: 'list',
-        category: effectiveCategory,
-        tier: effectiveTier,
+        tier: params.get('tier') || '',
+        seats: params.get('seats') || '',
         brand: params.get('brand') || '',
-        fuel: params.get('fuel') || '',
-        transmission: params.get('transmission') || '',
         max_price: params.get('max_price') || 500,
         location: params.get('location') || '',
         search: params.get('search') || '',
@@ -404,7 +354,8 @@
     const activeFilters = [];
     if (filterState.search) activeFilters.push('"' + filterState.search + '"');
     if (filterState.brand) activeFilters.push(filterState.brand);
-    if (filterState.category) activeFilters.push(filterState.category);
+    if (filterState.tier) activeFilters.push(filterState.tier + ' tier');
+    if (filterState.seats) activeFilters.push(filterState.seats + ' seats');
     const filterSuffix = activeFilters.length > 0 ? ' for ' + activeFilters.join(', ') : '';
 
     if (countText) {
@@ -414,49 +365,49 @@
     grid.innerHTML = cars.map(car => {
       const images = car.images || [];
       const hasValidImage = images.length > 0 && images[0] && (images[0].startsWith('http') || images[0].startsWith('/api/'));
+      const displaySeats = normalizeSeatTier(car.seats);
+      const plate = (car.license_plate || '').trim() || 'No plate';
       const imageHTML = hasValidImage
         ? '<img src="' + images[0] + '" alt="' + escapeHtml(car.brand + ' ' + car.model) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="no-image-placeholder" style="display:none;">No Photo</div>'
         : '<div class="no-image-placeholder">No Photo</div>';
 
-      const fuelIcon = car.fuel_type === 'electric' ? '⚡' : '⛽';
-      const features = (car.features || []).slice(0, 3).map(f => '<span class="car-feature">✓ ' + escapeHtml(f) + '</span>').join('');
       const rating = parseFloat(car.avg_rating) || 0;
-      const stars = '★'.repeat(Math.round(rating)) + '☆'.repeat(5 - Math.round(rating));
 
       // Vehicle status badge
       const isAvailable = (car.status || 'available') === 'available';
       const statusBadge = isAvailable
-        ? '<span class="car-status-badge available">✓ Available</span>'
-        : '<span class="car-status-badge rented">🔒 Rented</span>';
+        ? '<span class="car-status-badge available">Available</span>'
+        : '<span class="car-status-badge rented">Rented</span>';
+
+      const tierBadge = '<span class="car-tier-badge" style="background:' + getTierBgColor(car.service_tier) + ';color:' + getTierTextColor(car.service_tier) + ';">' +
+        escapeHtml((car.service_tier || 'standard').toUpperCase()) + ' TIER</span>';
 
       return '<div class="car-card' + (isAvailable ? '' : ' car-rented') + '">' +
         '<div class="car-card-image">' +
           imageHTML +
           statusBadge +
-          '<button class="car-card-favorite" onclick="event.stopPropagation();toggleFavorite(this)">🤍</button>' +
+          '<button class="car-card-favorite" onclick="event.stopPropagation();toggleFavorite(this)"><span class="material-symbols-outlined">favorite_border</span></button>' +
         '</div>' +
         '<div class="car-card-body">' +
-          '<h3 class="car-card-title">' + escapeHtml(car.brand + ' ' + car.model + ' ' + car.year) + '</h3>' +
-          '<p class="car-card-subtitle">' + escapeHtml(car.category + ' • ' + car.transmission + ' • ' + car.fuel_type) + '</p>' +
-          '<div class="car-card-features">' +
-            '<span class="car-feature">👤 ' + car.seats + ' seats</span>' +
-            '<span class="car-feature">' + fuelIcon + ' ' + escapeHtml(car.consumption || 'N/A') + '</span>' +
-            features +
+          '<div class="car-card-head">' +
+            '<h3 class="car-card-title">' + escapeHtml(car.brand + ' ' + car.model + ' ' + car.year) + '</h3>' +
+            '<div class="car-card-rating"><span class="material-symbols-outlined">star</span><span>' + rating.toFixed(1) + '</span></div>' +
+          '</div>' +
+          '<div class="car-card-meta">' +
+            '<span class="car-meta-chip"><span class="material-symbols-outlined">event_seat</span><span>' + displaySeats + ' seats</span></span>' +
+            '<span class="car-meta-chip"><span class="material-symbols-outlined">badge</span><span>' + escapeHtml(plate) + '</span></span>' +
           '</div>' +
           '<div class="car-card-footer">' +
-            '<div class="car-card-tier">' +
-              '<span class="car-tier-badge" style="background:' + getTierColor(car.service_tier) + ';color:white;padding:4px 12px;border-radius:20px;font-size:0.85rem;font-weight:600;text-transform:capitalize;">' +
-                getTierIcon(car.service_tier) + ' ' + (car.service_tier || 'standard') +
-              '</span>' +
-            '</div>' +
-            '<div class="car-card-rating">' +
-              '<span class="stars">' + stars + '</span>' +
-              '<span class="count">(' + (car.total_reviews || 0) + ')</span>' +
-            '</div>' +
+            tierBadge +
           '</div>' +
         '</div>' +
       '</div>';
     }).join('');
+  }
+
+  function normalizeSeatTier(seats) {
+    const n = parseInt(seats, 10) || 0;
+    return n >= 7 ? 7 : 4;
   }
 
   function getTierColor(tier) {
@@ -466,6 +417,20 @@
       'luxury': '#f59e0b'
     };
     return colors[tier] || '#0f766e';
+  }
+
+  function getTierBgColor(tier) {
+    const key = String(tier || 'standard').toLowerCase();
+    if (key === 'eco') return '#d1fae5';
+    if (key === 'luxury' || key === 'premium') return '#ffdbd1';
+    return '#dde4e2';
+  }
+
+  function getTierTextColor(tier) {
+    const key = String(tier || 'standard').toLowerCase();
+    if (key === 'eco') return '#065f46';
+    if (key === 'luxury' || key === 'premium') return '#723522';
+    return '#414847';
   }
 
   function getTierIcon(tier) {
@@ -687,8 +652,14 @@
   }
 
   function toggleFavorite(btn) {
+    const icon = btn.querySelector('.material-symbols-outlined');
     btn.classList.toggle('active');
-    btn.textContent = btn.classList.contains('active') ? '❤️' : '🤍';
+    if (icon) {
+      icon.textContent = btn.classList.contains('active') ? 'favorite' : 'favorite_border';
+      icon.style.fontVariationSettings = btn.classList.contains('active')
+        ? "'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24"
+        : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24";
+    }
     if (typeof showToast === 'function') {
       showToast(btn.classList.contains('active') ? 'Added to favorites!' : 'Removed from favorites.', 'success');
     }
@@ -710,6 +681,7 @@
   document.addEventListener('DOMContentLoaded', function() {
     initFromURL();
     bindStaticChips();
+    bindBrandSelect();
     bindPriceRange();
     bindSearchFunctionality();
     loadCars();

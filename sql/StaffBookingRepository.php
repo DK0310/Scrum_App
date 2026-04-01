@@ -27,6 +27,8 @@ final class StaffBookingRepository
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS phone_customer_email VARCHAR(255)");
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS created_by_staff_id UUID");
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS booking_ref VARCHAR(50)");
+            // Call-center minicab requests should allow null daily price.
+            $this->pdo->exec("ALTER TABLE bookings ALTER COLUMN price_per_day DROP NOT NULL");
         } catch (PDOException $e) {
             // Columns may already exist
         }

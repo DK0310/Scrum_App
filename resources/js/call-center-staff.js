@@ -413,16 +413,16 @@
     }
 
     async function loadRequests() {
-        el.requestsTable.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+        el.requestsTable.innerHTML = '<div class="cc-request-card">Loading...</div>';
         const data = await apiGet({ action: 'get_my_requests', limit: 100 });
         if (!data.success) {
-            el.requestsTable.innerHTML = '<tr><td colspan="5">Cannot load requests</td></tr>';
+            el.requestsTable.innerHTML = '<div class="cc-request-card">Cannot load requests</div>';
             return;
         }
 
         const rows = data.requests || [];
         if (rows.length === 0) {
-            el.requestsTable.innerHTML = '<tr><td colspan="5">No request yet</td></tr>';
+            el.requestsTable.innerHTML = '<div class="cc-request-card">No request yet</div>';
             return;
         }
 
@@ -430,7 +430,7 @@
             const bookingId = escapeHtml(r.id || '');
             const ref = escapeHtml(r.booking_ref || bookingId);
             const customer = escapeHtml(r.customer_name || '-');
-            const date = escapeHtml(r.pickup_date || '-');
+            const date = escapeHtml(formatDateTime(r.pickup_date || '-'));
             const status = escapeHtml(r.status || 'pending');
 
             let actionHtml = '<button class="cc-btn cc-btn-danger" data-action="delete" data-id="' + bookingId + '">Delete</button>';
@@ -438,13 +438,20 @@
                 actionHtml = '<button class="cc-btn cc-btn-secondary" data-action="cancel" data-id="' + bookingId + '">Cancel</button> ' + actionHtml;
             }
 
-            return '<tr>' +
-                '<td>' + ref + '</td>' +
-                '<td>' + customer + '</td>' +
-                '<td>' + date + '</td>' +
-                '<td><span class="' + statusClass(status) + '">' + status + '</span></td>' +
-                '<td>' + actionHtml + '</td>' +
-                '</tr>';
+            return '<article class="cc-request-card">'
+                + '<div class="cc-request-head">'
+                +   '<div>'
+                +     '<h4 class="cc-request-title">' + customer + '</h4>'
+                +     '<div class="cc-request-meta">Request ID: ' + ref + '</div>'
+                +   '</div>'
+                +   '<span class="' + statusClass(status) + '">' + status + '</span>'
+                + '</div>'
+                + '<div class="cc-request-row">'
+                +   '<div>Pickup: ' + date + '</div>'
+                +   '<div>Tier: ' + escapeHtml(String(r.ride_tier || '-')) + '</div>'
+                + '</div>'
+                + '<div class="cc-request-actions">' + actionHtml + '</div>'
+                + '</article>';
         }).join('');
 
         Array.from(el.requestsTable.querySelectorAll('button[data-action]')).forEach((btn) => {

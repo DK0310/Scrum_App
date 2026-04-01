@@ -126,21 +126,10 @@ async function loadProfile() {
         originalEmail = u.email || '';
         document.getElementById('pPhone').value = u.phone || '';
         document.getElementById('pDob').value = u.date_of_birth ? u.date_of_birth.substring(0, 10) : '';
-        document.getElementById('pRole').value = u.role || 'user';
         document.getElementById('pMembership').value = u.membership || 'free';
-        document.getElementById('pAddress').value = u.address || '';
-        document.getElementById('pCity').value = u.city || '';
-        document.getElementById('pCountry').value = u.country || '';
-        document.getElementById('pLicense').value = u.driving_license || '';
-        document.getElementById('pLicenseExpiry').value = u.license_expiry ? u.license_expiry.substring(0, 10) : '';
-        document.getElementById('pIdCard').value = u.id_card_number || '';
+        const membershipTextEl = document.getElementById('pMembershipText');
+        if (membershipTextEl) membershipTextEl.textContent = (u.membership || 'free').toLowerCase();
         document.getElementById('pBio').value = u.bio || '';
-
-        // Disable role for admin
-        if (u.role === 'admin') {
-            document.getElementById('pRole').disabled = true;
-            document.getElementById('pRole').innerHTML = '<option value="admin">⚙️ Administrator</option>';
-        }
 
         // Security tab
         document.getElementById('emailVerifiedStatus').textContent = u.email_verified ? 'Your email is verified' : 'Not verified yet';
@@ -201,13 +190,6 @@ async function doSaveProfile() {
         full_name: document.getElementById('pFullName').value.trim(),
         phone: document.getElementById('pPhone').value.trim(),
         date_of_birth: document.getElementById('pDob').value || null,
-        role: document.getElementById('pRole').value,
-        address: document.getElementById('pAddress').value.trim(),
-        city: document.getElementById('pCity').value.trim(),
-        country: document.getElementById('pCountry').value.trim(),
-        driving_license: document.getElementById('pLicense').value.trim(),
-        license_expiry: document.getElementById('pLicenseExpiry').value || null,
-        id_card_number: document.getElementById('pIdCard').value.trim(),
         bio: document.getElementById('pBio').value.trim(),
     };
 
@@ -232,32 +214,6 @@ async function doSaveProfile() {
             // Update header name
             const nameLink = document.querySelector('.navbar-actions a[href="/profile.php"]');
             if (nameLink) nameLink.innerHTML = '👤 ' + payload.full_name;
-
-            // Instant role change — update navbar UI
-            const newRole = payload.role;
-            const myVehiclesLink = document.querySelector('.navbar-nav a[href="my-vehicles.php"]');
-
-            if (['controlstaff', 'admin'].includes(newRole)) {
-                // Show My Vehicles link - controlstaff/admin can manage vehicles
-                if (!myVehiclesLink) {
-                    const ordersLi = document.querySelector('.navbar-nav a[href="/orders.php"]')?.parentElement;
-                    if (ordersLi) {
-                        const li = document.createElement('li');
-                        li.innerHTML = '<a href="my-vehicles.php" style="color:var(--primary);font-weight:600;">🚗 My Vehicles</a>';
-                        ordersLi.after(li);
-                    }
-                }
-            } else if (['user', 'driver', 'callcenterstaff'].includes(newRole)) {
-                // Remove My Vehicles link for non-control roles
-                if (myVehiclesLink) myVehiclesLink.parentElement.remove();
-            }
-
-            const roleBadge = newRole === 'admin' ? '⚙️ Administrator' 
-                : newRole === 'controlstaff' ? '🧭 Control Staff'
-                : newRole === 'callcenterstaff' ? '📞 Call Center Staff'
-                : newRole === 'driver' ? '🚗 Driver'
-                : newRole === 'user' ? '👤 Customer' : '👤 Customer';
-            document.getElementById('profileRole').textContent = roleBadge;
 
             // Reload profile data
             loadProfile();

@@ -39,8 +39,24 @@
         driverFilter: document.getElementById('ctrlDriverStatusFilter'),
         reloadDriversBtn: document.getElementById('ctrlReloadDrivers'),
         driversTable: document.getElementById('ctrlDriversTable'),
-        driverMsg: document.getElementById('ctrlDriverStatusMsg')
+        driverMsg: document.getElementById('ctrlDriverStatusMsg'),
+
+        kpiOrders: document.getElementById('ctrlKpiOrders'),
+        kpiDrivers: document.getElementById('ctrlKpiDrivers'),
+        kpiVehicles: document.getElementById('ctrlKpiVehicles')
     };
+
+    function updateKpis() {
+        if (el.kpiOrders) {
+            el.kpiOrders.textContent = String(ordersCache.length || 0);
+        }
+        if (el.kpiDrivers) {
+            el.kpiDrivers.textContent = String(driversCache.length || 0);
+        }
+        if (el.kpiVehicles) {
+            el.kpiVehicles.textContent = String(vehiclesCache.length || 0);
+        }
+    }
 
     function setOrderMsg(text, isError) {
         el.orderMsg.textContent = text || '';
@@ -61,6 +77,7 @@
     function statusBadgeClass(status) {
         if (status === 'in_progress') return 'ctrl-badge ctrl-in-progress';
         if (status === 'done' || status === 'completed') return 'ctrl-badge ctrl-done';
+        if (status === 'cancelled' || status === 'canceled') return 'ctrl-badge ctrl-pending';
         return 'ctrl-badge ctrl-pending';
     }
 
@@ -75,7 +92,13 @@
 
     async function apiGet(params) {
         const qs = new URLSearchParams(params);
-        const res = await fetch(API + '?' + qs.toString());
+        qs.set('_ts', String(Date.now()));
+        const res = await fetch(API + '?' + qs.toString(), {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        });
         const raw = await res.text();
         if (!res.ok) {
             throw new Error('HTTP ' + res.status + ': ' + raw.substring(0, 200));
@@ -147,6 +170,7 @@
 
             ordersCache = data.orders || [];
             renderOrdersTable();
+            updateKpis();
             setOrderMsg('Loaded ' + ordersCache.length + ' order(s).');
         } catch (err) {
             setOrderMsg('Error loading orders: ' + (err?.message || 'Unknown error'), true);
@@ -156,7 +180,7 @@
 
     function renderOrdersTable() {
         if (!ordersCache.length) {
-            el.ordersTable.innerHTML = '<tr><td colspan="5">No orders found</td></tr>';
+            el.ordersTable.innerHTML = '<tr><td colspan="6">No orders found</td></tr>';
             return;
         }
 
@@ -166,14 +190,17 @@
             const pickupDate = escapeHtml(o.pickup_date || '-');
             const total = Number(o.total_amount || 0).toFixed(2);
             const status = normalizeDisplayStatus(o.status);
-            const nextAction = getNextStatusAction(status);
-            const nextActionHtml = nextAction
-                ? '<button class="ctrl-btn ctrl-btn-primary" data-role="advance-order" data-id="' + id + '" data-next-status="' + nextAction.nextStatus + '">' + escapeHtml(nextAction.label) + '</button>'
-                : '<button class="ctrl-btn ctrl-btn-muted" disabled>No further action</button>';
-            const canReject = status === 'pending';
-            const rejectBtnHtml = canReject
-                ? '<button class="ctrl-btn ctrl-btn-danger" data-role="reject-order" data-id="' + id + '">Reject</button>'
-                : '<button class="ctrl-btn ctrl-btn-muted" data-role="reject-order" data-id="' + id + '" disabled style="opacity:0.45;cursor:not-allowed;">Reject</button>';
+            let actionHtml = '<div class="ctrl-order-actions">' +
+                '<button class="ctrl-btn ctrl-btn-muted" data-role="detail-order" data-id="' + id + '">View</button>' +
+            '</div>';
+            if (status === 'pending') {
+                actionHtml =
+                    '<div class="ctrl-order-actions">' +
+                        '<button class="ctrl-btn ctrl-btn-muted" data-role="detail-order" data-id="' + id + '">View</button>' +
+                        '<button class="ctrl-btn ctrl-btn-primary" data-role="advance-order" data-id="' + id + '" data-next-status="in_progress">Confirm</button>' +
+                        '<button class="ctrl-btn ctrl-btn-danger" data-role="reject-order" data-id="' + id + '">Reject</button>' +
+                    '</div>';
+            }
 
             return '<tr>' +
                 '<td>' + id + '</td>' +
@@ -181,14 +208,10 @@
                 '<td>' + pickupDate + '</td>' +
                 '<td>$' + total + '</td>' +
                 '<td class="ctrl-order-status-cell">' +
-                    '<div class="ctrl-order-status-wrap">' +
-                        '<span class="' + statusBadgeClass(status) + '">' + escapeHtml(status) + '</span>' +
-                        nextActionHtml +
-                        '<div class="ctrl-order-actions">' +
-                            '<button class="ctrl-btn ctrl-btn-muted" data-role="detail-order" data-id="' + id + '">View</button>' +
-                            rejectBtnHtml +
-                        '</div>' +
-                    '</div>' +
+                    '<span class="' + statusBadgeClass(status) + '">' + escapeHtml(status) + '</span>' +
+                '</td>' +
+                '<td class="ctrl-order-actions-cell">' +
+                    actionHtml +
                 '</td>' +
                 '</tr>';
         }).join('');
@@ -257,22 +280,6 @@
             });
         });
 
-        Array.from(el.ordersTable.querySelectorAll('button[data-role="detail-order"]')).forEach((btn) => {
-            btn.addEventListener('click', async () => {
-                const id = btn.getAttribute('data-id');
-                if (!id) return;
-
-                const data = await apiGet({ action: 'get_order', order_id: id });
-                if (!data.success) {
-                    setOrderMsg(data.message || 'Cannot load order detail', true);
-                    return;
-                }
-
-                const o = data.order || {};
-                openOrderDetailModal(o);
-            });
-        });
-
         Array.from(el.ordersTable.querySelectorAll('button[data-role="reject-order"]')).forEach((btn) => {
             btn.addEventListener('click', async () => {
                 if (btn.disabled) return;
@@ -280,15 +287,52 @@
                 if (!id) return;
                 if (!confirm('Reject this pending order? The customer will see it as cancelled.')) return;
 
-                const data = await apiPost({ action: 'reject_order', booking_id: id });
-                if (!data.success) {
-                    setOrderMsg(data.message || 'Reject failed', true);
-                    return;
-                }
+                btn.disabled = true;
+                const previousText = btn.textContent;
+                btn.textContent = 'Rejecting...';
 
-                setOrderMsg('Order rejected.');
-                await loadOrders();
-                await loadVehicles();
+                try {
+                    const data = await apiPost({ action: 'reject_order', booking_id: id });
+                    if (!data.success) {
+                        setOrderMsg(data.message || 'Reject failed', true);
+                        return;
+                    }
+
+                    // Realtime feedback: reflect cancellation immediately in current table data.
+                    const target = ordersCache.find((o) => String(o.id) === String(id));
+                    if (target) {
+                        target.status = 'cancelled';
+                    }
+                    renderOrdersTable();
+
+                    setOrderMsg('Order rejected.');
+                    await loadOrders();
+                    await loadVehicles();
+                } catch (err) {
+                    setOrderMsg('Reject failed: ' + (err && err.message ? err.message : 'Unknown error'), true);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = previousText;
+                }
+            });
+        });
+
+        Array.from(el.ordersTable.querySelectorAll('button[data-role="detail-order"]')).forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const id = btn.getAttribute('data-id');
+                if (!id) return;
+
+                try {
+                    const data = await apiGet({ action: 'get_order', order_id: id });
+                    if (!data.success) {
+                        setOrderMsg(data.message || 'Cannot load order detail', true);
+                        return;
+                    }
+
+                    openOrderDetailModal(data.order || {});
+                } catch (err) {
+                    setOrderMsg('Error loading order detail: ' + (err && err.message ? err.message : 'Unknown error'), true);
+                }
             });
         });
     }
@@ -330,6 +374,9 @@
         const pickupText = pickupLocation + ' @ ' + pickupDateTime;
         const destinationText = escapeHtml(order.return_location || '-');
         const amountText = '£' + Number(order.total_amount || 0).toFixed(2);
+        const serviceTier = escapeHtml(order.service_tier || order.ride_tier || '-');
+        const seatsText = escapeHtml(String(order.seats || order.number_of_passengers || '-'));
+        const pickupTimeText = escapeHtml(order.pickup_time || '-');
 
         el.orderModalTitle.textContent = 'Order #' + (order.id || '');
         el.orderModalBody.innerHTML =
@@ -337,8 +384,11 @@
                 '<div class="ctrl-kv"><div class="ctrl-k">Customer</div><div class="ctrl-v">' + customerName + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Status</div><div class="ctrl-v">' + status + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Pickup</div><div class="ctrl-v">' + pickupText + '</div></div>' +
+                '<div class="ctrl-kv"><div class="ctrl-k">Pickup Time</div><div class="ctrl-v">' + pickupTimeText + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Destination</div><div class="ctrl-v">' + destinationText + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Vehicle</div><div class="ctrl-v">' + vehicleText + '</div></div>' +
+                '<div class="ctrl-kv"><div class="ctrl-k">Service Tier</div><div class="ctrl-v">' + serviceTier + '</div></div>' +
+                '<div class="ctrl-kv"><div class="ctrl-k">Seats</div><div class="ctrl-v">' + seatsText + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Amount</div><div class="ctrl-v">' + amountText + '</div></div>' +
                 '<div class="ctrl-kv" style="grid-column:1/-1;"><div class="ctrl-k">Notes</div><div class="ctrl-v">' + escapeHtml(order.special_requests || '-') + '</div></div>' +
             '</div>';
@@ -419,6 +469,7 @@
 
         vehiclesCache = data.vehicles || [];
         renderVehiclesTable();
+        updateKpis();
     }
 
     function renderVehiclesTable() {
@@ -432,8 +483,16 @@
             const vm = escapeHtml((v.brand || '') + ' ' + (v.model || ''));
             const plate = escapeHtml(v.license_plate || '-');
             const cat = escapeHtml(v.category || '-');
-            const tier = escapeHtml((v.service_tier || 'standard').toString());
-            const status = escapeHtml(v.status || '-');
+            const tier = renderTierChip(v.service_tier || 'standard');
+            const status = renderVehicleStatusBadge(v.status || 'unavailable');
+            const locked = !!v.is_locked_in_progress;
+            const lockReason = escapeHtml(v.lock_reason || 'Vehicle is linked to an in-progress order');
+            const editBtn = locked
+                ? '<button class="ctrl-btn ctrl-btn-muted" data-role="edit-vehicle" data-id="' + id + '" disabled title="' + lockReason + '" style="opacity:.55;cursor:not-allowed;">Edit</button>'
+                : '<button class="ctrl-btn ctrl-btn-muted" data-role="edit-vehicle" data-id="' + id + '">Edit</button>';
+            const deleteBtn = locked
+                ? '<button class="ctrl-btn ctrl-btn-muted" data-role="delete-vehicle" data-id="' + id + '" disabled title="' + lockReason + '" style="opacity:.55;cursor:not-allowed;">Delete</button>'
+                : '<button class="ctrl-btn ctrl-btn-danger" data-role="delete-vehicle" data-id="' + id + '">Delete</button>';
 
             return '<tr>' +
                 '<td>' + vm + '</td>' +
@@ -442,14 +501,18 @@
                 '<td>' + tier + '</td>' +
                 '<td>' + status + '</td>' +
                 '<td>' +
-                    '<button class="ctrl-btn ctrl-btn-muted" data-role="edit-vehicle" data-id="' + id + '">Edit</button> ' +
-                    '<button class="ctrl-btn ctrl-btn-danger" data-role="delete-vehicle" data-id="' + id + '">Delete</button>' +
+                    editBtn + ' ' +
+                    deleteBtn +
                 '</td>' +
                 '</tr>';
         }).join('');
 
         Array.from(el.vehiclesTable.querySelectorAll('button[data-role="edit-vehicle"]')).forEach((btn) => {
             btn.addEventListener('click', () => {
+                if (btn.disabled) {
+                    setVehicleMsg(btn.title || 'Vehicle is linked to an in-progress order and cannot be edited now.', true);
+                    return;
+                }
                 const id = btn.getAttribute('data-id');
                 const vehicle = vehiclesCache.find((v) => String(v.id) === String(id));
                 if (!vehicle) return;
@@ -461,6 +524,10 @@
 
         Array.from(el.vehiclesTable.querySelectorAll('button[data-role="delete-vehicle"]')).forEach((btn) => {
             btn.addEventListener('click', async () => {
+                if (btn.disabled) {
+                    setVehicleMsg(btn.title || 'Vehicle is linked to an in-progress order and cannot be deleted now.', true);
+                    return;
+                }
                 const id = btn.getAttribute('data-id');
                 if (!id) return;
                 if (!confirm('Delete this vehicle?')) return;
@@ -479,6 +546,41 @@
     function driverStatusBadgeClass(status) {
         if (status === 'dispatched') return 'ctrl-badge ctrl-in-progress';
         return 'ctrl-badge ctrl-pending';
+    }
+
+    function toTitleCase(value) {
+        return String(value || '')
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (m) => m.toUpperCase());
+    }
+
+    function normalizeTier(value) {
+        const tier = String(value || '').trim().toLowerCase();
+        if (tier === 'eco' || tier === 'standard' || tier === 'luxury') {
+            return tier;
+        }
+        return 'standard';
+    }
+
+    function renderTierChip(value) {
+        const tier = normalizeTier(value);
+        return '<span class="ctrl-tier ctrl-tier-' + tier + '">' + escapeHtml(toTitleCase(tier)) + '</span>';
+    }
+
+    function normalizeVehicleStatus(value) {
+        const status = String(value || '').trim().toLowerCase();
+        if (!status) return 'default';
+        if (status === 'in_progress' || status === 'in use') return 'in-use';
+        if (status === 'booked' || status === 'reserved') return 'booked';
+        return status.replace(/_/g, '-');
+    }
+
+    function renderVehicleStatusBadge(value) {
+        const key = normalizeVehicleStatus(value);
+        const text = toTitleCase(String(value || key).replace(/-/g, ' '));
+        const valid = ['available', 'in-use', 'booked', 'maintenance', 'unavailable'];
+        const cls = valid.includes(key) ? key : 'default';
+        return '<span class="ctrl-vstatus ctrl-vstatus-' + cls + '">' + escapeHtml(text) + '</span>';
     }
 
     async function loadAvailableVehicles() {
@@ -504,6 +606,7 @@
 
             driversCache = data.drivers || [];
             renderDriversTable();
+            updateKpis();
             setDriverMsg('Loaded ' + driversCache.length + ' driver(s).');
         } catch (err) {
             setDriverMsg('Error loading drivers: ' + (err && err.message ? err.message : 'Unknown error'), true);
@@ -543,6 +646,8 @@
             const assignedVehicle = d.assigned_vehicle_id
                 ? escapeHtml([d.brand, d.model, d.license_plate].filter(Boolean).join(' - '))
                 : '-';
+            const canUnassign = (d.can_unassign !== false);
+            const unassignLockReason = escapeHtml(d.unassign_lock_reason || 'Cannot unassign while vehicle is serving an in-progress order.');
 
             let actionHtml = '';
             if (status === 'pending') {
@@ -551,7 +656,9 @@
                     '<button class="ctrl-btn ctrl-btn-primary" data-role="dispatch-driver" data-id="' + id + '">Dispatch</button>' +
                     '</div>';
             } else {
-                actionHtml = '<button class="ctrl-btn ctrl-btn-danger" data-role="unassign-driver" data-id="' + id + '">Unassign</button>';
+                actionHtml = canUnassign
+                    ? '<button class="ctrl-btn ctrl-btn-danger" data-role="unassign-driver" data-id="' + id + '">Unassign</button>'
+                    : '<button class="ctrl-btn ctrl-btn-muted" data-role="unassign-driver" data-id="' + id + '" disabled title="' + unassignLockReason + '" style="opacity:.55;cursor:not-allowed;">Unassign</button>';
             }
 
             return '<tr>' +
@@ -606,6 +713,10 @@
 
         Array.from(el.driversTable.querySelectorAll('button[data-role="unassign-driver"]')).forEach((btn) => {
             btn.addEventListener('click', async () => {
+                if (btn.disabled) {
+                    setDriverMsg(btn.title || 'Cannot unassign while vehicle is serving an in-progress order.', true);
+                    return;
+                }
                 const driverId = btn.getAttribute('data-id') || '';
                 if (!driverId) return;
 

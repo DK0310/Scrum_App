@@ -297,6 +297,7 @@ if ($action === 'list') {
     $filters = [
         'category' => $_GET['category'] ?? $input['category'] ?? '',
         'tier' => $_GET['tier'] ?? $input['tier'] ?? $_GET['service_tier'] ?? $input['service_tier'] ?? '',
+        'seats' => $_GET['seats'] ?? $input['seats'] ?? '',
         'brand' => $_GET['brand'] ?? $input['brand'] ?? '',
         'fuel' => $_GET['fuel'] ?? $input['fuel'] ?? '',
         'transmission' => $_GET['transmission'] ?? $input['transmission'] ?? '',

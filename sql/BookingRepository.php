@@ -462,8 +462,24 @@ final class BookingRepository
         $serviceTypeExpr = $this->bookingHasColumn('service_type') ? 'b.service_type' : 'NULL::text AS service_type';
         $passengerExpr = $this->bookingHasColumn('number_of_passengers') ? 'b.number_of_passengers' : 'NULL::int AS number_of_passengers';
         $rideTierExpr = $this->bookingHasColumn('ride_tier') ? 'b.ride_tier' : 'NULL::text AS ride_tier';
+        $pickupTimeExpr = $this->bookingHasColumn('pickup_time') ? 'b.pickup_time' : 'NULL::text AS pickup_time';
         $acceptedExpr = $this->bookingHasColumn('accepted_by_driver_at') ? 'b.accepted_by_driver_at' : 'NULL::timestamptz AS accepted_by_driver_at';
         $completedExpr = $this->bookingHasColumn('ride_completed_at') ? 'b.ride_completed_at' : 'NULL::timestamptz AS ride_completed_at';
+
+        $this->ensureVehicleServiceTierColumnExists();
+        $vehicleCols = [];
+        try {
+            $vehicleStmt = $this->pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'vehicles'");
+            $vehicleCols = $vehicleStmt ? $vehicleStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+        } catch (Throwable $e) {
+            $vehicleCols = [];
+        }
+        $vehicleColsMap = [];
+        foreach ($vehicleCols as $col) {
+            $vehicleColsMap[(string)$col] = true;
+        }
+        $vehicleTierExpr = isset($vehicleColsMap['service_tier']) ? 'v.service_tier' : 'NULL::text AS service_tier';
+        $vehicleSeatsExpr = isset($vehicleColsMap['seats']) ? 'v.seats' : 'NULL::int AS seats';
 
         $driverJoin = $this->bookingHasColumn('driver_id')
             ? 'LEFT JOIN users d ON b.driver_id = d.id'
@@ -477,12 +493,13 @@ final class BookingRepository
             SELECT 
                 b.id, b.renter_id, b.owner_id, {$driverIdExpr}, b.vehicle_id, b.status, b.booking_type,
                 b.pickup_location, b.return_location, b.pickup_date, b.return_date,
-                {$serviceTypeExpr}, b.total_amount, {$passengerExpr},
+                {$serviceTypeExpr}, {$pickupTimeExpr}, b.total_amount, {$passengerExpr},
                 {$rideTierExpr}, b.special_requests,
                 b.created_at, {$acceptedExpr}, {$completedExpr},
                 u.full_name as user_name, u.phone as user_phone, u.email,
                 {$driverInfoExpr},
-                v.brand, v.model, v.license_plate, v.year
+                v.brand, v.model, v.license_plate, v.year,
+                {$vehicleTierExpr}, {$vehicleSeatsExpr}
             FROM bookings b
             JOIN users u ON b.renter_id = u.id
             {$driverJoin}
@@ -578,6 +595,24 @@ final class BookingRepository
      */
     public function unassignVehicleFromBooking(string $bookingId): bool
     {
+        // Some environments still keep strict NOT NULL constraints on these columns.
+        // Reject/cancel workflows need to clear assignment, so relax constraints defensively.
+        try {
+            $this->pdo->exec("ALTER TABLE bookings ALTER COLUMN vehicle_id DROP NOT NULL");
+        } catch (Throwable $e) {
+            // Ignore if already nullable or no permission.
+        }
+        try {
+            $this->pdo->exec("ALTER TABLE bookings ALTER COLUMN owner_id DROP NOT NULL");
+        } catch (Throwable $e) {
+            // Ignore if already nullable or no permission.
+        }
+        try {
+            $this->pdo->exec("ALTER TABLE bookings ALTER COLUMN price_per_day DROP NOT NULL");
+        } catch (Throwable $e) {
+            // Ignore if already nullable or no permission.
+        }
+
         $stmt = $this->pdo->prepare(" 
             UPDATE bookings
             SET vehicle_id = NULL, owner_id = NULL, price_per_day = NULL

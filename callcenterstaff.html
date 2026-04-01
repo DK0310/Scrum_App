@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Concierge Ops - Staff Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container-highest": "#e1e3e3",
+                        "on-tertiary-fixed-variant": "#723522",
+                        "secondary-fixed": "#dde4e2",
+                        "outline-variant": "#bec9c5",
+                        "surface-container-low": "#f2f4f4",
+                        "surface-container": "#eceeee",
+                        "on-secondary-fixed-variant": "#414847",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-dim": "#d8dada",
+                        "error-container": "#ffdad6",
+                        "inverse-surface": "#2e3131",
+                        "error": "#ba1a1a",
+                        "tertiary-fixed-dim": "#ffb59f",
+                        "outline": "#6e7976",
+                        "on-tertiary-container": "#ffcabb",
+                        "primary-fixed-dim": "#84d5c5",
+                        "primary-fixed": "#a0f2e1",
+                        "on-surface": "#191c1d",
+                        "inverse-on-surface": "#eff1f1",
+                        "surface-variant": "#e1e3e3",
+                        "secondary": "#59605f",
+                        "inverse-primary": "#84d5c5",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed": "#ffdbd1",
+                        "on-secondary-container": "#5f6665",
+                        "on-secondary-fixed": "#161d1c",
+                        "on-primary-fixed-variant": "#005046",
+                        "on-primary-fixed": "#00201b",
+                        "on-primary-container": "#94e5d5",
+                        "background": "#f8fafa",
+                        "on-tertiary-fixed": "#3a0b01",
+                        "surface-tint": "#046b5e",
+                        "on-error-container": "#93000a",
+                        "primary": "#004f45",
+                        "primary-container": "#00695c",
+                        "on-primary": "#ffffff",
+                        "surface": "#f8fafa",
+                        "secondary-fixed-dim": "#c1c8c6",
+                        "secondary-container": "#dde4e2",
+                        "on-surface-variant": "#3e4946",
+                        "on-error": "#ffffff",
+                        "on-background": "#191c1d",
+                        "tertiary-container": "#8d4a36",
+                        "tertiary": "#703321",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-high": "#e6e8e8",
+                        "surface-bright": "#f8fafa"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- Main Canvas -->
+<main class="min-h-screen p-8 lg:p-12 max-w-[1600px] mx-auto">
+<!-- Header Section -->
+<!-- Two Column Layout Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-10 items-start">
+<!-- Left Column: Create Booking Form -->
+<section class="xl:col-span-7 bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-2xl font-bold text-on-surface">Create Booking Request</h2>
+<span class="material-symbols-outlined text-primary-container" data-icon="add_circle">add_circle</span>
+</div>
+<form class="space-y-6">
+<!-- Search Field -->
+<div class="relative">
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Search existing customer</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline" data-icon="search">search</span>
+<input class="w-full pl-12 pr-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all placeholder:text-outline" placeholder="Phone, Email or Name..." type="text"/>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Customer Name</label>
+<input class="w-full px-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all" type="text"/>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Customer Phone</label>
+<input class="w-full px-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all" type="tel"/>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Customer Email</label>
+<input class="w-full px-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all" type="email"/>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Ride Tier</label>
+<select class="w-full px-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all appearance-none">
+<option>Executive Sedan</option>
+<option>Luxury SUV</option>
+<option>Standard Electric</option>
+<option>Group Transit</option>
+</select>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Seat Capacity</label>
+<select class="w-full px-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all appearance-none">
+<option>1-2 Passengers</option>
+<option>3-4 Passengers</option>
+<option>5-7 Passengers</option>
+</select>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Pickup Date &amp; Time</label>
+<input class="w-full px-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all" type="datetime-local"/>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Pickup Location</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-primary" data-icon="location_on">location_on</span>
+<input class="w-full pl-12 pr-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all" placeholder="Enter address..." type="text"/>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Destination</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-error" data-icon="flag">flag</span>
+<input class="w-full pl-12 pr-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all" placeholder="Enter address..." type="text"/>
+</div>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Payment Method</label>
+<div class="flex gap-4">
+<label class="flex-1 cursor-pointer">
+<input checked="" class="hidden peer" name="payment" type="radio"/>
+<div class="p-4 rounded-xl border-2 border-transparent bg-surface-container text-center peer-checked:border-primary peer-checked:bg-primary-container/10 transition-all">
+<span class="block text-sm font-bold">Account Credit</span>
+</div>
+</label>
+<label class="flex-1 cursor-pointer">
+<input class="hidden peer" name="payment" type="radio"/>
+<div class="p-4 rounded-xl border-2 border-transparent bg-surface-container text-center peer-checked:border-primary peer-checked:bg-primary-container/10 transition-all">
+<span class="block text-sm font-bold">Credit Card</span>
+</div>
+</label>
+<label class="flex-1 cursor-pointer">
+<input class="hidden peer" name="payment" type="radio"/>
+<div class="p-4 rounded-xl border-2 border-transparent bg-surface-container text-center peer-checked:border-primary peer-checked:bg-primary-container/10 transition-all">
+<span class="block text-sm font-bold">Cash on Arrival</span>
+</div>
+</label>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Note</label>
+<textarea class="w-full px-4 py-3 bg-surface-container border-none rounded-xl focus:ring-2 focus:ring-primary/40 transition-all resize-none" placeholder="Special requirements, baggage info..." rows="3"></textarea>
+</div>
+<button class="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold rounded-xl shadow-lg hover:opacity-90 active:scale-95 transition-all" type="submit">
+                        Confirm Booking Request
+                    </button>
+</form>
+</section>
+<!-- Right Column: My Requests Table -->
+<section class="xl:col-span-5 space-y-6">
+<div class="bg-surface-container-low rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-xl font-bold text-on-surface">My Requests</h2>
+<button class="text-sm font-semibold text-primary hover:underline">View All</button>
+</div>
+<div class="space-y-4">
+<!-- Request Card 1 -->
+<div class="p-5 bg-surface-container-lowest rounded-xl hover:shadow-md transition-shadow group">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mr-3">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="person">person</span>
+</div>
+<div>
+<h4 class="font-bold text-on-surface group-hover:text-primary transition-colors">Marcus Holloway</h4>
+<p class="text-xs text-on-surface-variant">Request ID: #88219</p>
+</div>
+</div>
+<span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase rounded-full">Pending</span>
+</div>
+<div class="grid grid-cols-2 gap-4 text-sm mb-4">
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xs mr-2" data-icon="schedule">schedule</span>
+                                    Today, 4:30 PM
+                                </div>
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xs mr-2" data-icon="minor_crash">minor_crash</span>
+                                    Luxury SUV
+                                </div>
+</div>
+<div class="flex items-center space-x-2 pt-4 border-t border-surface-container">
+<button class="flex-1 py-2 rounded-lg bg-surface-container-high text-on-surface-variant text-xs font-bold hover:bg-outline-variant transition-colors">Edit</button>
+<button class="flex-1 py-2 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors">Details</button>
+</div>
+</div>
+<!-- Request Card 2 -->
+<div class="p-5 bg-surface-container-lowest rounded-xl hover:shadow-md transition-shadow group">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mr-3">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="person">person</span>
+</div>
+<div>
+<h4 class="font-bold text-on-surface group-hover:text-primary transition-colors">Elena Rodriguez</h4>
+<p class="text-xs text-on-surface-variant">Request ID: #88214</p>
+</div>
+</div>
+<span class="px-3 py-1 bg-green-100 text-green-800 text-[10px] font-bold uppercase rounded-full">Dispatched</span>
+</div>
+<div class="grid grid-cols-2 gap-4 text-sm mb-4">
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xs mr-2" data-icon="schedule">schedule</span>
+                                    Tomorrow, 8:00 AM
+                                </div>
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xs mr-2" data-icon="minor_crash">minor_crash</span>
+                                    Executive Sedan
+                                </div>
+</div>
+<div class="flex items-center space-x-2 pt-4 border-t border-surface-container">
+<button class="flex-1 py-2 rounded-lg bg-surface-container-high text-on-surface-variant text-xs font-bold hover:bg-outline-variant transition-colors">Edit</button>
+<button class="flex-1 py-2 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors">Details</button>
+</div>
+</div>
+<!-- Request Card 3 -->
+<div class="p-5 bg-surface-container-lowest rounded-xl hover:shadow-md transition-shadow group opacity-80">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mr-3">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="person">person</span>
+</div>
+<div>
+<h4 class="font-bold text-on-surface group-hover:text-primary transition-colors">David Chen</h4>
+<p class="text-xs text-on-surface-variant">Request ID: #88201</p>
+</div>
+</div>
+<span class="px-3 py-1 bg-surface-container-high text-on-surface-variant text-[10px] font-bold uppercase rounded-full">Completed</span>
+</div>
+<div class="grid grid-cols-2 gap-4 text-sm mb-4">
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xs mr-2" data-icon="schedule">schedule</span>
+                                    Oct 24, 2:15 PM
+                                </div>
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xs mr-2" data-icon="minor_crash">minor_crash</span>
+                                    Standard Electric
+                                </div>
+</div>
+<div class="flex items-center space-x-2 pt-4 border-t border-surface-container">
+<button class="w-full py-2 rounded-lg bg-surface-container-high text-on-surface-variant text-xs font-bold hover:bg-outline-variant transition-colors">Review Summary</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Contextual Info Card -->
+<div class="relative bg-primary overflow-hidden rounded-xl p-8 text-on-primary">
+<div class="relative z-10">
+<h3 class="text-lg font-bold mb-2">Concierge Tip</h3>
+<p class="text-sm opacity-90 leading-relaxed">Executive Sedan tier is currently seeing high demand. Advise customers to book at least 4 hours in advance for guaranteed availability during peak hours (5 PM - 8 PM).</p>
+</div>
+<div class="absolute -right-12 -bottom-12 opacity-10">
+<span class="material-symbols-outlined text-[160px]" data-icon="directions_car">directions_car</span>
+</div>
+</div>
+</section>
+</div>
+</main>
+</body></html>
+
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-highest": "#e1e3e3",
+              "on-tertiary-fixed-variant": "#723522",
+              "secondary-fixed": "#dde4e2",
+              "outline-variant": "#bec9c5",
+              "surface-container-low": "#f2f4f4",
+              "surface-container": "#eceeee",
+              "on-secondary-fixed-variant": "#414847",
+              "surface-container-lowest": "#ffffff",
+              "surface-dim": "#d8dada",
+              "error-container": "#ffdad6",
+              "inverse-surface": "#2e3131",
+              "error": "#ba1a1a",
+              "tertiary-fixed-dim": "#ffb59f",
+              "outline": "#6e7976",
+              "on-tertiary-container": "#ffcabb",
+              "primary-fixed-dim": "#84d5c5",
+              "primary-fixed": "#a0f2e1",
+              "on-surface": "#191c1d",
+              "inverse-on-surface": "#eff1f1",
+              "surface-variant": "#e1e3e3",
+              "secondary": "#59605f",
+              "inverse-primary": "#84d5c5",
+              "on-secondary": "#ffffff",
+              "tertiary-fixed": "#ffdbd1",
+              "on-secondary-container": "#5f6665",
+              "on-secondary-fixed": "#161d1c",
+              "on-primary-fixed-variant": "#005046",
+              "on-primary-fixed": "#00201b",
+              "on-primary-container": "#94e5d5",
+              "background": "#f8fafa",
+              "on-tertiary-fixed": "#3a0b01",
+              "surface-tint": "#046b5e",
+              "on-error-container": "#93000a",
+              "primary": "#004f45",
+              "primary-container": "#00695c",
+              "on-primary": "#ffffff",
+              "surface": "#f8fafa",
+              "secondary-fixed-dim": "#c1c8c6",
+              "secondary-container": "#dde4e2",
+              "on-surface-variant": "#3e4946",
+              "on-error": "#ffffff",
+              "on-background": "#191c1d",
+              "tertiary-container": "#8d4a36",
+              "tertiary": "#703321",
+              "on-tertiary": "#ffffff",
+              "surface-container-high": "#e6e8e8",
+              "surface-bright": "#f8fafa"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .tonal-transition {
+        background: linear-gradient(to bottom, transparent, var(--tw-gradient-to));
+      }
+      .glass-effect {
+        background: rgba(248, 250, 250, 0.8);
+        backdrop-filter: blur(20px);
+      }
+      .brushed-silk-gradient {
+        background: linear-gradient(135deg, #004f45 0%, #00695c 100%);
+      }
+      .teal-shadow {
+        box-shadow: 0 12px 40px rgba(0, 79, 69, 0.06);
+      }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary-fixed selection:text-on-primary-fixed">
+<div class="min-h-screen">
+<!-- Top Navbar (Replacement for sidebar logo area) -->
+<!-- Main Content Area -->
+<main class="w-full p-6 md:p-12 min-h-screen">
+<div class="max-w-4xl mx-auto">
+<!-- Page Header -->
+<header class="mb-10">
+<h2 class="text-3xl md:text-4xl font-extrabold font-headline text-primary tracking-tight mb-2">Staff Dashboard</h2>
+<p class="text-on-surface-variant text-base md:text-lg">Manage organizational hierarchy and user provisioning with precision.</p>
+</header>
+<!-- Tabs Navigation -->
+<nav class="flex gap-2 mb-12 p-1.5 bg-surface-container-low rounded-2xl w-fit overflow-x-auto no-scrollbar">
+<button class="whitespace-nowrap px-6 py-2.5 rounded-xl text-sm font-bold bg-surface-container-lowest text-primary teal-shadow transition-all">
+                    Customer Booking
+                </button>
+<button class="whitespace-nowrap px-6 py-2.5 rounded-xl text-sm font-semibold text-on-surface-variant hover:text-primary transition-all">
+                    Agent Assignments
+                </button>
+<button class="whitespace-nowrap px-6 py-2.5 rounded-xl text-sm font-semibold text-on-surface-variant hover:text-primary transition-all">
+                    Service Analytics
+                </button>
+</nav>
+<!-- Form Section -->
+<section class="bg-surface-container-lowest rounded-3xl p-6 md:p-10 teal-shadow relative overflow-hidden">
+<!-- Subtle decorative element -->
+<div class="absolute top-0 right-0 w-32 h-32 brushed-silk-gradient opacity-5 rounded-bl-[100px]"></div>
+<div class="mb-8">
+<h3 class="text-2xl font-bold font-headline text-on-surface">Create Customer Account</h3>
+<p class="text-on-surface-variant text-sm mt-1">Initialize a new secure profile within the concierge ecosystem.</p>
+</div>
+<form class="space-y-6">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Username -->
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant px-1">Username</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">person</span>
+<input class="w-full bg-surface-container border-none rounded-xl py-3.5 pl-12 pr-4 focus:ring-2 focus:ring-primary/40 text-on-surface placeholder:text-outline-variant font-medium" placeholder="e.g. jsmith_ops" type="text"/>
+</div>
+</div>
+<!-- Email -->
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant px-1">Email Address</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">mail</span>
+<input class="w-full bg-surface-container border-none rounded-xl py-3.5 pl-12 pr-4 focus:ring-2 focus:ring-primary/40 text-on-surface placeholder:text-outline-variant font-medium" placeholder="staff.name@concierge.com" type="email"/>
+</div>
+</div>
+<!-- Phone -->
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant px-1">Phone Number</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">call</span>
+<input class="w-full bg-surface-container border-none rounded-xl py-3.5 pl-12 pr-4 focus:ring-2 focus:ring-primary/40 text-on-surface placeholder:text-outline-variant font-medium" placeholder="+1 (555) 000-0000" type="tel"/>
+</div>
+</div>
+<!-- DOB -->
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant px-1">Date of Birth</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">calendar_today</span>
+<input class="w-full bg-surface-container border-none rounded-xl py-3.5 pl-12 pr-4 focus:ring-2 focus:ring-primary/40 text-on-surface font-medium" type="date"/>
+</div>
+</div>
+</div>
+<!-- Default Password (Readonly) -->
+<div class="space-y-2 pt-4">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant px-1">Default Password (Temporary)</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-primary text-lg">lock_reset</span>
+<input class="w-full bg-surface-container-low border-2 border-dashed border-outline-variant/30 rounded-xl py-3.5 pl-12 pr-4 text-primary font-mono font-bold" readonly="" type="text" value="Concierge@2024!Init"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-surface-container-high rounded-lg text-outline transition-colors" type="button">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+</button>
+</div>
+<p class="text-[11px] text-on-surface-variant italic px-1">User will be prompted to change this upon first login.</p>
+</div>
+<div class="pt-8 flex justify-end">
+<button class="w-full md:w-auto px-10 py-4 rounded-xl font-bold brushed-silk-gradient text-white flex items-center justify-center gap-2 transition-transform active:scale-95 teal-shadow" type="submit">
+<span class="material-symbols-outlined text-xl">person_add</span>
+                            Provision Account
+                        </button>
+</div>
+</form>
+</section>
+<!-- Success Alert -->
+<div class="mt-8 bg-primary-fixed/30 border border-primary/10 rounded-2xl p-6 flex flex-col md:flex-row items-start gap-5">
+<div class="bg-primary text-white p-2 rounded-full flex-shrink-0">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="w-full">
+<h4 class="font-bold text-primary text-lg">Account Successfully Provisioned</h4>
+<div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+<div class="bg-white/40 p-3 rounded-lg">
+<p class="text-[10px] uppercase font-bold text-on-primary-fixed-variant opacity-70">Internal ID</p>
+<p class="font-mono text-sm font-bold text-primary">OPS-9928-XA</p>
+</div>
+<div class="bg-white/40 p-3 rounded-lg">
+<p class="text-[10px] uppercase font-bold text-on-primary-fixed-variant opacity-70">Verification Status</p>
+<p class="font-bold text-sm text-primary">Email Pending</p>
+</div>
+<div class="bg-white/40 p-3 rounded-lg">
+<p class="text-[10px] uppercase font-bold text-on-primary-fixed-variant opacity-70">Assigned Node</p>
+<p class="font-bold text-sm text-primary">Central Hub-01</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Subtle Decorative Image -->
+<div class="mt-12 rounded-3xl h-32 relative overflow-hidden">
+<img alt="abstract blurred professional office interior with soft natural lighting and teal accents" class="w-full h-full object-cover opacity-20 grayscale brightness-125" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFsUSwra_TCY_i4gtfsKz2ni-9wvbgloUc0DQ2OLRV6zL14-Pd2CcRPdY_v_O83ulQXrKFh4uHRReukACBYSLAefQ0ugC8fcBsk_zfbOIZXiVc7OzLcvtOzKU6bCg7aSWIejsq0fjYMaA5tk-T332AphIbTw5w3vXl7l1o4X5JzUC3OPUv9EL098q0IipwB0muxrjgUQXNoF_11jSaVlH0xb17Axsf_ng_mL4UlJM_psbjwrjOQHuGut_xuoMyj724gZMzXduRUXk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background to-transparent"></div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
+
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Concierge Ops - Staff Dashboard</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-highest": "#e1e3e3",
+              "on-tertiary-fixed-variant": "#723522",
+              "secondary-fixed": "#dde4e2",
+              "outline-variant": "#bec9c5",
+              "surface-container-low": "#f2f4f4",
+              "surface-container": "#eceeee",
+              "on-secondary-fixed-variant": "#414847",
+              "surface-container-lowest": "#ffffff",
+              "surface-dim": "#d8dada",
+              "error-container": "#ffdad6",
+              "inverse-surface": "#2e3131",
+              "error": "#ba1a1a",
+              "tertiary-fixed-dim": "#ffb59f",
+              "outline": "#6e7976",
+              "on-tertiary-container": "#ffcabb",
+              "primary-fixed-dim": "#84d5c5",
+              "primary-fixed": "#a0f2e1",
+              "on-surface": "#191c1d",
+              "inverse-on-surface": "#eff1f1",
+              "surface-variant": "#e1e3e3",
+              "secondary": "#59605f",
+              "inverse-primary": "#84d5c5",
+              "on-secondary": "#ffffff",
+              "tertiary-fixed": "#ffdbd1",
+              "on-secondary-container": "#5f6665",
+              "on-secondary-fixed": "#161d1c",
+              "on-primary-fixed-variant": "#005046",
+              "on-primary-fixed": "#00201b",
+              "on-primary-container": "#94e5d5",
+              "background": "#f8fafa",
+              "on-tertiary-fixed": "#3a0b01",
+              "surface-tint": "#046b5e",
+              "on-error-container": "#93000a",
+              "primary": "#004f45",
+              "primary-container": "#00695c",
+              "on-primary": "#ffffff",
+              "surface": "#f8fafa",
+              "secondary-fixed-dim": "#c1c8c6",
+              "secondary-container": "#dde4e2",
+              "on-surface-variant": "#3e4946",
+              "on-error": "#ffffff",
+              "on-background": "#191c1d",
+              "tertiary-container": "#8d4a36",
+              "tertiary": "#703321",
+              "on-tertiary": "#ffffff",
+              "surface-container-high": "#e6e8e8",
+              "surface-bright": "#f8fafa"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8fafa;
+      }
+      h1, h2, h3, .font-headline {
+        font-family: 'Manrope', sans-serif;
+      }
+    </style>
+</head>
+<body class="text-on-surface antialiased overflow-y-auto">
+<!-- Main Content Area - Full width now that sidebar is removed -->
+<main class="min-h-screen bg-surface p-8 lg:p-12">
+<div class="max-w-7xl mx-auto">
+<!-- Header with Logo and Brand (Moved from Sidebar to Page Header) -->
+<!-- Page Title -->
+<header class="mb-10">
+<h1 class="text-4xl font-extrabold text-on-surface tracking-tight mb-2">Staff Dashboard</h1>
+<p class="text-on-surface-variant font-medium">Manage and resolve incoming customer inquiries in real-time.</p>
+</header>
+<!-- Secondary Tab Navigation -->
+<div class="flex items-center space-x-8 border-b-0 mb-12">
+<button class="relative pb-4 text-sm font-bold text-primary transition-all">
+                    Customer Booking
+                    <span class="absolute bottom-0 left-0 w-full h-1 bg-primary rounded-full"></span>
+</button>
+<button class="pb-4 text-sm font-medium text-on-surface-variant hover:text-primary transition-all">
+                    Agent Assignments
+                </button>
+<button class="pb-4 text-sm font-medium text-on-surface-variant hover:text-primary transition-all">
+                    Service Analytics
+                </button>
+</div>
+<!-- Bento Grid Metrics -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+<div class="bg-surface-container-low p-6 rounded-3xl">
+<p class="text-sm font-medium text-on-surface-variant mb-1">Open Tickets</p>
+<h3 class="text-2xl font-bold text-on-surface">24</h3>
+</div>
+<div class="bg-surface-container-low p-6 rounded-3xl">
+<p class="text-sm font-medium text-on-surface-variant mb-1">Avg. Response Time</p>
+<h3 class="text-2xl font-bold text-on-surface">12m</h3>
+</div>
+<div class="bg-surface-container-low p-6 rounded-3xl">
+<p class="text-sm font-medium text-on-surface-variant mb-1">Resolved Today</p>
+<h3 class="text-2xl font-bold text-on-surface">142</h3>
+</div>
+<div class="bg-primary p-6 rounded-3xl text-on-primary shadow-lg shadow-primary/10">
+<p class="text-sm font-medium opacity-80 mb-1">Active Status</p>
+<h3 class="text-2xl font-bold">Online</h3>
+</div>
+</div>
+<!-- Data Table Section -->
+<div class="bg-surface-container-lowest rounded-[2rem] overflow-hidden shadow-sm">
+<div class="p-8 border-b border-outline-variant/10 flex items-center justify-between">
+<h2 class="text-xl font-bold text-on-surface">Customer Enquiries</h2>
+<div class="flex gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 w-64" placeholder="Search inquiries..." type="text"/>
+</div>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-high text-on-surface-variant rounded-xl text-sm font-semibold hover:bg-surface-dim transition-colors">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+                            Filter
+                        </button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low/50">
+<th class="px-8 py-5 text-xs font-bold text-on-surface-variant uppercase tracking-widest">Created</th>
+<th class="px-8 py-5 text-xs font-bold text-on-surface-variant uppercase tracking-widest">Type</th>
+<th class="px-8 py-5 text-xs font-bold text-on-surface-variant uppercase tracking-widest">Customer</th>
+<th class="px-8 py-5 text-xs font-bold text-on-surface-variant uppercase tracking-widest">Status</th>
+<th class="px-8 py-5 text-xs font-bold text-on-surface-variant uppercase tracking-widest">Preview</th>
+<th class="px-8 py-5 text-xs font-bold text-on-surface-variant uppercase tracking-widest text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-8 py-6">
+<p class="text-sm font-medium text-on-surface">Oct 24, 2023</p>
+<p class="text-xs text-on-surface-variant">09:12 AM</p>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-lg">directions_car</span>
+<span class="text-sm font-semibold text-on-surface">Vehicle Spec</span>
+</div>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center text-xs font-bold">EM</div>
+<div>
+<p class="text-sm font-bold text-on-surface">Elena Mistral</p>
+<p class="text-xs text-on-surface-variant">e.mistral@web.com</p>
+</div>
+</div>
+</td>
+<td class="px-8 py-6">
+<span class="px-3 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider rounded-full">New</span>
+</td>
+<td class="px-8 py-6">
+<p class="text-sm text-on-surface-variant line-clamp-1 max-w-[200px]">Interested in the cargo capacity of the premium fleet...</p>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="px-5 py-2 bg-primary text-on-primary rounded-xl text-xs font-bold hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95">Reply</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-8 py-6">
+<p class="text-sm font-medium text-on-surface">Oct 24, 2023</p>
+<p class="text-xs text-on-surface-variant">08:45 AM</p>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-lg">payments</span>
+<span class="text-sm font-semibold text-on-surface">Billing</span>
+</div>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed text-on-primary-fixed flex items-center justify-center text-xs font-bold">JD</div>
+<div>
+<p class="text-sm font-bold text-on-surface">Julian Doss</p>
+<p class="text-xs text-on-surface-variant">j.doss@provider.net</p>
+</div>
+</div>
+</td>
+<td class="px-8 py-6">
+<span class="px-3 py-1 bg-blue-100 text-blue-800 text-[10px] font-bold uppercase tracking-wider rounded-full">In Progress</span>
+</td>
+<td class="px-8 py-6">
+<p class="text-sm text-on-surface-variant line-clamp-1 max-w-[200px]">Invoice correction request for last week's booking...</p>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="px-5 py-2 bg-primary text-on-primary rounded-xl text-xs font-bold hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95">Reply</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-8 py-6">
+<p class="text-sm font-medium text-on-surface">Oct 23, 2023</p>
+<p class="text-xs text-on-surface-variant">04:30 PM</p>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-lg">help</span>
+<span class="text-sm font-semibold text-on-surface">General</span>
+</div>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-3">
+<img alt="Customer" class="w-8 h-8 rounded-full object-cover" data-alt="portrait of a professional woman with glasses smiling slightly in a bright airy office environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADFAaHpKuVMqlUfrZqRat58ZT-KEUw2J5i-5-3ucS2x95ED4pwULusoy5EZEy1_FltA5zQyFXO2Wz1dLxcpyeVEBq95ARl6Dg0ylj1Bj6Pcph6kELamLKqoYuiNNVlK9UoHoeEMI5vNa3hYOm88TWJkaoQIrcRVmrAujXWEsdwP2XK-JDdGEdcMYuXB57ej_anXUUEeEfD2QHsFt_aLqZB3O2eB8wI90dow0w3jEi9dSjF4IHXovH_-ol1PYBUcBvmFBJcwM4zZ1s"/>
+<div>
+<p class="text-sm font-bold text-on-surface">Sarah Connor</p>
+<p class="text-xs text-on-surface-variant">s.connor@skyline.org</p>
+</div>
+</div>
+</td>
+<td class="px-8 py-6">
+<span class="px-3 py-1 bg-green-100 text-green-800 text-[10px] font-bold uppercase tracking-wider rounded-full">Resolved</span>
+</td>
+<td class="px-8 py-6">
+<p class="text-sm text-on-surface-variant line-clamp-1 max-w-[200px]">Clarification on weekend mileage limits for luxury tier...</p>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="px-5 py-2 bg-primary-container text-on-primary-container rounded-xl text-xs font-bold hover:bg-primary transition-all active:scale-95">View</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-8 py-6">
+<p class="text-sm font-medium text-on-surface">Oct 23, 2023</p>
+<p class="text-xs text-on-surface-variant">02:15 PM</p>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-lg">event_busy</span>
+<span class="text-sm font-semibold text-on-surface">Cancellation</span>
+</div>
+</td>
+<td class="px-8 py-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center text-xs font-bold">RK</div>
+<div>
+<p class="text-sm font-bold text-on-surface">Robert King</p>
+<p class="text-xs text-on-surface-variant">r.king@global.com</p>
+</div>
+</div>
+</td>
+<td class="px-8 py-6">
+<span class="px-3 py-1 bg-rose-100 text-rose-800 text-[10px] font-bold uppercase tracking-wider rounded-full">Escalated</span>
+</td>
+<td class="px-8 py-6">
+<p class="text-sm text-on-surface-variant line-clamp-1 max-w-[200px]">Dispute over cancellation fee due to flight delay...</p>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="px-5 py-2 bg-primary text-on-primary rounded-xl text-xs font-bold hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95">Reply</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-6 bg-surface-container-low/30 flex items-center justify-between">
+<p class="text-xs font-medium text-on-surface-variant">Showing 4 of 128 inquiries</p>
+<div class="flex gap-2">
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface-variant hover:bg-primary hover:text-on-primary transition-all">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-on-primary shadow-sm font-bold text-xs">1</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface-variant hover:bg-primary hover:text-on-primary transition-all font-bold text-xs">2</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface-variant hover:bg-primary hover:text-on-primary transition-all font-bold text-xs">3</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface-variant hover:bg-primary hover:text-on-primary transition-all">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

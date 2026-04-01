@@ -82,6 +82,7 @@ final class VehicleRepository
     {
         $category = trim((string)($filters['category'] ?? ''));
         $tier = strtolower(trim((string)($filters['tier'] ?? '')));
+        $seats = (int)($filters['seats'] ?? 0);
         $brand = trim((string)($filters['brand'] ?? ''));
         $fuel = trim((string)($filters['fuel'] ?? ''));
         $transmission = trim((string)($filters['transmission'] ?? ''));
@@ -106,6 +107,16 @@ final class VehicleRepository
             } else {
                 $where[] = 'LOWER(v.service_tier) = LOWER(?)';
                 $params[] = $tier;
+            }
+        }
+        if ($seats > 0) {
+            // UI uses 2 tiers: 4-seat (vehicles with seats < 7) and 7-seat (vehicles with seats >= 7).
+            if ($seats >= 7) {
+                $where[] = 'v.seats >= ?';
+                $params[] = 7;
+            } else {
+                $where[] = 'v.seats < ?';
+                $params[] = 7;
             }
         }
         if ($brand !== '') {
@@ -177,7 +188,7 @@ final class VehicleRepository
         $stmt = $this->pdo->prepare("
             SELECT 
                 v.id, v.brand, v.model, v.year, v.license_plate, v.color,
-                v.transmission, v.fuel_type, v.seats,
+                v.transmission, v.fuel_type, v.seats, v.service_tier,
                 va.assigned_date
             FROM vehicle_assignments va
             JOIN vehicles v ON va.vehicle_id = v.id

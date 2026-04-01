@@ -56,6 +56,9 @@ function control_normalize_booking_status(string $status): string
 {
     $s = strtolower(trim($status));
     $s = str_replace('-', '_', $s);
+    if ($s === 'canceled') {
+        return 'cancelled';
+    }
     if ($s === 'done') {
         return 'completed';
     }
@@ -70,6 +73,7 @@ function control_status_rank(string $status): int
         'confirmed' => 2, // included for reference but Control Staff workflow uses only 1,3,4
         'in_progress' => 3,
         'completed' => 4,
+        'cancelled' => 5,
         default => 0,
     };
 }
@@ -156,6 +160,19 @@ function control_get_available_vehicles(PDO $pdo): array
     return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 }
 
+/**
+ * @return array<int,string>
+ */
+function control_get_in_progress_vehicle_ids(PDO $pdo): array
+{
+    $stmt = $pdo->query("\n        SELECT DISTINCT b.vehicle_id::text AS vehicle_id\n        FROM bookings b\n        WHERE b.vehicle_id IS NOT NULL\n          AND REPLACE(LOWER(b.status::text), '-', '_') = 'in_progress'\n    ");
+    if (!$stmt) {
+        return [];
+    }
+    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    return array_values(array_filter(array_map('strval', $rows)));
+}
+
 function control_vehicle_column_exists(PDO $pdo, string $columnName): bool
 {
     $stmt = $pdo->prepare("\n        SELECT 1\n        FROM information_schema.columns\n        WHERE table_schema = current_schema()\n          AND table_name = 'vehicles'\n          AND column_name = ?\n        LIMIT 1\n    ");
@@ -173,6 +190,17 @@ function control_pick_random_driver_vehicle(PDO $pdo): ?array
 
     $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : false;
     return $row ?: null;
+}
+
+function control_vehicle_is_locked_in_progress(PDO $pdo, string $vehicleId): bool
+{
+    if ($vehicleId === '') {
+        return false;
+    }
+
+    $stmt = $pdo->prepare("\n        SELECT 1\n        FROM bookings b\n        WHERE b.vehicle_id = ?\n          AND REPLACE(LOWER(b.status::text), '-', '_') = 'in_progress'\n        LIMIT 1\n    ");
+    $stmt->execute([$vehicleId]);
+    return (bool)$stmt->fetchColumn();
 }
 
 if (!isset($_SESSION['user_id'])) {
@@ -456,6 +484,18 @@ try {
     if ($action === 'get_vehicles') {
         ensure_vehicle_service_tier_column($pdo);
         $vehicles = $vehicleRepo->listAll();
+
+        $lockedVehicleIds = array_flip(control_get_in_progress_vehicle_ids($pdo));
+        $vehicles = array_map(static function (array $vehicle) use ($lockedVehicleIds): array {
+            $vid = (string)($vehicle['id'] ?? '');
+            $locked = isset($lockedVehicleIds[$vid]);
+            $vehicle['is_locked_in_progress'] = $locked;
+            $vehicle['lock_reason'] = $locked
+                ? 'Vehicle is currently assigned to an in-progress order. Complete that order before editing or deleting this vehicle.'
+                : '';
+            return $vehicle;
+        }, $vehicles);
+
         echo json_encode(['success' => true, 'vehicles' => $vehicles]);
         exit;
     }
@@ -467,6 +507,17 @@ try {
         }
 
         $drivers = control_get_drivers_with_status($userRepo, $statusFilter);
+        $lockedVehicleIds = array_flip(control_get_in_progress_vehicle_ids($pdo));
+        $drivers = array_map(static function (array $driver) use ($lockedVehicleIds): array {
+            $assignedVehicleId = trim((string)($driver['assigned_vehicle_id'] ?? ''));
+            $isLocked = $assignedVehicleId !== '' && isset($lockedVehicleIds[$assignedVehicleId]);
+            $driver['can_unassign'] = !$isLocked;
+            $driver['unassign_lock_reason'] = $isLocked
+                ? 'Cannot unassign driver while the assigned vehicle is serving an in-progress order.'
+                : '';
+            return $driver;
+        }, $drivers);
+
         echo json_encode(['success' => true, 'drivers' => $drivers]);
         exit;
     }
@@ -528,6 +579,10 @@ try {
         $assignedVehicleId = trim((string)($driver['assigned_vehicle_id'] ?? ''));
         if ($assignedVehicleId === '') {
             throw new Exception('Driver is already pending');
+        }
+
+        if (control_vehicle_is_locked_in_progress($pdo, $assignedVehicleId)) {
+            throw new Exception('Cannot unassign driver while the assigned vehicle is linked to an in-progress order');
         }
 
         $clearDriverStmt = $pdo->prepare("UPDATE users SET assigned_vehicle_id = NULL, assigned_vehicle_assigned_at = NULL WHERE id = ?");
@@ -606,6 +661,10 @@ try {
             throw new Exception('Vehicle not found');
         }
 
+        if (control_vehicle_is_locked_in_progress($pdo, $vehicleId)) {
+            throw new Exception('Cannot edit vehicle while it is linked to an in-progress order');
+        }
+
         $fields = [];
         $editable = [
             'brand', 'model', 'year', 'license_plate', 'category', 'transmission', 'fuel_type',
@@ -633,6 +692,10 @@ try {
         $vehicleId = trim((string)($bodyJson['vehicle_id'] ?? $_POST['vehicle_id'] ?? ''));
         if ($vehicleId === '') {
             throw new Exception('Missing vehicle_id');
+        }
+
+        if (control_vehicle_is_locked_in_progress($pdo, $vehicleId)) {
+            throw new Exception('Cannot delete vehicle while it is linked to an in-progress order');
         }
 
         $ok = $vehicleRepo->deleteVehicleAdmin($vehicleId);

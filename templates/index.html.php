@@ -334,8 +334,21 @@
 
         .section-header-centered { text-align: center; justify-content: center; }
         .section-header-centered .section-subtitle { margin: 0 auto; max-width: 620px; }
-        .section-header-space { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-        .section-header-space > div { text-align: center; margin: 0 auto; }
+        .section-header-space {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 16px;
+        }
+        .section-header-space > div {
+            grid-column: 2;
+            text-align: center;
+            margin: 0;
+        }
+        .section-header-space .section-link {
+            grid-column: 3;
+            justify-self: end;
+        }
         .section-eyebrow { display: block; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin-bottom: 8px; }
 
         .steps-grid-redesign {
@@ -441,6 +454,15 @@
 
         @media (max-width: 900px) {
             .spotlight-grid { grid-template-columns: 1fr; }
+            .section-header-space {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            .section-header-space .section-link {
+                justify-self: auto;
+            }
         }
     </style>
 
@@ -449,7 +471,7 @@
         <div class="section-container">
             <div class="section-header section-header-centered">
                 <div>
-                    <h2 class="section-title">Precision Workflow</h2>
+                    <h2 class="section-title">How It Works</h2>
                     <p class="section-subtitle">Experience a seamless transition from selection to the driver's seat with our curated 4-step process.</p>
                 </div>
             </div>
@@ -488,7 +510,7 @@
             <div class="section-header section-header-space">
                 <div>
                     <span class="section-eyebrow">Exclusive Access</span>
-                    <h2 class="section-title">Seasonal Privileges</h2>
+                    <h2 class="section-title">Promotions and Deals</h2>
                 </div>
                 <a href="/promotions.php" class="section-link">All Promotions →</a>
             </div>

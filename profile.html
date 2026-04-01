@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        h1, h2, h3, .headline-lg {
+            font-family: 'Manrope', sans-serif;
+        }
+        .custom-glass {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "tertiary-container": "#8d4a36",
+                "on-secondary": "#ffffff",
+                "on-tertiary": "#ffffff",
+                "background": "#f8fafa",
+                "secondary-fixed": "#dde4e2",
+                "surface-container-lowest": "#ffffff",
+                "on-primary": "#ffffff",
+                "surface-container-low": "#f2f4f4",
+                "on-secondary-fixed-variant": "#414847",
+                "primary-fixed-dim": "#84d5c5",
+                "surface-container-high": "#e6e8e8",
+                "tertiary": "#703321",
+                "on-tertiary-container": "#ffcabb",
+                "secondary-container": "#dde4e2",
+                "primary-fixed": "#a0f2e1",
+                "secondary": "#59605f",
+                "on-background": "#191c1d",
+                "surface-dim": "#d8dada",
+                "primary": "#004f45",
+                "on-tertiary-fixed-variant": "#723522",
+                "on-surface": "#191c1d",
+                "surface-container-highest": "#e1e3e3",
+                "surface-bright": "#f8fafa",
+                "surface": "#f8fafa",
+                "inverse-on-surface": "#eff1f1",
+                "on-secondary-container": "#5f6665",
+                "error-container": "#ffdad6",
+                "tertiary-fixed-dim": "#ffb59f",
+                "on-primary-container": "#94e5d5",
+                "secondary-fixed-dim": "#c1c8c6",
+                "on-surface-variant": "#3e4946",
+                "tertiary-fixed": "#ffdbd1",
+                "on-secondary-fixed": "#161d1c",
+                "on-primary-fixed": "#00201b",
+                "surface-variant": "#e1e3e3",
+                "on-tertiary-fixed": "#3a0b01",
+                "surface-container": "#eceeee",
+                "on-error": "#ffffff",
+                "inverse-primary": "#84d5c5",
+                "error": "#ba1a1a",
+                "surface-tint": "#046b5e",
+                "on-primary-fixed-variant": "#005046",
+                "primary-container": "#00695c",
+                "outline": "#6e7976",
+                "on-error-container": "#93000a",
+                "inverse-surface": "#2e3131",
+                "outline-variant": "#bec9c5"
+              },
+              fontFamily: {
+                "headline": ["Manrope"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background min-h-screen flex">
+<!-- SideNavBar (Shared Component) -->
+<aside class="h-screen w-72 fixed left-0 top-0 bg-slate-50 dark:bg-slate-950 flex flex-col py-8 px-4 gap-2 z-40">
+<!-- Header -->
+<div class="px-4 mb-8">
+<div class="w-16 h-16 rounded-full bg-surface-container-highest mb-4 overflow-hidden">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="professional portrait of a middle-aged man with short dark hair and a confident expression, neutral studio background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLphtQtOvnp0YcUFPLVV1pVAMrHioAjL-vuZNlcMUEUXBtPBO3I98pJ5U54iHjUkzBmZeytM2reqtYzqivV8SfiBwbnAoKO9edtCFa-NymeXIrkdhnLsI1rms42oFl6krIQCUxLS-9okd3L_z25Y75Muew5HhjsRnM2QOG0-e6gre01rWzCIIpN2viBNeMx4u2BvqYZChRbb_jDD6F1bFGrJmvrFykl5IR8vLcYOqBP8MpeoEDBoo7YAnCkNQz1EOAZTx7QPl85LY"/>
+</div>
+<h2 class="text-teal-900 font-black text-xl font-headline">Julian Montgomery</h2>
+<p class="text-slate-500 dark:text-slate-400 text-xs font-label">Senior Architect</p>
+</div>
+<!-- Navigation Tabs -->
+<nav class="flex-1 space-y-1">
+<!-- Active: Profile Details -->
+<a class="flex items-center gap-3 px-4 py-3 text-teal-800 dark:text-teal-200 font-bold border-r-4 border-teal-800 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/20 transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-manrope font-semibold text-sm">Profile Details</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-teal-50/50 dark:hover:bg-teal-900/10 hover:text-teal-700 transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+<span class="font-manrope font-semibold text-sm">Security</span>
+</a>
+<!-- Removed Notifications and Payment Methods per request -->
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-teal-50/50 dark:hover:bg-teal-900/10 hover:text-teal-700 transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-manrope font-semibold text-sm">App Settings</span>
+</a>
+</nav>
+<!-- Footer Actions -->
+<div class="mt-auto pt-8 space-y-1">
+<button class="w-full mb-4 py-3 px-4 rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary text-sm font-semibold shadow-lg shadow-primary/10">
+                Upgrade Plan
+            </button>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-teal-50/50 transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-manrope font-semibold text-sm">Help Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-teal-50/50 transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-manrope font-semibold text-sm">Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 ml-72 min-h-screen p-12">
+<div class="max-w-4xl mx-auto">
+<!-- Header Section (Remaining focused and balanced) -->
+<header class="mb-12">
+<h1 class="text-4xl font-extrabold tracking-tight text-on-background mb-2">Personal Information</h1>
+<p class="text-on-surface-variant text-lg">Manage your account details and architectural preferences.</p>
+</header>
+<!-- Main Form Card -->
+<section class="bg-surface-container-lowest rounded-3xl p-10 shadow-[0_12px_40px_rgba(0,79,69,0.06)]">
+<form class="space-y-8">
+<!-- Identity Section -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="space-y-2">
+<label class="block text-sm font-semibold text-on-surface-variant ml-1">Full Name</label>
+<input class="w-full bg-surface-container border-none rounded-xl px-4 py-4 focus:ring-2 focus:ring-primary/40 text-on-surface font-medium transition-all" placeholder="Enter your full name" type="text" value="Julian Montgomery"/>
+</div>
+<div class="space-y-2">
+<label class="block text-sm font-semibold text-on-surface-variant ml-1">Email Address</label>
+<input class="w-full bg-surface-container border-none rounded-xl px-4 py-4 focus:ring-2 focus:ring-primary/40 text-on-surface font-medium transition-all" placeholder="name@example.com" type="email" value="j.montgomery@arch-mobility.com"/>
+</div>
+</div>
+<!-- Contact & Bio Section -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="space-y-2">
+<label class="block text-sm font-semibold text-on-surface-variant ml-1">Phone Number</label>
+<input class="w-full bg-surface-container border-none rounded-xl px-4 py-4 focus:ring-2 focus:ring-primary/40 text-on-surface font-medium transition-all" placeholder="+1 (000) 000-0000" type="tel" value="+1 (555) 892-4410"/>
+</div>
+<div class="space-y-2">
+<label class="block text-sm font-semibold text-on-surface-variant ml-1">Date of Birth</label>
+<div class="relative">
+<input class="w-full bg-surface-container border-none rounded-xl px-4 py-4 focus:ring-2 focus:ring-primary/40 text-on-surface font-medium transition-all appearance-none" type="date" value="1985-05-12"/>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" data-icon="calendar_today">calendar_today</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="block text-sm font-semibold text-on-surface-variant ml-1">Professional Bio</label>
+<textarea class="w-full bg-surface-container border-none rounded-xl px-4 py-4 focus:ring-2 focus:ring-primary/40 text-on-surface font-medium transition-all resize-none" placeholder="Tell us about your architectural background..." rows="5">Senior Architect with over 15 years of experience in urban planning and sustainable mobility solutions. Passionate about integrating transit-oriented development with modern residential aesthetics.</textarea>
+</div>
+<!-- Visual Accent Card (Bento Style) -->
+<div class="bg-surface-container-low rounded-2xl p-6 flex items-center gap-6 mt-4">
+<div class="w-24 h-24 rounded-xl bg-surface-container-highest flex-shrink-0 overflow-hidden">
+<img alt="Modern architectural building" class="w-full h-full object-cover" data-alt="ultra-modern glass skyscraper with geometric steel patterns reflecting a clear blue sky, architectural photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsK-NHY8fDHuk_syQAT3aEBfdHtyHGqZ6I58lTTD5yMOydf0PM5FRQII548kwPeD6o2wlxwhLcGOX97DZtTZQcHWd9wuJ7Tjd6JR0EEPiGbluCIenPcvO9mliO-z59bQ_PY_ytFLGp5oEyHu2IyX012tndUbzJxri-8Kgozavg8T747PwvMhsVa5-vRM2p3IZnbfdM-Ksg2qQ9NTUxdMkYUyTk7CxsgDBtwU7ACh5qHKCRQ50eEcpPEtNPcmc7nR4iJ-bHXipgYdo"/>
+</div>
+<div>
+<h3 class="font-headline font-bold text-primary mb-1">Company Association</h3>
+<p class="text-sm text-on-surface-variant">Your profile is currently linked to the <span class="font-bold text-on-surface">Architectural Mobility Global Syndicate</span>. All billing and logistics are managed under this entity.</p>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-end gap-4 pt-6">
+<button class="px-8 py-3 rounded-xl bg-surface-container-high text-primary font-semibold hover:bg-surface-container-highest transition-colors duration-200" type="reset">
+                            Reset
+                        </button>
+<button class="px-10 py-3 rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all duration-200" type="submit">
+                            Save Changes
+                        </button>
+</div>
+</form>
+</section>
+<!-- Support Footer Note -->
+<footer class="mt-8 text-center">
+<p class="text-on-surface-variant text-sm">
+                    Having trouble updating your information? 
+                    <a class="text-primary font-bold hover:underline ml-1" href="#">Contact Support</a>
+</p>
+</footer>
+</div>
+</main>
+</body></html>
+
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-container": "#8d4a36",
+              "on-secondary": "#ffffff",
+              "on-tertiary": "#ffffff",
+              "background": "#f8fafa",
+              "secondary-fixed": "#dde4e2",
+              "surface-container-lowest": "#ffffff",
+              "on-primary": "#ffffff",
+              "surface-container-low": "#f2f4f4",
+              "on-secondary-fixed-variant": "#414847",
+              "primary-fixed-dim": "#84d5c5",
+              "surface-container-high": "#e6e8e8",
+              "tertiary": "#703321",
+              "on-tertiary-container": "#ffcabb",
+              "secondary-container": "#dde4e2",
+              "primary-fixed": "#a0f2e1",
+              "secondary": "#59605f",
+              "on-background": "#191c1d",
+              "surface-dim": "#d8dada",
+              "primary": "#004f45",
+              "on-tertiary-fixed-variant": "#723522",
+              "on-surface": "#191c1d",
+              "surface-container-highest": "#e1e3e3",
+              "surface-bright": "#f8fafa",
+              "surface": "#f8fafa",
+              "inverse-on-surface": "#eff1f1",
+              "on-secondary-container": "#5f6665",
+              "error-container": "#ffdad6",
+              "tertiary-fixed-dim": "#ffb59f",
+              "on-primary-container": "#94e5d5",
+              "secondary-fixed-dim": "#c1c8c6",
+              "on-surface-variant": "#3e4946",
+              "tertiary-fixed": "#ffdbd1",
+              "on-secondary-fixed": "#161d1c",
+              "on-primary-fixed": "#00201b",
+              "surface-variant": "#e1e3e3",
+              "on-tertiary-fixed": "#3a0b01",
+              "surface-container": "#eceeee",
+              "on-error": "#ffffff",
+              "inverse-primary": "#84d5c5",
+              "error": "#ba1a1a",
+              "surface-tint": "#046b5e",
+              "on-primary-fixed-variant": "#005046",
+              "primary-container": "#00695c",
+              "outline": "#6e7976",
+              "on-error-container": "#93000a",
+              "inverse-surface": "#2e3131",
+              "outline-variant": "#bec9c5"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .glass-nav {
+        background: rgba(0, 79, 69, 0.8);
+        backdrop-filter: blur(12px);
+      }
+      .brushed-silk-gradient {
+        background: linear-gradient(135deg, #004f45 0%, #00695c 100%);
+      }
+    </style>
+</head>
+<body class="bg-background font-body text-on-background antialiased">
+<div class="flex min-h-screen">
+<!-- SideNavBar Component -->
+<aside class="h-screen w-72 fixed left-0 top-0 bg-slate-50 dark:bg-slate-950 flex flex-col py-8 px-4 gap-2 border-r border-slate-200 dark:border-slate-800">
+<div class="mb-8 px-4">
+<div class="flex items-center gap-2 mb-8">
+<span class="text-xl font-bold text-primary font-headline">Architectural Mobility</span>
+</div>
+<div class="flex items-center gap-3 mb-4">
+<img alt="User profile avatar" class="h-12 w-12 rounded-full object-cover" data-alt="Portrait of Julian Montgomery, an architect in his 40s with a professional and friendly expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDP4JBEXvbyDIESp8SwCABW4qCkEk5MtugLTRjT1BKMzudT6O3pM_ENUMfQbtMUXnVoeMcZW00BrZSlMcoKhm6F1l-NxiE-Y_zeeM-dAMKV5Sz7whz4GNh2F93fsN7zPi9e4QlZGzXbB64LGmHiMLBN6oDJxYQs0GnR6bPKx8gZkVyqdsj68RaEmgF8P9TnPp2KYzL5NKeYnUOFU8eK9OynW6uzKaVcegJhcapnUmnz1k5HMnzhSREUU7EfGfWBDGT9XiAfsyfxXmw"/>
+<div>
+<h3 class="text-teal-900 font-black font-headline text-sm">Julian Montgomery</h3>
+<p class="text-slate-500 text-xs">Senior Architect</p>
+</div>
+</div>
+<button class="w-full brushed-silk-gradient text-white text-sm font-semibold py-2 rounded-xl shadow-lg shadow-teal-900/10">Upgrade Plan</button>
+</div>
+<nav class="flex-1 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 dark:text-slate-400 font-manrope font-semibold text-sm hover:bg-teal-50/50 dark:hover:bg-teal-900/10 hover:text-teal-700 transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span>Profile Details</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-800 dark:text-teal-200 font-bold border-r-4 border-teal-800 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/20 font-manrope text-sm transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+<span>Security</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 dark:text-slate-400 font-manrope font-semibold text-sm hover:bg-teal-50/50 dark:hover:bg-teal-900/10 hover:text-teal-700 transition-colors duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>App Settings</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-slate-200 pt-4 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 font-manrope font-semibold text-sm hover:bg-teal-50/50" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Help Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 font-manrope font-semibold text-sm hover:bg-red-50 hover:text-red-600" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span>Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-72 flex-1 p-12">
+<div class="max-w-4xl mx-auto">
+<header class="mb-10">
+<h1 class="text-4xl font-headline font-extrabold text-primary tracking-tight mb-2">Account Security</h1>
+<p class="text-on-surface-variant font-body">Manage your account authentication and security preferences.</p>
+</header>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Email Verification -->
+<div class="bg-surface-container-low rounded-xl p-6 flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 bg-primary/10 rounded-lg text-primary">
+<span class="material-symbols-outlined">mail</span>
+</div>
+<span class="px-3 py-1 bg-primary text-on-primary text-xs font-bold rounded-full">Verified</span>
+</div>
+<div>
+<h3 class="text-lg font-headline font-bold text-primary mb-1">Email Verification</h3>
+<p class="text-sm text-on-surface-variant mb-4">julian.m@architectural-mobility.com</p>
+<button class="text-primary text-sm font-semibold hover:underline flex items-center gap-1">Change Email <span class="material-symbols-outlined text-sm">chevron_right</span></button>
+</div>
+</div>
+<!-- Phone Verification -->
+<div class="bg-surface-container-low rounded-xl p-6 flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 bg-error/10 rounded-lg text-error">
+<span class="material-symbols-outlined">smartphone</span>
+</div>
+<span class="px-3 py-1 bg-error-container text-on-error-container text-xs font-bold rounded-full">Not Verified</span>
+</div>
+<div>
+<h3 class="text-lg font-headline font-bold text-primary mb-1">Phone Verification</h3>
+<p class="text-sm text-on-surface-variant mb-4">Connect your phone for two-factor security.</p>
+<button class="text-primary text-sm font-semibold hover:underline flex items-center gap-1">Add Phone Number <span class="material-symbols-outlined text-sm">chevron_right</span></button>
+</div>
+</div>
+<!-- Face ID -->
+<div class="bg-surface-container-low rounded-xl p-6 flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 bg-secondary/10 rounded-lg text-secondary">
+<span class="material-symbols-outlined">face</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-medium text-on-surface-variant">Disabled</span>
+<div class="w-10 h-5 bg-surface-container-highest rounded-full relative cursor-pointer">
+<div class="absolute left-1 top-1 w-3 h-3 bg-white rounded-full"></div>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-lg font-headline font-bold text-primary mb-1">Face ID Login</h3>
+<p class="text-sm text-on-surface-variant mb-4">Quick access using biometric authentication.</p>
+<button class="text-primary text-sm font-semibold hover:underline flex items-center gap-1">Enable Face ID <span class="material-symbols-outlined text-sm">chevron_right</span></button>
+</div>
+</div>
+<!-- Password Reset Section - Spans 3 columns -->
+<div class="md:col-span-3 bg-surface-container-lowest rounded-xl p-8 shadow-sm border border-outline-variant/15 mt-4">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+<div class="flex-1">
+<h3 class="text-2xl font-headline font-bold text-primary mb-2">Security Credentials</h3>
+<p class="text-on-surface-variant text-sm max-w-md">We recommend updating your password every 90 days to maintain optimal architectural security standards.</p>
+</div>
+<div class="flex flex-col gap-4 min-w-[240px]">
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl">
+<div>
+<p class="text-xs text-on-surface-variant font-medium">Last Changed</p>
+<p class="text-sm font-bold text-primary">October 24, 2023</p>
+</div>
+<span class="material-symbols-outlined text-teal-700/40">history</span>
+</div>
+<button class="brushed-silk-gradient text-white py-4 px-6 rounded-xl font-headline font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-teal-900/20 hover:scale-[1.02] transition-transform">
+<span class="material-symbols-outlined text-sm">key</span>
+                                    Reset Password
+                                </button>
+</div>
+</div>
+</div>
+<!-- Extra Security Tips -->
+<div class="md:col-span-3 mt-8">
+<div class="bg-teal-900 text-white rounded-2xl overflow-hidden relative">
+<div class="p-8 relative z-10">
+<h4 class="text-xl font-headline font-bold mb-2">Enhance Your Account Protection</h4>
+<p class="text-teal-100/80 text-sm max-w-lg mb-6">Learn how to better protect your architectural designs and booking history using our advanced multi-factor authentication protocols.</p>
+<button class="bg-white text-primary px-6 py-2 rounded-full text-sm font-bold hover:bg-teal-50 transition-colors">Read Security Guide</button>
+</div>
+<!-- Aesthetic abstract background element -->
+<div class="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 flex items-center justify-center pointer-events-none">
+<span class="material-symbols-outlined text-[120px]" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
+
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "tertiary-container": "#8d4a36",
+            "on-secondary": "#ffffff",
+            "on-tertiary": "#ffffff",
+            "background": "#f8fafa",
+            "secondary-fixed": "#dde4e2",
+            "surface-container-lowest": "#ffffff",
+            "on-primary": "#ffffff",
+            "surface-container-low": "#f2f4f4",
+            "on-secondary-fixed-variant": "#414847",
+            "primary-fixed-dim": "#84d5c5",
+            "surface-container-high": "#e6e8e8",
+            "tertiary": "#703321",
+            "on-tertiary-container": "#ffcabb",
+            "secondary-container": "#dde4e2",
+            "primary-fixed": "#a0f2e1",
+            "secondary": "#59605f",
+            "on-background": "#191c1d",
+            "surface-dim": "#d8dada",
+            "primary": "#004f45",
+            "on-tertiary-fixed-variant": "#723522",
+            "on-surface": "#191c1d",
+            "surface-container-highest": "#e1e3e3",
+            "surface-bright": "#f8fafa",
+            "surface": "#f8fafa",
+            "inverse-on-surface": "#eff1f1",
+            "on-secondary-container": "#5f6665",
+            "error-container": "#ffdad6",
+            "tertiary-fixed-dim": "#ffb59f",
+            "on-primary-container": "#94e5d5",
+            "secondary-fixed-dim": "#c1c8c6",
+            "on-surface-variant": "#3e4946",
+            "tertiary-fixed": "#ffdbd1",
+            "on-secondary-fixed": "#161d1c",
+            "on-primary-fixed": "#00201b",
+            "surface-variant": "#e1e3e3",
+            "on-tertiary-fixed": "#3a0b01",
+            "surface-container": "#eceeee",
+            "on-error": "#ffffff",
+            "inverse-primary": "#84d5c5",
+            "error": "#ba1a1a",
+            "surface-tint": "#046b5e",
+            "on-primary-fixed-variant": "#005046",
+            "primary-container": "#00695c",
+            "outline": "#6e7976",
+            "on-error-container": "#93000a",
+            "inverse-surface": "#2e3131",
+            "outline-variant": "#bec9c5"
+          },
+          fontFamily: {
+            "headline": ["Manrope"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafa;
+      color: #191c1d;
+    }
+    h1, h2, h3 {
+      font-family: 'Manrope', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-background min-h-screen">
+<aside class="h-screen w-72 fixed left-0 top-0 bg-slate-50 flex flex-col py-8 px-4 gap-2 border-r border-slate-200">
+<div class="px-4 mb-8">
+<div class="flex items-center gap-3 mb-4">
+<img alt="User profile avatar" class="w-12 h-12 rounded-xl object-cover" data-alt="close up headshot of Julian Montgomery wearing a dark turtleneck against a neutral architectural background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfh7JqWu5jSnNuPx_-1q9KYVxkMzmuXCxV-4RviYWjD6V4PGrs088wElSYure774sZkDMyOnfGmJ_hcPkxHvK9ard8W5wPsztmz-U6NzzlwmbHF2eEEG3Dup3gC69UwuT1CkQrj_nvdBfC5hll2MFy1V9GPLwfJzBwfefoXRiVT7bewaJSYGLIrV1F3ZUO9xjhytebgISa1LOyyxV8IVuS1HATGuNUszmX4mPAi-D5eq_Gwuw-24fahNlWv3pC7PWKDKiyx8MAXmk"/>
+<div>
+<div class="font-headline font-black text-teal-900 text-sm">Julian Montgomery</div>
+<div class="text-xs text-slate-500">Senior Architect</div>
+</div>
+</div>
+<button class="w-full bg-teal-800 text-white py-2 rounded-xl text-sm font-semibold hover:bg-teal-900 transition-colors">Upgrade Plan</button>
+</div>
+<div class="space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-teal-50/50 hover:text-teal-700 rounded-xl transition-colors duration-300 font-manrope font-semibold text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+        Profile Details
+      </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-teal-50/50 hover:text-teal-700 rounded-xl transition-colors duration-300 font-manrope font-semibold text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+        Security
+      </a>
+<a class="flex items-center gap-3 px-4 py-3 text-teal-800 font-bold border-r-4 border-teal-800 bg-teal-50 rounded-l-xl transition-colors duration-300 font-manrope text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+        App Settings
+      </a>
+</div>
+<div class="mt-auto space-y-1 pt-4 border-t border-slate-200">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-teal-50/50 hover:text-teal-700 rounded-xl transition-colors duration-300 font-manrope font-semibold text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+        Help Support
+      </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-teal-50/50 hover:text-teal-700 rounded-xl transition-colors duration-300 font-manrope font-semibold text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+        Sign Out
+      </a>
+</div>
+</aside>
+<main class="ml-72 pt-12 pb-20 px-12 max-w-6xl">
+<div class="mb-12">
+<h1 class="text-4xl font-extrabold text-on-surface tracking-tight mb-2">App Settings</h1>
+<p class="text-on-surface-variant max-w-2xl">Configure your workspace and notification preferences for a more personalized architectural management experience.</p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<div class="lg:col-span-8 space-y-6">
+<section class="bg-surface-container-lowest p-8 rounded-xl shadow-xl shadow-teal-900/5 transition-all">
+<div class="flex items-center gap-4 mb-8">
+<div class="w-12 h-12 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="language">language</span>
+</div>
+<div>
+<h2 class="text-xl font-bold font-headline text-on-surface">Language &amp; Regional</h2>
+<p class="text-sm text-on-surface-variant">Select your preferred language for the interface and communications.</p>
+</div>
+</div>
+<div class="space-y-4">
+<label class="block">
+<span class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2 block">System Language</span>
+<div class="relative">
+<select class="w-full bg-surface-container border-none rounded-xl h-14 px-5 text-on-surface appearance-none focus:ring-2 focus:ring-primary/40 font-medium transition-all">
+<option value="en-US">English (United States)</option>
+<option value="en-GB">English (United Kingdom)</option>
+<option value="de-DE">Deutsch</option>
+<option value="fr-FR">Français</option>
+<option value="es-ES">Español</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+<span class="material-symbols-outlined text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</label>
+<p class="text-xs text-on-surface-variant">Changes will be applied immediately across all synced devices.</p>
+</div>
+</section>
+<section class="bg-surface-container-lowest p-8 rounded-xl shadow-xl shadow-teal-900/5 transition-all">
+<div class="flex items-center gap-4 mb-8">
+<div class="w-12 h-12 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="mail">mail</span>
+</div>
+<div>
+<h2 class="text-xl font-bold font-headline text-on-surface">Email Notifications</h2>
+<p class="text-sm text-on-surface-variant">Control which updates you receive via email.</p>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center justify-between py-4 group">
+<div class="flex-1 pr-8">
+<h3 class="font-bold text-on-surface mb-1">Invoice</h3>
+<p class="text-sm text-on-surface-variant">Receive automated invoices and billing summaries directly in your inbox.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-14 h-8 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between py-4 border-t border-outline-variant/20 group">
+<div class="flex-1 pr-8">
+<h3 class="font-bold text-on-surface mb-1">Trip In Progress</h3>
+<p class="text-sm text-on-surface-variant">Real-time updates and status alerts while your transport is on the move.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-14 h-8 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</section>
+<div class="flex justify-end gap-4 pt-4">
+<button class="px-8 py-3 rounded-xl bg-surface-container-high text-primary font-bold hover:bg-surface-container-highest transition-all">Discard Changes</button>
+<button class="px-8 py-3 rounded-xl bg-gradient-to-br from-primary to-primary-container text-white font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all">Save Preferences</button>
+</div>
+</div>
+<div class="lg:col-span-4 space-y-6">
+<div class="bg-primary text-white p-8 rounded-xl relative overflow-hidden">
+<div class="relative z-10">
+<h3 class="text-xl font-bold font-headline mb-4">Precision Concierge</h3>
+<p class="text-sm text-teal-100/80 mb-6 leading-relaxed">Your preferences are synced across all devices using enterprise-grade encryption. Need help with custom configurations?</p>
+<button class="bg-white/10 backdrop-blur-md hover:bg-white/20 transition-all text-white px-6 py-2 rounded-lg text-sm font-bold border border-white/20">Contact Support</button>
+</div>
+<div class="absolute -right-12 -bottom-12 w-48 h-48 bg-white/5 rounded-full blur-3xl"></div>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border border-outline-variant/10">
+<h4 class="font-bold text-on-surface mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">history</span>
+            Recent Changes
+          </h4>
+<div class="space-y-4">
+<div class="flex items-start gap-3">
+<div class="w-1 h-10 bg-primary/20 rounded-full"></div>
+<div>
+<div class="text-xs font-bold text-on-surface">Language updated</div>
+<div class="text-[10px] text-on-surface-variant">2 days ago • IP: 192.168.1.1</div>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-1 h-10 bg-primary/20 rounded-full"></div>
+<div>
+<div class="text-xs font-bold text-on-surface">Security keys refreshed</div>
+<div class="text-[10px] text-on-surface-variant">Oct 14, 2023 • Mobile App</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

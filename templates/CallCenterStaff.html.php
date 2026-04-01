@@ -2,90 +2,161 @@
 
 <style>
     :root {
-        --cc-bg-top: #fff8ee;
-        --cc-bg-bottom: #eef6ff;
-        --cc-panel: #ffffff;
-        --cc-panel-border: #dbe7f5;
-        --cc-panel-shadow: 0 10px 30px rgba(15, 23, 42, 0.07);
-        --cc-ink: #0f172a;
-        --cc-sub: #5a6b83;
-        --cc-accent: #0f6bcf;
-        --cc-accent-soft: #e8f2ff;
+        --cc-primary: #004f45;
+        --cc-surface: #f8fafa;
+        --cc-card: #ffffff;
+        --cc-soft: #f2f4f4;
+        --cc-border: #dce4e2;
     }
 
     body {
-        background:
-            radial-gradient(1000px 420px at -5% -10%, #ffe4bf 0%, transparent 60%),
-            radial-gradient(900px 380px at 105% -10%, #cce7ff 0%, transparent 58%),
-            linear-gradient(180deg, var(--cc-bg-top) 0%, var(--cc-bg-bottom) 100%);
+        background: var(--cc-surface);
     }
 
     .cc-wrap {
-        max-width: 1240px;
+        max-width: 1560px;
         margin: 0 auto;
-        padding: calc(84px + env(safe-area-inset-top)) 24px 34px;
+        padding: calc(84px + env(safe-area-inset-top)) 22px 28px;
     }
 
     .cc-hero {
-        background: linear-gradient(135deg, #0f172a 0%, #1f3e6f 55%, #0f6bcf 100%);
-        border-radius: 18px;
-        padding: 22px 22px;
-        color: #eff6ff;
-        margin-bottom: 18px;
-        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.2);
+        margin-bottom: 12px;
     }
 
-    .cc-title { font-size: 1.9rem; letter-spacing: 0.2px; color: #f8fafc; margin-bottom: 8px; }
-    .cc-sub { color: #bfd7f6; margin-bottom: 0; }
+    .cc-title {
+        font-size: 2.1rem;
+        font-weight: 800;
+        line-height: 1.1;
+        color: #191c1d;
+        margin-bottom: 6px;
+    }
+
+    .cc-sub {
+        color: #4f5b58;
+        margin: 0;
+        font-size: 0.96rem;
+    }
 
     .cc-tabbar {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         margin-bottom: 16px;
-        flex-wrap: wrap;
+        width: fit-content;
+        background: #eef2f2;
+        border-radius: 14px;
+        padding: 6px;
     }
 
     .cc-tab-btn {
-        border: 1px solid #c6dcf5;
-        background: #f8fbff;
-        color: #1e3a5f;
-        border-radius: 999px;
-        padding: 9px 16px;
+        border: none;
+        background: transparent;
+        color: #4d5b57;
+        border-radius: 10px;
+        padding: 10px 16px;
         font-weight: 700;
         cursor: pointer;
-        transition: all .2s ease;
-    }
-
-    .cc-tab-btn:hover {
-        border-color: #95c4f3;
-        transform: translateY(-1px);
+        transition: all .18s ease;
     }
 
     .cc-tab-btn.active {
-        border-color: #0f6bcf;
-        background: linear-gradient(135deg, #0f6bcf 0%, #1d4ed8 100%);
-        color: #fff;
-        box-shadow: 0 8px 18px rgba(15, 107, 207, 0.24);
+        background: #fff;
+        color: var(--cc-primary);
+        box-shadow: 0 8px 20px rgba(0, 79, 69, 0.08);
     }
 
     .cc-tab-panel { display: none; }
     .cc-tab-panel.active { display: block; }
 
-    .cc-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
-    .cc-card { background: var(--cc-panel); border: 1px solid var(--cc-panel-border); border-radius: 14px; padding: 18px; box-shadow: var(--cc-panel-shadow); }
-    .cc-card h2 { margin: 0 0 14px 0; font-size: 1.08rem; color: var(--cc-ink); }
-    .cc-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cc-tab-note {
+        font-size: 0.86rem;
+        color: #62706d;
+        margin-bottom: 12px;
+    }
+
+    .cc-grid {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr;
+        gap: 22px;
+    }
+
+    .cc-card {
+        background: var(--cc-card);
+        border: 1px solid var(--cc-border);
+        border-radius: 18px;
+        padding: 22px;
+        box-shadow: 0 12px 30px rgba(0, 79, 69, 0.06);
+    }
+
+    .cc-card h2 {
+        margin: 0;
+        font-size: 1.35rem;
+        color: #1a2020;
+        font-weight: 800;
+    }
+
+    .cc-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+    }
+
+    .cc-card-head-icon {
+        color: var(--cc-primary);
+        font-size: 1.65rem;
+    }
+
+    .cc-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .cc-form-grid .full { grid-column: 1 / -1; }
-    .cc-input, .cc-select, .cc-textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; }
+
+    .cc-form-field label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.69rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        color: #4c5a57;
+    }
+
+    .cc-input, .cc-select, .cc-textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.92rem;
+        background: var(--cc-soft);
+        color: #1d2523;
+    }
+
+    .cc-input:focus, .cc-select:focus, .cc-textarea:focus {
+        outline: 2px solid rgba(0, 79, 69, 0.22);
+    }
+
     .cc-textarea { min-height: 90px; resize: vertical; }
-    .cc-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; }
-    .cc-btn { padding: 9px 14px; border: none; border-radius: 9px; cursor: pointer; font-weight: 700; }
-    .cc-btn-primary { background: #1d4ed8; color: #fff; }
-    .cc-btn-secondary { background: #e2e8f0; color: #0f172a; }
+
+    .cc-actions {
+        margin-top: 14px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .cc-btn {
+        padding: 10px 14px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 800;
+    }
+
+    .cc-btn-primary { background: linear-gradient(135deg, #004f45, #00695c); color: #fff; }
+    .cc-btn-secondary { background: #e6eceb; color: #243330; }
     .cc-btn-danger { background: #dc2626; color: #fff; }
-    .cc-status { margin-top: 10px; color: #334155; font-size: 0.9rem; }
+
+    .cc-status { margin-top: 10px; color: #334155; font-size: 0.88rem; }
     .cc-results { position: relative; }
-    .cc-customer-list { position: absolute; z-index: 30; width: 100%; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; max-height: 180px; overflow: auto; display: none; }
+    .cc-customer-list { position: absolute; z-index: 30; width: 100%; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; max-height: 180px; overflow: auto; display: none; }
     .cc-customer-item { padding: 10px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
     .cc-customer-item:hover { background: #eff6ff; }
     .cc-table-wrap {
@@ -154,10 +225,125 @@
     .leaflet-autocomplete-list .autocomplete-item .ac-main { font-weight: 600; }
     .leaflet-autocomplete-list .autocomplete-item .ac-sub { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
 
-    .cc-tab-note {
-        font-size: 0.85rem;
-        color: var(--cc-sub);
-        margin-bottom: 12px;
+    .cc-requests-stack {
+        display: grid;
+        gap: 12px;
+    }
+
+    .cc-request-card {
+        padding: 14px;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid #e0e8e6;
+        transition: all .2s ease;
+    }
+
+    .cc-request-card:hover {
+        box-shadow: 0 10px 20px rgba(0, 79, 69, 0.08);
+    }
+
+    .cc-request-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .cc-request-title {
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #1b2321;
+        margin: 0;
+    }
+
+    .cc-request-meta {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+
+    .cc-request-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 10px;
+        font-size: 0.81rem;
+        color: #596867;
+    }
+
+    .cc-request-actions {
+        display: flex;
+        gap: 8px;
+        padding-top: 10px;
+        border-top: 1px solid #ebf1f0;
+    }
+
+    .cc-request-actions .cc-btn { flex: 1; padding: 8px 10px; font-size: 0.78rem; }
+
+    .cc-create-wrap {
+        max-width: 930px;
+        margin: 0 auto;
+    }
+
+    .cc-summary-card {
+        display: none;
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid #bde5da;
+        background: #e8f6f1;
+        color: #134e4a;
+        font-size: 0.86rem;
+    }
+
+    .cc-enquiry-shell {
+        background: #fff;
+        border: 1px solid #dce4e2;
+        border-radius: 26px;
+        overflow: hidden;
+        box-shadow: 0 12px 30px rgba(0, 79, 69, 0.06);
+    }
+
+    .cc-enquiry-head {
+        padding: 18px 22px;
+        border-bottom: 1px solid #e8efed;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .cc-enquiry-title {
+        font-size: 1.22rem;
+        font-weight: 800;
+        color: #1a2020;
+        margin: 0;
+    }
+
+    .cc-enquiry-tools {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .cc-enquiry-search {
+        padding: 9px 12px;
+        border-radius: 10px;
+        border: none;
+        background: #f2f4f4;
+        min-width: 240px;
+    }
+
+    .cc-enquiry-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 18px;
+        background: #f6f9f8;
+        border-top: 1px solid #e8efed;
+        font-size: 0.78rem;
+        color: #64748b;
     }
 
     #ccReplyModal .modal {
@@ -188,26 +374,16 @@
 
         .cc-title { font-size: 1.35rem; }
 
-        .cc-tabbar {
-            position: sticky;
-            top: calc(60px + env(safe-area-inset-top));
-            z-index: 12;
-            background: rgba(238, 246, 255, 0.92);
-            backdrop-filter: blur(6px);
-            padding: 8px;
-            border: 1px solid #d3e4f8;
-            border-radius: 12px;
-        }
-
-        .cc-tab-btn {
-            flex: 1 1 180px;
-            text-align: center;
-        }
+        .cc-tabbar { width: 100%; overflow-x: auto; }
+        .cc-tab-btn { white-space: nowrap; }
 
         .cc-form-grid { grid-template-columns: 1fr; }
         .cc-card { padding: 14px; }
         th, td { padding: 9px 8px; font-size: 0.84rem; }
         .map-picker { height: 240px; }
+        .cc-request-row { grid-template-columns: 1fr; }
+        .cc-enquiry-head { flex-direction: column; align-items: stretch; }
+        .cc-enquiry-search { min-width: 0; width: 100%; }
     }
 
     @media (max-height: 820px) {
@@ -257,7 +433,7 @@
 <div class="cc-wrap">
     <section class="cc-hero">
         <h1 class="cc-title">Call Center Staff Dashboard</h1>
-        <p class="cc-sub">Manage customer bookings and enquiry responses in dedicated workspaces.</p>
+        <p class="cc-sub">Manage customer bookings, create new accounts, and resolve customer enquiries in one workspace.</p>
     </section>
 
     <div class="cc-tabbar" role="tablist" aria-label="Call center tabs">
@@ -273,10 +449,12 @@
 
         <div class="cc-grid">
             <section class="cc-card">
-                <h2>Create Booking Request</h2>
+                <div class="cc-card-head">
+                    <h2>Create Booking Request</h2>
+                </div>
                 <form id="ccBookingForm">
                     <div class="cc-form-grid">
-                        <div class="full cc-results">
+                        <div class="full cc-results cc-form-field">
                             <label>Search existing customer</label>
                             <input class="cc-input" id="ccCustomerSearch" placeholder="Search by name, email, phone">
                             <div class="cc-customer-list" id="ccCustomerResults"></div>
@@ -284,19 +462,19 @@
 
                         <input type="hidden" id="ccCustomerId">
 
-                        <div>
+                        <div class="cc-form-field">
                             <label>Customer Name *</label>
                             <input class="cc-input" id="ccCustomerName" required>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Customer Phone *</label>
                             <input class="cc-input" id="ccCustomerPhone" required>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Customer Email *</label>
                             <input class="cc-input" id="ccCustomerEmail" type="email" required>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Ride Tier *</label>
                             <select class="cc-select" id="ccRideTier" required>
                                 <option value="">Select tier</option>
@@ -306,7 +484,7 @@
                             </select>
                             <small id="ccRideTierHint" class="cc-help">Checking available ride tiers...</small>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Seat Capacity *</label>
                             <select class="cc-select" id="ccSeatCapacity" required>
                                 <option value="4">4 seats</option>
@@ -314,12 +492,12 @@
                             </select>
                             <small id="ccSeatCapacityHint" class="cc-help">Choose seat capacity based on available fleet.</small>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Pickup Date & Time *</label>
                             <input class="cc-input" id="ccPickupDate" type="datetime-local" required>
                             <small id="ccPickupDateHint" class="cc-help">Pickup must be at least 30 minutes from now.</small>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Pickup Location *</label>
                             <div class="location-input-wrapper">
                                 <input class="cc-input" id="ccPickupLocation" placeholder="Search pickup location" autocomplete="off" required>
@@ -336,7 +514,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Destination *</label>
                             <div class="location-input-wrapper">
                                 <input class="cc-input" id="ccReturnLocation" placeholder="Search destination" autocomplete="off" required>
@@ -353,7 +531,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div>
+                        <div class="cc-form-field">
                             <label>Payment Method</label>
                             <select class="cc-select" id="ccPaymentMethod">
                                 <option value="cash">Cash</option>
@@ -362,7 +540,7 @@
                                 <option value="paypal">PayPal</option>
                             </select>
                         </div>
-                        <div class="full">
+                        <div class="full cc-form-field">
                             <label>Note</label>
                             <textarea class="cc-textarea" id="ccSpecialRequests"></textarea>
                         </div>
@@ -377,22 +555,11 @@
             </section>
 
             <section class="cc-card">
-                <h2>My Requests</h2>
-                <div class="cc-table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Ref/ID</th>
-                                <th>Customer</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ccRequestsTable">
-                            <tr><td colspan="5">Loading...</td></tr>
-                        </tbody>
-                    </table>
+                <div class="cc-card-head">
+                    <h2>My Requests</h2>
+                </div>
+                <div class="cc-requests-stack" id="ccRequestsTable">
+                    <div class="cc-request-card">Loading...</div>
                 </div>
             </section>
         </div>
@@ -400,8 +567,14 @@
 
     <section class="cc-tab-panel" id="ccTabEnquiry" role="tabpanel" aria-label="Customer Enquiry">
         <p class="cc-tab-note">Review newest enquiries first and send exactly one response per enquiry.</p>
-        <section class="cc-card">
-            <h2>Customer Enquiries</h2>
+        <section class="cc-enquiry-shell">
+            <div class="cc-enquiry-head">
+                <h2 class="cc-enquiry-title">Customer Enquiries</h2>
+                <div class="cc-enquiry-tools">
+                    <input class="cc-enquiry-search" placeholder="Search enquiries..." type="text">
+                    <button class="cc-btn cc-btn-secondary" type="button">Search</button>
+                </div>
+            </div>
             <div class="cc-table-wrap">
                 <table>
                     <thead>
@@ -419,33 +592,39 @@
                     </tbody>
                 </table>
             </div>
+            <div class="cc-enquiry-foot">
+                <span>Live enquiry feed</span>
+                <span>Newest first</span>
+            </div>
         </section>
     </section>
 
     <?php if (!empty($canCreateAccount)): ?>
     <section class="cc-tab-panel" id="ccTabCreateAccount" role="tabpanel" aria-label="Create Account">
         <p class="cc-tab-note">Create customer accounts with temporary password <strong>123456</strong>.</p>
-        <section class="cc-card" style="max-width:760px;">
-            <h2>Create Customer Account</h2>
+        <section class="cc-card cc-create-wrap">
+            <div class="cc-card-head">
+                <h2>Create Customer Account</h2>
+            </div>
             <form id="ccCreateAccountForm">
                 <div class="cc-form-grid">
-                    <div>
+                    <div class="cc-form-field">
                         <label>Username *</label>
                         <input class="cc-input" id="ccAccountUsername" required>
                     </div>
-                    <div>
+                    <div class="cc-form-field">
                         <label>Email *</label>
                         <input class="cc-input" id="ccAccountEmail" type="email" required>
                     </div>
-                    <div>
+                    <div class="cc-form-field">
                         <label>Phone Number *</label>
                         <input class="cc-input" id="ccAccountPhone" required>
                     </div>
-                    <div>
+                    <div class="cc-form-field">
                         <label>Date of Birth *</label>
                         <input class="cc-input" id="ccAccountDob" type="date" required>
                     </div>
-                    <div class="full">
+                    <div class="full cc-form-field">
                         <label>Default Password</label>
                         <input class="cc-input" value="123456" readonly>
                         <small class="cc-help">Temporary credential will be emailed to the customer.</small>
@@ -459,7 +638,7 @@
                 <div class="cc-status" id="ccCreateAccountStatus"></div>
             </form>
 
-            <div id="ccCreateAccountSummary" style="display:none;margin-top:12px;padding:10px 12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;color:#1e3a8a;font-size:0.88rem;"></div>
+            <div id="ccCreateAccountSummary" class="cc-summary-card"></div>
         </section>
     </section>
     <?php endif; ?>

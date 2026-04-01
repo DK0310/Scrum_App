@@ -55,7 +55,7 @@
         insertBeforeMenu(actions, notifBtn);
         insertBeforeMenu(actions, profile);
 
-        if (role !== 'admin' && role !== 'controlstaff' && role !== 'callcenterstaff') {
+        if (role !== 'admin' && role !== 'controlstaff' && role !== 'callcenterstaff' && role !== 'driver') {
             const ordersLink = document.createElement('a');
             ordersLink.href = '/orders.php';
             ordersLink.className = 'btn btn-outline btn-sm navbar-action-link';

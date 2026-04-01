@@ -99,7 +99,7 @@ function filterOrders(status) {
 // ===== RENDER ORDER CARDS =====
 function renderOrders(orders) {
     const container = document.getElementById('ordersList');
-    container.innerHTML = orders.map(order => {
+    const cards = orders.map(order => {
         const statusLabels = {
             pending: '⏳ Pending',
             confirmed: '✅ Confirmed',
@@ -175,33 +175,33 @@ function renderOrders(orders) {
             renterInfoHtml = '<div class="owner-renter-info">👤 Renter: <span>' + order.renter_name + '</span> — ' + (order.renter_email || '') + '</div>';
         }
 
-        return '<div class="' + cardClassName + '"' + cardAttrs + '>' +
+        return '<div class="' + cardClassName + ' status-' + order.status + '"' + cardAttrs + '>' +
             '<div class="order-card-header">' +
                 '<div class="order-card-left">' +
                     '<div class="order-car-thumb">' + thumbHtml + '</div>' +
                     '<div class="order-car-info">' +
-                        '<h4>' + displayVehicleName + '</h4>' +
-                        '<p>' + (typeLabels[order.booking_type] || order.booking_type) + (order.service_type ? ' · ' + order.service_type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '') + ' · Order #' + order.id.substring(0, 8) + '</p>' +
+                        '<h4>' + (typeLabels[order.booking_type] || order.booking_type) + (order.service_type ? ' - ' + order.service_type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '') + '</h4>' +
+                        '<p>#' + order.id.substring(0, 8).toUpperCase() + '</p>' +
                     '</div>' +
                 '</div>' +
                 '<div class="order-status-badge status-' + order.status + '">' + (statusLabels[order.status] || order.status) + '</div>' +
             '</div>' +
             renterInfoHtml +
             '<div class="order-card-body">' +
-                '<div class="order-detail-item"><div class="order-detail-label">Pick-up Date</div><div class="order-detail-value">' + formatPickupDate(order) + '</div></div>' +
-                (order.return_date ? '<div class="order-detail-item"><div class="order-detail-label">Return Date</div><div class="order-detail-value">' + formatDate(order.return_date) + '</div></div>' : '') +
-                '<div class="order-detail-item"><div class="order-detail-label">Pick-up Location</div><div class="order-detail-value">' + truncate(order.pickup_location || '-', 40) + '</div></div>' +
-                (order.return_location && order.booking_type === 'minicab' ? '<div class="order-detail-item"><div class="order-detail-label">Destination</div><div class="order-detail-value">' + truncate(order.return_location || '-', 40) + '</div></div>' : '') +
+                '<div class="order-detail-item"><div class="order-detail-label">Pick-up Date & Time</div><div class="order-detail-value">' + formatPickupDate(order) + '</div></div>' +
                 (order.distance_km ? '<div class="order-detail-item"><div class="order-detail-label">📏 Distance</div><div class="order-detail-value">' + parseFloat(order.distance_km).toFixed(1) + ' km</div></div>' : '') +
-                '<div class="order-detail-item"><div class="order-detail-label">Payment</div><div class="order-detail-value">' + (pmLabels[order.payment_method] || order.payment_method || 'N/A') + '</div></div>' +
-                '<div class="order-detail-item"><div class="order-detail-label">Booked On</div><div class="order-detail-value">' + formatDate(order.created_at) + '</div></div>' +
+                '<div class="order-detail-item is-wide"><div class="order-detail-label">Pick-up Location</div><div class="order-detail-value">' + truncate(order.pickup_location || '-', 65) + '</div></div>' +
+                (order.return_location && order.booking_type === 'minicab' ? '<div class="order-detail-item is-wide"><div class="order-detail-label">Destination</div><div class="order-detail-value">' + truncate(order.return_location || '-', 65) + '</div></div>' : '') +
+                '<div class="order-detail-item is-wide"><div class="order-detail-label">Payment Method</div><div class="order-detail-value">' + (pmLabels[order.payment_method] || order.payment_method || 'N/A') + '</div></div>' +
             '</div>' +
             '<div class="order-card-footer">' +
-                '<div class="order-total">£' + parseFloat(order.total_amount).toFixed(2) + '</div>' +
+                '<div><div class="order-detail-label">Total Fare</div><div class="order-total">£' + parseFloat(order.total_amount).toFixed(2) + '</div></div>' +
                 '<div class="order-actions">' + actionsHtml + '</div>' +
             '</div>' +
         '</div>';
     }).join('');
+
+    container.innerHTML = '<div class="orders-grid">' + cards + '</div>';
 
     bindOrderCardClicks();
 }
