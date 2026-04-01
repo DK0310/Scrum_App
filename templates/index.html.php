@@ -456,7 +456,7 @@
             <div class="steps-grid steps-grid-redesign">
                 <div class="step-card step-card-redesign">
                     <div class="step-icon">🔍</div>
-                    <h3 class="step-title">Search & Filter</h3>
+                    <h3 class="step-title">Browse Suited Vehicles</h3>
                     <p class="step-description">Browse our elite fleet with granular filters for performance, luxury, and utility.</p>
                     <div class="step-index">01</div>
                 </div>

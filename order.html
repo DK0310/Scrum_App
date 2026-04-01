@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "tertiary-fixed-dim": "#ffb59f",
+            "surface-container-low": "#f2f4f4",
+            "primary": "#004f45",
+            "on-primary-container": "#94e5d5",
+            "tertiary": "#703321",
+            "error-container": "#ffdad6",
+            "tertiary-container": "#8d4a36",
+            "background": "#f8fafa",
+            "on-error": "#ffffff",
+            "secondary": "#59605f",
+            "surface-variant": "#e1e3e3",
+            "surface": "#f8fafa",
+            "surface-bright": "#f8fafa",
+            "secondary-fixed": "#dde4e2",
+            "on-tertiary-fixed": "#3a0b01",
+            "on-error-container": "#93000a",
+            "inverse-primary": "#84d5c5",
+            "outline": "#6e7976",
+            "surface-container-lowest": "#ffffff",
+            "secondary-container": "#dde4e2",
+            "surface-container-highest": "#e1e3e3",
+            "on-tertiary-fixed-variant": "#723522",
+            "on-surface-variant": "#3e4946",
+            "on-secondary-fixed": "#161d1c",
+            "on-secondary-container": "#5f6665",
+            "primary-fixed-dim": "#84d5c5",
+            "on-tertiary-container": "#ffcabb",
+            "tertiary-fixed": "#ffdbd1",
+            "on-tertiary": "#ffffff",
+            "on-primary-fixed": "#00201b",
+            "surface-tint": "#046b5e",
+            "on-primary-fixed-variant": "#005046",
+            "primary-container": "#00695c",
+            "inverse-on-surface": "#eff1f1",
+            "surface-dim": "#d8dada",
+            "primary-fixed": "#a0f2e1",
+            "surface-container": "#eceeee",
+            "outline-variant": "#bec9c5",
+            "surface-container-high": "#e6e8e8",
+            "secondary-fixed-dim": "#c1c8c6",
+            "inverse-surface": "#2e3131",
+            "on-secondary-fixed-variant": "#414847",
+            "on-secondary": "#ffffff",
+            "on-surface": "#191c1d",
+            "on-background": "#191c1d",
+            "error": "#ba1a1a",
+            "on-primary": "#ffffff"
+          },
+          fontFamily: {
+            "headline": ["Manrope"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+        },
+      },
+    }
+  </script>
+<style>
+    body { font-family: 'Inter', sans-serif; }
+    h1, h2, h3, h4 { font-family: 'Manrope', sans-serif; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .status-badge-pending { background-color: #fffbeb; color: #92400e; }
+    .status-badge-confirmed { background-color: #ecfdf5; color: #065f46; }
+    .status-badge-cancelled { background-color: #fef2f2; color: #991b1b; }
+    .status-badge-completed { background-color: #f0f9ff; color: #075985; }
+  
+    .status-badge-inprogress { background-color: #ecfdf5; color: #065f46; }
+    @keyframes pulse-dot {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 105, 92, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(0, 105, 92, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 105, 92, 0); }
+    }
+    .active-indicator { width: 8px; height: 8px; background-color: #00695C; border-radius: 50%; display: inline-block; animation: pulse-dot 2s infinite; }
+  </style>
+</head>
+<body class="bg-background text-on-surface">
+<main class="pt-32 pb-20 px-6 max-w-7xl mx-auto">
+<!-- Header Section -->
+<section class="mb-10">
+<h1 class="text-4xl font-extrabold tracking-tight text-on-surface mb-2">My Bookings</h1>
+<p class="text-on-surface-variant text-lg">Track and manage your mobility journey</p>
+</section>
+<!-- Filtering Tabs -->
+<nav class="flex flex-wrap items-center gap-2 mb-12 border-b border-surface-container pb-4">
+<button class="px-5 py-2 rounded-full text-sm font-semibold bg-primary text-on-primary transition-all">All</button>
+<button class="px-5 py-2 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">Pending</button>
+<button class="px-5 py-2 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">Confirmed</button>
+<button class="px-5 py-2 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">In Progress</button>
+<button class="px-5 py-2 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">Completed</button>
+<button class="px-5 py-2 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">Cancelled</button>
+</nav>
+<!-- Bookings Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<!-- Card 1: Pending -->
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(0,79,69,0.06)] p-6 border border-emerald-50 transition-transform hover:scale-[1.01] border-l-4 border-l-[#00695C] bg-emerald-50/30">
+<div class="flex justify-between items-start mb-6 pb-6 border-b border-surface-container">
+<div>
+<h3 class="text-lg font-bold text-on-surface mb-1">Minicab - Airport Transfer</h3>
+<span class="text-xs font-mono text-on-surface-variant tracking-widest">#288A0BF7</span>
+</div>
+<span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider status-badge-inprogress flex items-center gap-2">In Progress</span>
+</div>
+<div class="grid grid-cols-2 gap-y-6 gap-x-4 mb-8">
+<div class="space-y-1 border-l-4 border-l-[#00695C] bg-emerald-50/30">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Date &amp; Time</p>
+<p class="text-sm font-semibold text-on-surface">Apr 1, 2026, 08:56PM</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Distance</p>
+<p class="text-sm font-semibold text-on-surface">51.4 km</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Location</p>
+<p class="text-sm font-semibold text-on-surface truncate">Mayfair, London, W1J 8AJ</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Destination</p>
+<p class="text-sm font-semibold text-on-surface truncate">Gatwick Airport, Terminal S</p>
+</div>
+<div class="space-y-1 col-span-2">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Payment Method</p>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-primary text-xl">payments</span>
+<p class="text-sm font-semibold text-on-surface">Cash on Delivery</p>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mt-auto pt-6 border-t border-surface-container">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Total Fare</span>
+<span class="text-2xl font-extrabold text-primary">£111.78</span>
+</div>
+<div class="flex gap-3"><button class="border border-outline text-on-surface-variant hover:bg-surface-container px-4 py-3 rounded-xl text-sm font-bold transition-all uppercase tracking-tight">Cancel Booking</button><button class="bg-primary-container hover:bg-primary text-on-primary-container hover:text-on-primary px-4 py-3 rounded-xl text-sm font-bold transition-all uppercase tracking-tight">Modify Booking</button></div>
+</div>
+</div>
+<!-- Card 2: Confirmed -->
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(0,79,69,0.06)] p-6 border border-emerald-50 transition-transform hover:scale-[1.01]">
+<div class="flex justify-between items-start mb-6 pb-6 border-b border-surface-container">
+<div>
+<h3 class="text-lg font-bold text-on-surface mb-1">Minicab - Local Journey</h3>
+<span class="text-xs font-mono text-on-surface-variant tracking-widest">#91C2E0B2</span>
+</div>
+<span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider status-badge-confirmed">Confirmed</span>
+</div>
+<div class="grid grid-cols-2 gap-y-6 gap-x-4 mb-8">
+<div class="space-y-1 border-l-4 border-l-[#00695C] bg-emerald-50/30">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Date &amp; Time</p>
+<p class="text-sm font-semibold text-on-surface">Mar 28, 2026, 10:00AM</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Distance</p>
+<p class="text-sm font-semibold text-on-surface">12.8 km</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Location</p>
+<p class="text-sm font-semibold text-on-surface truncate">The Shard, London SE1</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Destination</p>
+<p class="text-sm font-semibold text-on-surface truncate">City Financial District</p>
+</div>
+<div class="space-y-1 col-span-2">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Payment Method</p>
+<div class="flex items-center gap-2 mt-1">
+<img alt="PayPal" class="h-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAoJeGykuqFhjnqdfV_h7egr-GiLAg2uPUn3Xe_pP_wsjNbXX6toCAaTOoX7gpRGGKvxepYVH3mjtSlfAor495TqsiF9C_x9q9IWYyJGN75yzum7j0GlhsdJ48tQNpUeijMUFnfrXlWk24yJt95KqPbNvfiRFi5R5F5UCZ-83QILRHI706z3mp_GrD7CwS3Byl6vQiNw3w5-14DqLiRLVPj4p32vDdXMhAEV_MwQvjgvx21XQ-TG4c4cdwqkFF3yV3ktIDYXQDxdo4"/>
+<p class="text-sm font-semibold text-on-surface">PayPal</p>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mt-auto pt-6 border-t border-surface-container">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Total Fare</span>
+<span class="text-2xl font-extrabold text-primary">£245.00</span>
+</div>
+<button class="bg-primary-container hover:bg-primary text-on-primary-container hover:text-on-primary px-6 py-3 rounded-xl text-sm font-bold transition-all">View Details</button>
+</div>
+</div>
+<!-- Card 3: Completed -->
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(0,79,69,0.06)] p-6 border border-emerald-50 opacity-90 transition-transform hover:scale-[1.01]">
+<div class="flex justify-between items-start mb-6 pb-6 border-b border-surface-container">
+<div>
+<h3 class="text-lg font-bold text-on-surface mb-1">Minicab - Long Journey</h3>
+<span class="text-xs font-mono text-on-surface-variant tracking-widest">#FD3345A1</span>
+</div>
+<span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider status-badge-completed">Completed</span>
+</div>
+<div class="grid grid-cols-2 gap-y-6 gap-x-4 mb-8">
+<div class="space-y-1 border-l-4 border-l-[#00695C] bg-emerald-50/30">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Date &amp; Time</p>
+<p class="text-sm font-semibold text-on-surface">Feb 14, 2026, 06:30PM</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Distance</p>
+<p class="text-sm font-semibold text-on-surface">180 km</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Location</p>
+<p class="text-sm font-semibold text-on-surface truncate">Chelsea Harbour Hotel</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Destination</p>
+<p class="text-sm font-semibold text-on-surface truncate">Royal Opera House</p>
+</div>
+<div class="space-y-1 col-span-2">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Payment Method</p>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-primary text-xl">payments</span>
+<p class="text-sm font-semibold text-on-surface">Cash On Delivery</p>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mt-auto pt-6 border-t border-surface-container">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Total Fare</span>
+<span class="text-2xl font-extrabold text-primary">£85.40</span>
+</div>
+<div class="flex gap-3">
+<button class="bg-surface-container text-primary px-4 py-3 rounded-xl text-sm font-bold transition-all">Rebook</button>
+</div>
+</div>
+</div>
+<!-- Card 4: Cancelled -->
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(0,79,69,0.06)] p-6 border border-emerald-50 opacity-80 transition-transform hover:scale-[1.01]">
+<div class="flex justify-between items-start mb-6 pb-6 border-b border-surface-container">
+<div>
+<h3 class="text-lg font-bold text-on-surface mb-1">Minicab - Hotel Transfer</h3>
+<span class="text-xs font-mono text-on-surface-variant tracking-widest">#EE4201CF</span>
+</div>
+<span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider status-badge-cancelled">Cancelled</span>
+</div>
+<div class="grid grid-cols-2 gap-y-6 gap-x-4 mb-8">
+<div class="space-y-1 border-l-4 border-l-[#00695C] bg-emerald-50/30">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Date &amp; Time</p>
+<p class="text-sm font-semibold text-on-surface">Jan 05, 2026, 04:00PM</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Distance</p>
+<p class="text-sm font-semibold text-on-surface">82.1 km</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Pick-up Location</p>
+<p class="text-sm font-semibold text-on-surface truncate">Oxford City Centre</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Destination</p>
+<p class="text-sm font-semibold text-on-surface truncate">Heathrow Airport Terminal 5</p>
+</div>
+<div class="space-y-1 col-span-2"><p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Payment Method</p><div class="flex items-center gap-2 mt-1"><img alt="PayPal" class="h-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAoJeGykuqFhjnqdfV_h7egr-GiLAg2uPUn3Xe_pP_wsjNbXX6toCAaTOoX7gpRGGKvxepYVH3mjtSlfAor495TqsiF9C_x9q9IWYyJGN75yzum7j0GlhsdJ48tQNpUeijMUFnfrXlWk24yJt95KqPbNvfiRFi5R5F5UCZ-83QILRHI706z3mp_GrD7CwS3Byl6vQiNw3w5-14DqLiRLVPj4p32vDdXMhAEV_MwQvjgvx21XQ-TG4c4cdwqkFF3yV3ktIDYXQDxdo4"/><p class="text-sm font-semibold text-on-surface">PayPal</p></div></div>
+</div>
+<div class="flex items-center justify-between mt-auto pt-6 border-t border-surface-container">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Total Fare</span>
+<span class="text-2xl font-extrabold text-on-surface-variant line-through">£198.50</span>
+</div>
+<button class="bg-surface-container text-on-surface-variant px-6 py-3 rounded-xl text-sm font-bold transition-all">Support</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>
