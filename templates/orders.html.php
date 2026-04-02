@@ -12,11 +12,11 @@
 
             <!-- Filter Tabs -->
             <div class="order-tabs" id="orderTabs">
-                <button class="order-tab active" data-status="all" onclick="filterOrders('all')">All</button>
-                <button class="order-tab" data-status="pending" onclick="filterOrders('pending')">Pending</button>
-                <button class="order-tab" data-status="in_progress" onclick="filterOrders('in_progress')">In Progress</button>
-                <button class="order-tab" data-status="completed" onclick="filterOrders('completed')">Completed</button>
-                <button class="order-tab" data-status="cancelled" onclick="filterOrders('cancelled')">Cancelled</button>
+                <button type="button" class="order-tab active" data-status="all" onclick="filterOrders('all')">All</button>
+                <button type="button" class="order-tab" data-status="pending" onclick="filterOrders('pending')">Pending</button>
+                <button type="button" class="order-tab" data-status="in_progress" onclick="filterOrders('in_progress')">In Progress</button>
+                <button type="button" class="order-tab" data-status="completed" onclick="filterOrders('completed')">Completed</button>
+                <button type="button" class="order-tab" data-status="cancelled" onclick="filterOrders('cancelled')">Cancelled</button>
             </div>
 
             <!-- Loading -->
@@ -296,6 +296,34 @@
             <div class="review-modal-footer" style="padding-top:8px;justify-content:flex-end;">
                 <button type="button" class="btn btn-secondary" onclick="closeModifyBookingModal()">Cancel</button>
                 <button type="button" class="btn btn-primary" id="modifyBookingSaveBtn" onclick="submitModifyBooking()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="review-modal-overlay" id="reviewModalOverlay" style="display:none;">
+        <div class="review-modal" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+            <div class="review-modal-header">
+                <h3 id="reviewModalTitle" style="margin:0 0 6px;color:var(--gray-900);">Rate & Feedback</h3>
+                <p style="margin:0;color:var(--gray-600);font-size:0.9rem;">
+                    Share your experience for <strong id="reviewCarName">this trip</strong>
+                </p>
+            </div>
+            <div class="review-modal-body">
+                <label class="order-detail-label" style="display:block;margin-bottom:8px;">Your Rating</label>
+                <div class="review-stars-input" id="reviewStarsInput" style="margin-bottom:18px;"></div>
+
+                <label class="order-detail-label" for="reviewContent" style="display:block;margin-bottom:8px;">Your Feedback</label>
+                <textarea
+                    id="reviewContent"
+                    class="form-input"
+                    rows="4"
+                    placeholder="Tell us about your completed trip..."
+                    style="resize:vertical;min-height:110px;"
+                ></textarea>
+            </div>
+            <div class="review-modal-footer" style="justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeReviewModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitOrderReview()">⭐ Submit Feedback</button>
             </div>
         </div>
     </div>

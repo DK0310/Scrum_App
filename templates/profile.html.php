@@ -27,9 +27,10 @@
                     <button type="button" class="profile-upgrade-btn">Upgrade Plan</button>
 
                     <nav class="profile-side-nav">
-                        <button class="profile-tab active" onclick="switchProfileTab('info')" id="tab-info"><span class="material-symbols-outlined" aria-hidden="true">person</span><span>Profile Details</span></button>
-                        <button class="profile-tab" onclick="switchProfileTab('security')" id="tab-security"><span class="material-symbols-outlined" aria-hidden="true">lock</span><span>Security</span></button>
-                        <button class="profile-tab" onclick="switchProfileTab('preferences')" id="tab-preferences"><span class="material-symbols-outlined" aria-hidden="true">settings</span><span>App Settings</span></button>
+                        <button type="button" class="profile-tab active" onclick="switchProfileTab('info')" id="tab-info"><span class="material-symbols-outlined" aria-hidden="true">person</span><span>Profile Details</span></button>
+                        <button type="button" class="profile-tab" onclick="switchProfileTab('security')" id="tab-security"><span class="material-symbols-outlined" aria-hidden="true">lock</span><span>Security</span></button>
+                        <button type="button" class="profile-tab" onclick="switchProfileTab('preferences')" id="tab-preferences"><span class="material-symbols-outlined" aria-hidden="true">settings</span><span>App Settings</span></button>
+                        <button type="button" class="profile-tab" onclick="switchProfileTab('balance')" id="tab-balance"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Account Balance</span></button>
                     </nav>
                 </aside>
 
@@ -135,10 +136,10 @@
                             </div>
                             <!-- Face ID Action Buttons -->
                             <div id="faceIdActions" style="display:flex;gap:8px;">
-                                <button class="btn btn-primary" id="faceIdEnableBtn" onclick="openFaceIdSetup()" style="padding:8px 16px;font-size:0.8rem;border-radius:var(--radius);">
+                                <button type="button" class="btn btn-primary" id="faceIdEnableBtn" onclick="openFaceIdSetup()" style="padding:8px 16px;font-size:0.8rem;border-radius:var(--radius);">
                                     📸 Set Up Face ID
                                 </button>
-                                <button class="btn btn-outline" id="faceIdDisableBtn" onclick="disableFaceId()" style="padding:8px 16px;font-size:0.8rem;border-radius:var(--radius);display:none;color:#dc2626;border-color:#dc2626;">
+                                <button type="button" class="btn btn-outline" id="faceIdDisableBtn" onclick="disableFaceId()" style="padding:8px 16px;font-size:0.8rem;border-radius:var(--radius);display:none;color:#dc2626;border-color:#dc2626;">
                                     🗑️ Remove Face ID
                                 </button>
                             </div>
@@ -168,6 +169,20 @@
                             </div>
                             <button type="button" id="sendResetEmailBtn" class="btn btn-outline" onclick="sendMyPasswordResetLink(this)" style="padding:8px 14px;font-size:0.82rem;">Send Reset Email</button>
                         </div>
+
+                        <div class="danger-zone-card">
+                            <div class="danger-zone-header">
+                                <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                                <div>
+                                    <h4 class="danger-zone-title">Delete Account</h4>
+                                    <p class="danger-zone-copy">This action is permanent. Your customer account and related data will be deleted from the system.</p>
+                                </div>
+                            </div>
+                            <div class="danger-zone-actions">
+                                <input type="text" id="deleteAccountConfirm" class="form-input danger-confirm-input" placeholder="Type DELETE to confirm">
+                                <button type="button" id="deleteAccountBtn" class="btn danger-delete-btn" onclick="deleteMyAccount()">Delete Account</button>
+                            </div>
+                        </div>
                     </div>
                     </div>
 
@@ -195,6 +210,29 @@
                             </label>
                         </div>
                     </div>
+                    </div>
+
+                    <!-- ===== ACCOUNT BALANCE TAB ===== -->
+                    <div class="profile-panel" id="panel-balance" style="padding:28px;display:none;">
+                        <h3 style="font-weight:700;margin-bottom:16px;color:var(--gray-800);">Account Balance</h3>
+                        <p style="margin:0 0 16px;color:var(--gray-500);font-size:0.9rem;">Use your GBP balance to pay for booking services instantly.</p>
+
+                        <div class="balance-grid">
+                            <div class="balance-card">
+                                <div style="font-size:0.8rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Current Balance</div>
+                                <div id="balanceAmount" style="font-size:2.2rem;font-weight:900;color:var(--primary);margin-top:8px;">£ 0.00</div>
+                                <div style="margin-top:10px;font-size:0.82rem;color:var(--gray-500);">Currency: British Pound (GBP)</div>
+                            </div>
+
+                            <div class="topup-card">
+                                <h3 style="font-size:1.1rem;font-weight:800;color:var(--gray-900);margin-bottom:12px;">Top Up via PayPal</h3>
+                                <label class="form-label" for="topupAmount">Top-up Amount (GBP)</label>
+                                <input id="topupAmount" type="number" class="form-input" min="1" step="0.01" placeholder="e.g. 50.00">
+                                <p style="font-size:0.78rem;color:var(--gray-500);margin:8px 0 14px;">Minimum £ 1.00, maximum £ 10,000.00 per transaction.</p>
+                                <button type="button" id="topupBtn" class="btn btn-primary" style="width:100%;" onclick="startPaypalTopup()">Top Up with PayPal</button>
+                                <div id="topupStatus" style="margin-top:10px;font-size:0.82rem;color:var(--gray-500);"></div>
+                            </div>
+                        </div>
                         </div>
                     </div>
                 </div>
@@ -207,7 +245,7 @@
         <div class="modal" style="max-width:480px;">
             <div class="modal-header">
                 <h3 class="modal-title">📧 Verify Email Change</h3>
-                <button class="modal-close" onclick="closeModal('emailChangeModal');cancelEmailChange();">✕</button>
+                <button type="button" class="modal-close" onclick="closeModal('emailChangeModal');cancelEmailChange();">✕</button>
             </div>
             <div class="modal-body" style="text-align:center;">
                 <p style="color:var(--gray-600);font-size:0.875rem;margin-bottom:8px;">
@@ -250,8 +288,8 @@
                 <div id="ecStatusBar" style="padding:10px;border-radius:var(--radius);margin-bottom:12px;font-size:0.85rem;display:none;"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('emailChangeModal');cancelEmailChange();">Cancel</button>
-                <button class="btn btn-primary" id="ecVerifyBtn" onclick="verifyEmailChange()">✅ Verify & Change</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('emailChangeModal');cancelEmailChange();">Cancel</button>
+                <button type="button" class="btn btn-primary" id="ecVerifyBtn" onclick="verifyEmailChange()">✅ Verify & Change</button>
             </div>
         </div>
     </div>
@@ -261,7 +299,7 @@
         <div class="modal" style="max-width:520px;">
             <div class="modal-header">
                 <h3 class="modal-title">🔐 Face ID Setup</h3>
-                <button class="modal-close" onclick="closeFaceIdSetup()">✕</button>
+                <button type="button" class="modal-close" onclick="closeFaceIdSetup()">✕</button>
             </div>
             <div class="modal-body" style="text-align:center;">
                 <!-- Step 1: Instructions -->
@@ -281,7 +319,7 @@
                             <li>✅ Keep still during scanning</li>
                         </ul>
                     </div>
-                    <button class="btn btn-primary" onclick="startFaceIdScan()" style="width:100%;">📸 Start Camera Scan</button>
+                    <button type="button" class="btn btn-primary" onclick="startFaceIdScan()" style="width:100%;">📸 Start Camera Scan</button>
                 </div>
 
                 <!-- Step 2: Camera Scanning -->
@@ -302,7 +340,7 @@
                         </div>
                         <small style="color:var(--gray-500);margin-top:6px;display:block;" id="faceIdProgressText">Preparing camera...</small>
                     </div>
-                    <button class="btn btn-outline" onclick="closeFaceIdSetup()" style="margin-top:12px;">Cancel</button>
+                    <button type="button" class="btn btn-outline" onclick="closeFaceIdSetup()" style="margin-top:12px;">Cancel</button>
                 </div>
 
                 <!-- Step 3: Success -->
@@ -313,7 +351,7 @@
                         Your face has been securely registered. You can now use <strong>Face ID</strong> to sign in instantly.
                     </p>
                     <div id="faceIdMatchInfo" style="background:#dcfce7;border-radius:var(--radius);padding:12px;font-size:0.8rem;color:#166534;margin-bottom:16px;"></div>
-                    <button class="btn btn-primary" onclick="closeFaceIdSetup();loadProfile();" style="width:100%;">👍 Done</button>
+                    <button type="button" class="btn btn-primary" onclick="closeFaceIdSetup();loadProfile();" style="width:100%;">👍 Done</button>
                 </div>
 
                 <!-- Step Error -->
@@ -324,8 +362,8 @@
                         We couldn't detect your face clearly. Please try again.
                     </p>
                     <div style="display:flex;gap:8px;">
-                        <button class="btn btn-primary" onclick="retryFaceIdScan()" style="flex:1;">🔄 Try Again</button>
-                        <button class="btn btn-outline" onclick="closeFaceIdSetup()" style="flex:1;">Cancel</button>
+                        <button type="button" class="btn btn-primary" onclick="retryFaceIdScan()" style="flex:1;">🔄 Try Again</button>
+                        <button type="button" class="btn btn-outline" onclick="closeFaceIdSetup()" style="flex:1;">Cancel</button>
                     </div>
                 </div>
             </div>
@@ -555,6 +593,64 @@
             display: flex; justify-content: space-between; align-items: center;
             padding: 16px 0; border-bottom: 1px solid var(--gray-100);
         }
+        .danger-zone-card {
+            margin-top: 18px;
+            padding: 16px;
+            border: 1px solid #fecaca;
+            border-radius: 14px;
+            background: #fff5f5;
+        }
+        .danger-zone-header {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .danger-zone-header .material-symbols-outlined {
+            color: #dc2626;
+            font-size: 20px;
+            margin-top: 1px;
+        }
+        .danger-zone-title {
+            margin: 0;
+            color: #b91c1c;
+            font-size: 0.95rem;
+            font-weight: 800;
+            font-family: 'Manrope', sans-serif;
+        }
+        .danger-zone-copy {
+            margin: 4px 0 0;
+            color: #7f1d1d;
+            font-size: 0.78rem;
+            line-height: 1.45;
+        }
+        .danger-zone-actions {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .danger-confirm-input {
+            background: #fff;
+            border-color: #fca5a5;
+        }
+        .danger-confirm-input:focus {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+        .danger-delete-btn {
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: #fff;
+            padding: 0 18px;
+            cursor: pointer;
+            min-height: 44px;
+        }
+        .danger-delete-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
         .admin-badge { display: inline-block; padding: 3px 10px; border-radius: 50px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
         .admin-badge.active { background: #dcfce7; color: #166534; }
         .admin-badge.inactive { background: #fef2f2; color: #991b1b; }
@@ -578,6 +674,20 @@
             transition: var(--transition);
         }
         .otp-box:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+
+        .balance-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            gap: 18px;
+        }
+        .balance-card,
+        .topup-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 16px;
+            padding: 22px;
+            box-shadow: var(--shadow-sm);
+        }
 
         .profile-avatar-wrapper label:hover { transform: scale(1.1); background: var(--primary-dark) !important; }
 
@@ -607,19 +717,13 @@
             }
 
             #panel-info .form-group { grid-column: 1 / -1 !important; }
+
+            .balance-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 
     <script src="/resources/js/profile.js"></script>
-
-    <!-- Window scope setup for global variables -->
-    <script>
-        const SESSION_API = '/api/session.php';
-        const PROFILE_API = '/api/profile.php';
-        const FACEID_API = '/api/faceid.php';
-        const EMAIL_SECURITY_API = '/api/profile.php';
-        const FACE_API_CDN = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.min.js';
-        const FACE_MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
-    </script>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>

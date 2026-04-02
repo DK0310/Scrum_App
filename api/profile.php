@@ -27,12 +27,21 @@ if (empty($action) && $preAction !== 'get-avatar') {
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../sql/UserRepository.php';
 require_once __DIR__ . '/supabase-storage.php';
+require_once __DIR__ . '/../lib/payments/PayPalGateway.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 $userRepo = new UserRepository($pdo);
+$paypalGateway = new PayPalGateway();
+
+function getProfileBaseUrl(): string
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost:8000';
+    return $scheme . '://' . $host;
+}
 
 // Handle get-avatar special case (file download, not JSON API)
 if ($preAction === 'get-avatar') {
@@ -132,6 +141,143 @@ if ($action === 'get-profile') {
     exit;
 }
 
+if ($action === 'get-balance') {
+    api_require_auth();
+
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    $balance = $userRepo->getAccountBalance($userId);
+
+    echo json_encode([
+        'success' => true,
+        'currency' => 'GBP',
+        'balance' => round($balance, 2)
+    ]);
+    exit;
+}
+
+if ($action === 'paypal-topup-create') {
+    api_require_auth();
+
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    $amount = isset($input['amount']) ? (float)$input['amount'] : 0.0;
+
+    if ($amount <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Top-up amount must be greater than 0.']);
+        exit;
+    }
+    if ($amount > 10000) {
+        echo json_encode(['success' => false, 'message' => 'Top-up amount is too large.']);
+        exit;
+    }
+
+    $baseUrl = getProfileBaseUrl();
+    $returnUrl = $baseUrl . '/profile.php?tab=balance&paypal=return';
+    $cancelUrl = $baseUrl . '/profile.php?tab=balance&paypal=cancel';
+    $reference = 'BALTOPUP-' . $userId . '-' . time();
+
+    try {
+        $paypalOrder = $paypalGateway->createOrder($amount, 'GBP', $reference, $returnUrl, $cancelUrl);
+        if (empty($paypalOrder['success'])) {
+            echo json_encode([
+                'success' => false,
+                'message' => $paypalOrder['message'] ?? 'Unable to initialize PayPal top-up.'
+            ]);
+            exit;
+        }
+
+        if (!isset($_SESSION['balance_topups']) || !is_array($_SESSION['balance_topups'])) {
+            $_SESSION['balance_topups'] = [];
+        }
+
+        $orderId = (string)$paypalOrder['order_id'];
+        $_SESSION['balance_topups'][$orderId] = [
+            'user_id' => $userId,
+            'amount' => round($amount, 2),
+            'currency' => 'GBP',
+            'created_at' => time(),
+        ];
+
+        echo json_encode([
+            'success' => true,
+            'paypal' => [
+                'order_id' => $orderId,
+                'approval_url' => (string)$paypalOrder['approval_url'],
+                'mock' => !empty($paypalOrder['mock']),
+            ]
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'PayPal top-up init failed: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'paypal-topup-capture') {
+    api_require_auth();
+
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    $orderId = trim((string)($input['order_id'] ?? ''));
+
+    if ($orderId === '') {
+        echo json_encode(['success' => false, 'message' => 'PayPal order ID is required.']);
+        exit;
+    }
+
+    $topups = $_SESSION['balance_topups'] ?? [];
+    $pending = is_array($topups) ? ($topups[$orderId] ?? null) : null;
+
+    if (!$pending || (string)($pending['user_id'] ?? '') !== $userId) {
+        echo json_encode(['success' => false, 'message' => 'Top-up order not found or expired.']);
+        exit;
+    }
+
+    $amount = (float)($pending['amount'] ?? 0);
+    if ($amount <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid top-up amount.']);
+        exit;
+    }
+
+    try {
+        $capture = $paypalGateway->captureOrder($orderId);
+        if (empty($capture['success'])) {
+            echo json_encode(['success' => false, 'message' => $capture['message'] ?? 'PayPal capture failed.']);
+            exit;
+        }
+
+        $credited = $userRepo->addAccountBalance($userId, $amount);
+        if (!$credited) {
+            echo json_encode(['success' => false, 'message' => 'Unable to credit account balance.']);
+            exit;
+        }
+
+        unset($_SESSION['balance_topups'][$orderId]);
+        $newBalance = $userRepo->getAccountBalance($userId);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Top-up successful. Your balance has been updated.',
+            'currency' => 'GBP',
+            'credited_amount' => round($amount, 2),
+            'balance' => round($newBalance, 2),
+            'capture_id' => $capture['capture_id'] ?? null,
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'PayPal top-up capture failed: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'paypal-topup-cancel') {
+    api_require_auth();
+
+    $orderId = trim((string)($input['order_id'] ?? ''));
+    if ($orderId !== '' && isset($_SESSION['balance_topups'][$orderId])) {
+        unset($_SESSION['balance_topups'][$orderId]);
+    }
+
+    echo json_encode(['success' => true, 'message' => 'Top-up was cancelled.']);
+    exit;
+}
+
 if ($action === 'update-profile') {
     if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
         echo json_encode(['success' => false, 'message' => 'Not authenticated.']);
@@ -141,8 +287,7 @@ if ($action === 'update-profile') {
     $userId = $_SESSION['user_id'];
     $updates = [];
     $allowedFields = [
-        'full_name', 'date_of_birth', 'phone', 'email', 'address', 'city',
-        'country', 'driving_license', 'license_expiry', 'id_card_number', 'bio', 'avatar_url'
+        'full_name', 'date_of_birth', 'phone', 'email', 'bio', 'avatar_url'
     ];
 
     foreach ($allowedFields as $field) {
@@ -170,7 +315,6 @@ if ($action === 'update-profile') {
         $changedFields = [];
         if (isset($updates['full_name'])) $changedFields[] = 'name';
         if (isset($updates['phone'])) $changedFields[] = 'phone';
-        if (isset($updates['address'])) $changedFields[] = 'address';
         if (isset($updates['role'])) $changedFields[] = 'role to ' . $updates['role'];
         if (isset($updates['bio'])) $changedFields[] = 'bio';
         $fieldsSummary = !empty($changedFields) ? implode(', ', $changedFields) : 'profile info';
@@ -190,6 +334,49 @@ if ($action === 'update-profile') {
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'delete-account') {
+    api_require_auth();
+
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    $role = strtolower((string)($_SESSION['role'] ?? 'user'));
+    $confirmText = strtoupper(trim((string)($input['confirm_text'] ?? '')));
+
+    if ($confirmText !== 'DELETE') {
+        echo json_encode(['success' => false, 'message' => 'Please type DELETE to confirm.']);
+        exit;
+    }
+
+    if ($role !== 'user') {
+        echo json_encode(['success' => false, 'message' => 'Delete account is available for customer accounts only.']);
+        exit;
+    }
+
+    try {
+        $deleted = $userRepo->deleteOwnAccount($userId);
+
+        if (!$deleted) {
+            echo json_encode(['success' => false, 'message' => 'Account not found or cannot be deleted.']);
+            exit;
+        }
+
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Your account has been permanently deleted.',
+            'redirect_to' => '/'
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Delete account failed: ' . $e->getMessage()]);
     }
     exit;
 }

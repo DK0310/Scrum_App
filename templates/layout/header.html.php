@@ -57,7 +57,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                     </button>
                     <a href="/profile.php" class="navbar-profile-link" <?= ($currentPage ?? '') === 'profile' ? 'style="background:var(--primary-50);color:var(--primary);"' : '' ?>>👤 <?= htmlspecialchars($currentUser) ?></a>
                     <?php if ($showMyOrders): ?>
-                    <a href="/orders.php" class="btn btn-outline btn-sm navbar-action-link" style="<?= ($currentPage ?? '') === 'orders' ? 'background:var(--primary);color:white;border-color:var(--primary);' : 'color:var(--primary);border-color:var(--primary);' ?>">📋 My Orders</a>
+                    <a href="/orders.php" class="btn btn-outline btn-sm navbar-action-link navbar-my-orders <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">📋 My Orders</a>
                     <?php endif; ?>
                     
                     <!-- Dashboard Link by Role -->

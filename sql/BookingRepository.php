@@ -574,7 +574,12 @@ final class BookingRepository
                    v.brand, v.model, v.year, v.category, v.license_plate,
                    u_renter.full_name AS renter_name,
                    u_renter.email AS renter_email,
-                   p.method AS payment_method,
+                   CASE
+                       WHEN p.method::text = 'bank_transfer'
+                            AND COALESCE(p.payment_details->>'original_method', '') = 'account_balance'
+                       THEN 'account_balance'
+                       ELSE p.method::text
+                   END AS payment_method,
                    p.status AS payment_status,
                    rev.id AS review_id,
                    rev.rating AS review_rating

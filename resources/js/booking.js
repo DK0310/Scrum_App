@@ -8,6 +8,7 @@
   // ===== CONFIGURATION =====
   const VEHICLES_API = '/api/vehicles.php';
   const BOOKINGS_API = '/api/bookings.php';
+  const ACCOUNT_BALANCE_API = '/api/profile.php';
   const CAR_ID = window.CAR_ID || '';
   const INITIAL_PROMO = window.INITIAL_PROMO || '';
   const BOOKING_MODE = window.BOOKING_MODE || '';
@@ -17,6 +18,7 @@
   let carData = null;
   let selectedBookingType = 'minicab';
   let selectedPaymentMethod = 'cash';
+  let accountBalanceValue = 0;
   let appliedPromo = null;
   let pickupMapObj = null, returnMapObj = null;
   let pickupMarker = null, returnMarker = null;
@@ -940,6 +942,7 @@
     }
 
     populatePaymentSummary();
+    await refreshAccountBalanceOption();
     const step1Content = document.getElementById('step1Content');
     const step2Content = document.getElementById('step2Content');
     const step1Indicator = document.getElementById('step1Indicator');
@@ -1159,6 +1162,64 @@
     }
     const paymentTotal = document.getElementById('paymentTotal');
     if (paymentTotal) paymentTotal.textContent = '£' + Math.max(0, subtotal - discount).toFixed(2);
+    refreshAccountBalanceOption();
+  }
+
+  function getCurrentPaymentTotal() {
+    const paymentTotal = document.getElementById('paymentTotal');
+    const raw = paymentTotal ? paymentTotal.textContent : '0';
+    const num = Number(String(raw || '').replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(num) ? Math.max(0, num) : 0;
+  }
+
+  async function refreshAccountBalanceOption() {
+    const card = document.getElementById('accountBalanceMethodCard');
+    const desc = document.getElementById('accountBalanceMethodDesc');
+    if (!card || !desc) return;
+
+    try {
+      const res = await fetch(ACCOUNT_BALANCE_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get-balance' })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        desc.textContent = 'Unavailable right now';
+        card.classList.add('disabled');
+        if (selectedPaymentMethod === 'account_balance') {
+          selectPaymentMethod('cash');
+        }
+        return;
+      }
+
+      accountBalanceValue = Number(data.balance || 0);
+      const total = getCurrentPaymentTotal();
+      const sufficient = accountBalanceValue >= total;
+
+      if (total <= 0) {
+        desc.textContent = 'Balance: £ ' + accountBalanceValue.toFixed(2);
+        card.classList.remove('disabled');
+        return;
+      }
+
+      if (sufficient) {
+        desc.textContent = 'Balance: £ ' + accountBalanceValue.toFixed(2);
+        card.classList.remove('disabled');
+      } else {
+        desc.textContent = 'Balance: £ ' + accountBalanceValue.toFixed(2) + ' (insufficient)';
+        card.classList.add('disabled');
+        if (selectedPaymentMethod === 'account_balance') {
+          selectPaymentMethod('cash');
+        }
+      }
+    } catch (err) {
+      desc.textContent = 'Unavailable right now';
+      card.classList.add('disabled');
+      if (selectedPaymentMethod === 'account_balance') {
+        selectPaymentMethod('cash');
+      }
+    }
   }
 
   function formatDate(dateStr) {
@@ -1168,7 +1229,12 @@
 
   // ===== PAYMENT METHOD =====
   function selectPaymentMethod(method) {
-    if (method !== 'cash' && method !== 'paypal') {
+    if (method !== 'cash' && method !== 'paypal' && method !== 'account_balance') {
+      return;
+    }
+    const targetCard = document.querySelector('.payment-method-card[data-method="' + method + '"]');
+    if (targetCard && targetCard.classList.contains('disabled')) {
+      if (typeof showToast === 'function') showToast('Insufficient Account Balance for this booking total.', 'warning');
       return;
     }
     selectedPaymentMethod = method;
@@ -1300,6 +1366,19 @@
   // ===== CONFIRM BOOKING =====
   async function confirmBooking() {
     const btn = document.getElementById('confirmBtn');
+
+        if (selectedPaymentMethod === 'account_balance') {
+          const total = getCurrentPaymentTotal();
+          if (accountBalanceValue < total) {
+            if (typeof showToast === 'function') showToast('Insufficient Account Balance. Please top up or choose another method.', 'warning');
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = 'Confirm & Book';
+            }
+            return;
+          }
+        }
+
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Processing...';
@@ -1461,7 +1540,7 @@
   }
 
   function formatPaymentMethod(m) {
-    return { cash: '💵 Cash', bank_transfer: '🏦 Banking', paypal: '🅿️ PayPal', credit_card: '💳 Card' }[m] || m;
+    return { cash: '💵 Cash', bank_transfer: '🏦 Banking', paypal: '🅿️ PayPal', credit_card: '💳 Card', account_balance: '💷 Account Balance' }[m] || m;
   }
 
   // ===== LEAFLET AUTOCOMPLETE =====

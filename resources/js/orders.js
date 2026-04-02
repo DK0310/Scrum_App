@@ -5,6 +5,7 @@
 
 // ===== CONSTANTS & CONFIGURATION =====
 const BOOKINGS_API = '/api/orders.php';
+const REVIEWS_API = '/api/reviews.php';
 const VEHICLES_API = '/api/vehicles.php';
 const ORDER_STATUS_LABELS = {
     pending: 'Pending',
@@ -22,7 +23,8 @@ const PAYMENT_METHOD_LABELS = {
     cash: 'Cash',
     bank_transfer: 'Bank Transfer',
     paypal: 'PayPal',
-    credit_card: 'Card'
+    credit_card: 'Card',
+    account_balance: 'Account Balance'
 };
 
 // ===== STATE MANAGEMENT =====
@@ -162,7 +164,7 @@ function renderOrders(orders) {
 
         // Renter: can review if completed and not yet reviewed
         if (order.is_renter && order.status === 'completed' && !order.review_id) {
-            actionsHtml += '<button class="btn btn-primary btn-sm" onclick="openReviewModal(\'' + order.id + '\', \'' + (order.brand + ' ' + order.model).replace(/'/g, "\\'") + '\')">⭐ Rate & Review</button>';
+            actionsHtml += '<button class="btn btn-primary btn-sm" onclick="openReviewModal(\'' + order.id + '\', \'' + (order.brand + ' ' + order.model).replace(/'/g, "\\'") + '\')">⭐ Rate & Feedback</button>';
         }
         // Show "Reviewed" badge if already reviewed
         if (order.is_renter && order.status === 'completed' && order.review_id) {
@@ -337,7 +339,13 @@ async function updateOrderStatus(bookingId, newStatus) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'update-status', booking_id: bookingId, status: newStatus })
         });
-        const data = await res.json();
+        const raw = await res.text();
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (e) {
+            throw new Error(raw || 'Invalid response from server');
+        }
         if (data.success) {
             showToast('✅ Order updated!', 'success');
             
@@ -368,7 +376,7 @@ async function updateOrderStatus(bookingId, newStatus) {
             showToast('❌ ' + (data.message || 'Failed to update.'), 'error');
         }
     } catch (err) {
-        showToast('Connection error. Please try again.', 'error');
+        showToast((err && err.message) ? err.message : 'Connection error. Please try again.', 'error');
     }
 }
 
@@ -965,16 +973,27 @@ window.confirmModifyMapLocation = confirmModifyMapLocation;
 
 // ===== REVIEW MODAL MANAGEMENT =====
 function openReviewModal(bookingId, carName) {
+    const modal = document.getElementById('reviewModalOverlay');
+    const carNameEl = document.getElementById('reviewCarName');
+    const contentEl = document.getElementById('reviewContent');
+    if (!modal || !carNameEl || !contentEl) {
+        showToast('Feedback modal is not available right now. Please refresh and try again.', 'error');
+        return;
+    }
+
     reviewBookingId = bookingId;
     reviewRating = 0;
-    document.getElementById('reviewCarName').textContent = carName;
-    document.getElementById('reviewContent').value = '';
+    carNameEl.textContent = carName;
+    contentEl.value = '';
     renderStars(0);
-    document.getElementById('reviewModalOverlay').style.display = 'flex';
+    modal.style.display = 'flex';
 }
 
 function closeReviewModal() {
-    document.getElementById('reviewModalOverlay').style.display = 'none';
+    const modal = document.getElementById('reviewModalOverlay');
+    if (modal) {
+        modal.style.display = 'none';
+    }
     reviewBookingId = null;
     reviewRating = 0;
 }
@@ -986,6 +1005,7 @@ function setReviewRating(rating) {
 
 function renderStars(rating) {
     const container = document.getElementById('reviewStarsInput');
+    if (!container) return;
     container.innerHTML = '';
     for (let i = 1; i <= 5; i++) {
         const star = document.createElement('span');
@@ -1009,7 +1029,7 @@ async function submitOrderReview() {
     btn.textContent = 'Submitting...';
 
     try {
-        const res = await fetch(BOOKINGS_API, {
+        const res = await fetch(REVIEWS_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1032,6 +1052,6 @@ async function submitOrderReview() {
         showToast('Connection error. Please try again.', 'error');
     } finally {
         btn.disabled = false;
-        btn.textContent = '⭐ Submit Review';
+        btn.textContent = '⭐ Submit Feedback';
     }
 }

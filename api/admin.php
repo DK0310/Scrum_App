@@ -511,16 +511,65 @@ if ($action === 'admin-list-vehicles') {
     requireAdmin();
 
     try {
-        // Get vehicles via repository
-        $vehicles = $vehicleRepo->listAll();
+        // Get vehicles via repository (with admin dashboard metadata)
+        $vehicles = $vehicleRepo->listForAdminDashboard();
 
         // Add image URLs (get first image as thumbnail)
         foreach ($vehicles as &$v) {
             // Get thumbnail ID using repository helper
             $imgId = $vehicleRepo->getThumbnailImageId($v['id']);
             $v['thumbnail'] = $imgId ? '/api/vehicles.php?action=get-image&id=' . $imgId : null;
+            $v['can_set_maintenance'] = (
+                (string)($v['status'] ?? '') === 'available'
+                && empty($v['assigned_driver_id'])
+            );
         }
         echo json_encode(['success' => true, 'vehicles' => $vehicles]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - SET VEHICLE MAINTENANCE
+// Rule: only when vehicle is available and not assigned to any driver
+// ==========================================================
+if ($action === 'admin-set-vehicle-maintenance') {
+    requireAdmin();
+
+    $vehicleId = trim((string)($input['vehicle_id'] ?? ''));
+    if ($vehicleId === '') {
+        echo json_encode(['success' => false, 'message' => 'Vehicle ID is required.']);
+        exit;
+    }
+
+    try {
+        $vehicle = $vehicleRepo->getById($vehicleId);
+        if (!$vehicle) {
+            echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
+            exit;
+        }
+
+        if ((string)($vehicle['status'] ?? '') !== 'available') {
+            echo json_encode(['success' => false, 'message' => 'Only available vehicles can be moved to maintenance.']);
+            exit;
+        }
+
+        $assignedDriverStmt = $pdo->prepare("SELECT id FROM users WHERE assigned_vehicle_id = ? AND role = 'driver' AND is_active = true LIMIT 1");
+        $assignedDriverStmt->execute([$vehicleId]);
+        if ($assignedDriverStmt->fetch(PDO::FETCH_ASSOC)) {
+            echo json_encode(['success' => false, 'message' => 'Cannot set maintenance while this vehicle is assigned to a driver.']);
+            exit;
+        }
+
+        $updated = $vehicleRepo->setStatusAdmin($vehicleId, 'maintenance');
+        if (!$updated) {
+            echo json_encode(['success' => false, 'message' => 'No status change applied.']);
+            exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Vehicle moved to maintenance.']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }

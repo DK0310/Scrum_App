@@ -167,6 +167,25 @@ img { max-width: 100%; height: auto; }
 }
 .navbar-profile-link:hover { background: var(--primary-50); color: var(--primary); }
 .navbar-action-link { font-weight: 600; }
+.navbar-my-orders {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+.navbar-my-orders:hover {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary-dark);
+}
+.navbar-my-orders.active {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+}
+.navbar-my-orders.active:hover {
+    background: var(--primary-dark);
+    color: #ffffff;
+    border-color: var(--primary-dark);
+}
 .navbar-actions { display: flex; align-items: center; gap: 12px; }
 
 /* ===== SIDE MENU TOGGLE BUTTON (always visible) ===== */

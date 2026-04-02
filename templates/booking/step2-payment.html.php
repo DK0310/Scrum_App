@@ -11,6 +11,12 @@
                                             <span class="pm-desc">Pay at destination</span>
                                             <span class="pm-check">✓</span>
                                         </div>
+                                        <div class="payment-method-card" data-method="account_balance" onclick="selectPaymentMethod('account_balance')" id="accountBalanceMethodCard">
+                                            <div class="pm-chip">💷</div>
+                                            <span class="pm-name">Account Balance</span>
+                                            <span class="pm-desc" id="accountBalanceMethodDesc">Loading balance...</span>
+                                            <span class="pm-check">✓</span>
+                                        </div>
                                         <div class="payment-method-card" data-method="paypal" onclick="selectPaymentMethod('paypal')">
                                             <div class="pm-chip pm-chip-logo">
                                                 <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBU4sSgahwkKMnCEomLWind84lM-UT7qYIEvSrSltS75tTWEF7My1wXzNKkIvW32YmhTdOBE_nhb_1mnk0Oga0OH9ezDqPGl4zwJijm34ExlToAl-aYQXOzZaC3cvFuIHG6DYFWtNkD9HPLHJrBvveBiuoyI9Bkas5WqqCUPpp6N_Ud5eIEXvSBp2mZ-qMA3JrRwDn1IulQr_10prTVRIX2eTHQv1t8HmOvCYKQ6GAnnGNwdV5kEJ3ubZ3aLr6AX1aTW0s-1otamc" alt="PayPal Logo">
@@ -26,7 +32,7 @@
 
                                         <div class="promo-input-row" id="promoInputRow">
                                             <input type="text" class="form-input" id="promoCodeInput" placeholder="Enter code" style="flex:1;">
-                                            <button class="btn btn-secondary" onclick="applyPromoCode()" id="promoApplyBtn">Apply</button>
+                                            <button type="button" class="btn btn-secondary" onclick="applyPromoCode()" id="promoApplyBtn">Apply</button>
                                         </div>
 
                                         <div class="promo-applied" id="promoApplied" style="display:none;">
@@ -36,7 +42,7 @@
                                                     <div class="promo-applied-code" id="promoAppliedCode"></div>
                                                     <div class="promo-applied-desc" id="promoAppliedDesc"></div>
                                                 </div>
-                                                <button class="promo-remove-btn" onclick="removePromo()">✕</button>
+                                                <button type="button" class="promo-remove-btn" onclick="removePromo()">✕</button>
                                             </div>
                                         </div>
 
@@ -54,7 +60,7 @@
                                         </div>
                                     </div>
 
-                                    <button class="btn btn-outline" onclick="goToStep1()" style="width:100%;">← Back to Trip Details</button>
+                                    <button type="button" class="btn btn-outline" onclick="goToStep1()" style="width:100%;">← Back to Trip Details</button>
                                 </div>
 
                                 <div class="payment-summary-card payment-summary-modern">
@@ -124,7 +130,7 @@
                                             </div>
                                         </div>
 
-                                        <button class="btn btn-primary btn-lg btn-block" onclick="confirmBooking()" id="confirmBtn">
+                                        <button type="button" class="btn btn-primary btn-lg btn-block" onclick="confirmBooking()" id="confirmBtn">
                                             Confirm & Book
                                         </button>
                                         <p class="payment-terms-text">

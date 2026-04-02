@@ -33,7 +33,7 @@
                             <div class="minicab-trust-pill">Live Tracking</div>
                         </div>
                         <div class="minicab-summary-actions">
-                            <button class="btn btn-primary btn-lg btn-block" onclick="goToStep2()" id="continueBtnMini">
+                            <button type="button" class="btn btn-primary btn-lg btn-block" onclick="goToStep2()" id="continueBtnMini">
                                 Continue to Payment →
                             </button>
                         </div>
@@ -279,7 +279,7 @@
                         <?php endif; ?>
 
                         <?php if (!$isMinicabPage): ?>
-                        <button class="btn btn-primary btn-lg btn-block" onclick="goToStep2()" id="continueBtn">
+                        <button type="button" class="btn btn-primary btn-lg btn-block" onclick="goToStep2()" id="continueBtn">
                             Continue to Payment →
                         </button>
                         <?php endif; ?>

@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Membership
     membership      membership_tier NOT NULL DEFAULT 'free',
+    account_balance DECIMAL(12,2) NOT NULL DEFAULT 0,
 
     -- Driver dispatch assignment
     assigned_vehicle_id UUID,

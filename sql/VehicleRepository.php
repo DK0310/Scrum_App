@@ -9,6 +9,16 @@ final class VehicleRepository
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+        $this->ensureAddedByStaffColumnExists();
+    }
+
+    private function ensureAddedByStaffColumnExists(): void
+    {
+        try {
+            $this->pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS added_by_staff_id UUID NULL REFERENCES users(id) ON DELETE SET NULL");
+        } catch (Throwable $e) {
+            // Ignore in environments without ALTER permissions.
+        }
     }
 
     private function generateUuidV4(): string
@@ -281,23 +291,24 @@ final class VehicleRepository
             $vehicleId = $data['id'] ?? $this->generateUuidV4();
         
         $stmt = $this->pdo->prepare("
-            INSERT INTO vehicles
-            (id, owner_id, brand, model, year, license_plate,
-                         category, service_tier, transmission, fuel_type, seats, color,
-             engine_size, consumption, features,
-             location_city, location_address,
-             status, created_at, updated_at)
-            VALUES
-            (?, ?, ?, ?, ?, ?,
-                         ?, ?, ?, ?, ?, ?,
-             ?, ?, ?,
-             ?, ?,
-             'available', NOW(), NOW())
-        ");
+        INSERT INTO vehicles
+        (id, owner_id, added_by_staff_id, brand, model, year, license_plate,
+         category, service_tier, transmission, fuel_type, seats, color,
+         engine_size, consumption, features,
+         location_city, location_address,
+         status, created_at, updated_at)
+        VALUES
+        (?, ?, ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?, ?,
+         ?, ?, ?,
+         ?, ?,
+         'available', NOW(), NOW())
+    ");
 
         $stmt->execute([
             $vehicleId,
             $ownerId,
+            $data['added_by_staff_id'] ?? null,
             $data['brand'],
             $data['model'],
             (int)$data['year'],
@@ -327,6 +338,55 @@ final class VehicleRepository
         $stmt = $this->pdo->prepare("SELECT * FROM vehicles ORDER BY created_at DESC");
         $stmt->execute([]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * List vehicles for admin dashboard with assignment/staff/bookings metadata.
+     * @return array<int,array<string,mixed>>
+     */
+    public function listForAdminDashboard(): array
+    {
+        $sql = "
+            SELECT
+                v.id,
+                v.brand,
+                v.model,
+                v.year,
+                v.license_plate,
+                v.category,
+                v.status,
+                COALESCE(COUNT(b.id), 0) AS bookings_total,
+                v.created_at,
+                v.owner_id,
+                staff.id AS added_by_staff_id,
+                staff.full_name AS added_by_staff_name,
+                staff.email AS added_by_staff_email,
+                driver.id AS assigned_driver_id,
+                driver.full_name AS assigned_driver_name,
+                driver.email AS assigned_driver_email
+            FROM vehicles v
+            LEFT JOIN users staff ON v.added_by_staff_id = staff.id
+            LEFT JOIN users driver ON driver.assigned_vehicle_id = v.id AND driver.role = 'driver' AND driver.is_active = true
+            LEFT JOIN bookings b ON b.vehicle_id = v.id
+            GROUP BY
+                v.id,
+                staff.id,
+                staff.full_name,
+                staff.email,
+                driver.id,
+                driver.full_name,
+                driver.email
+            ORDER BY v.created_at DESC
+        ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function setStatusAdmin(string $vehicleId, string $status): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE vehicles SET status = ?, updated_at = NOW() WHERE id = ?");
+        return $stmt->execute([$status, $vehicleId]) && $stmt->rowCount() > 0;
     }
 
     /**

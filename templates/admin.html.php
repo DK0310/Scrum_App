@@ -139,7 +139,7 @@
                     <h2 style="font-size:1.25rem;font-weight:700;">🚗 All Vehicles</h2>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                         <select id="vehicleOwnerFilter" onchange="filterAdminVehicles()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
-                            <option value="">All Owners</option>
+                            <option value="">All Added By Staff</option>
                         </select>
                         <select id="vehicleCategoryFilter" onchange="filterAdminVehicles()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
                             <option value="">All Types</option>
@@ -149,7 +149,6 @@
                             <option value="available">Available</option>
                             <option value="rented">Rented</option>
                             <option value="maintenance">Maintenance</option>
-                            <option value="inactive">Inactive</option>
                         </select>
                     </div>
                 </div>
@@ -163,7 +162,7 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
                     <h2 style="font-size:1.25rem;font-weight:700;">📋 All Bookings</h2>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                        <input type="text" id="bookingSearchInput" placeholder="Search renter or owner..." oninput="filterAdminBookings()" style="padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;width:220px;">
+                        <input type="text" id="bookingSearchInput" placeholder="Search customer or driver..." oninput="filterAdminBookings()" style="padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;width:220px;">
                         <select id="bookingStatusFilter" onchange="filterAdminBookings()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
                             <option value="">All Status</option>
                             <option value="pending">Pending</option>

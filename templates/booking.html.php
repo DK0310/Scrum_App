@@ -597,6 +597,15 @@
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(15,118,110,0.15);
         }
+        .payment-method-card.disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            border-color: var(--gray-200);
+            background: var(--gray-100);
+        }
+        .payment-method-card.disabled:hover {
+            border-color: var(--gray-200);
+        }
         .promo-title {
             font-size: 1rem;
             font-weight: 700;

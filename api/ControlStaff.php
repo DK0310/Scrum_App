@@ -20,6 +20,52 @@ $userRepo = new UserRepository($pdo);
 $bookingRepo = new BookingRepository($pdo);
 $vehicleRepo = new VehicleRepository($pdo);
 
+function control_decode_payment_details($raw): array
+{
+    if (is_array($raw)) {
+        return $raw;
+    }
+    if (is_string($raw) && $raw !== '') {
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+    return [];
+}
+
+function control_effective_payment_method(array $payment): string
+{
+    $method = strtolower(trim((string)($payment['method'] ?? '')));
+    $details = control_decode_payment_details($payment['payment_details'] ?? []);
+    $original = strtolower(trim((string)($details['original_method'] ?? '')));
+    return $original !== '' ? $original : $method;
+}
+
+function control_refund_account_balance(UserRepository $userRepo, BookingRepository $bookingRepo, string $bookingId, array $booking, array $payment): bool
+{
+    $amount = isset($payment['amount']) ? (float)$payment['amount'] : 0.0;
+    if ($amount <= 0) {
+        return false;
+    }
+
+    $targetUserId = (string)($payment['user_id'] ?? $booking['renter_id'] ?? '');
+    if ($targetUserId === '') {
+        return false;
+    }
+
+    if (!$userRepo->addAccountBalance($targetUserId, $amount)) {
+        return false;
+    }
+
+    $details = control_decode_payment_details($payment['payment_details'] ?? []);
+    $details['provider'] = 'account_balance';
+    $details['stage'] = 'refund';
+    $details['refunded_amount'] = round($amount, 2);
+    $details['refunded_at'] = gmdate('c');
+
+    $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
+    return true;
+}
+
 function ensure_vehicle_service_tier_column(PDO $pdo): void
 {
     try {
@@ -464,6 +510,18 @@ try {
             throw new Exception('Only pending orders can be rejected');
         }
 
+        $payment = $bookingRepo->getPaymentByBookingId($bookingId);
+        if ($payment) {
+            $paymentMethod = control_effective_payment_method($payment);
+            $paymentStatus = strtolower(trim((string)($payment['status'] ?? '')));
+            if ($paymentMethod === 'account_balance' && $paymentStatus === 'paid') {
+                $okRefund = control_refund_account_balance($userRepo, $bookingRepo, $bookingId, $booking, $payment);
+                if (!$okRefund) {
+                    throw new Exception('Unable to refund account balance for this order');
+                }
+            }
+        }
+
         $cancelledDbStatus = control_resolve_db_booking_status($pdo, 'cancelled');
         $ok = $bookingRepo->updateStatus($bookingId, $cancelledDbStatus);
         if (!$ok) {
@@ -620,6 +678,7 @@ try {
         }
 
         $vehicleId = $vehicleRepo->create([
+            'added_by_staff_id' => $userId,
             'brand' => $brand,
             'model' => $model,
             'year' => $year,

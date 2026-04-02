@@ -313,11 +313,11 @@ async function loadAdminVehicles() {
 }
 
 function populateVehicleFilters(vehicles) {
-    // Owner filter
-    const owners = [...new Set(vehicles.map(v => v.owner_name).filter(Boolean))].sort();
+    // Added-by-staff filter
+    const owners = [...new Set(vehicles.map(v => v.added_by_staff_name).filter(Boolean))].sort();
     const ownerSelect = document.getElementById('vehicleOwnerFilter');
     const currentOwner = ownerSelect.value;
-    ownerSelect.innerHTML = '<option value="">All Owners</option>' + owners.map(o => `<option value="${o}">${o}</option>`).join('');
+    ownerSelect.innerHTML = '<option value="">All Added By Staff</option>' + owners.map(o => `<option value="${o}">${o}</option>`).join('');
     ownerSelect.value = currentOwner;
 
     // Category filter
@@ -334,7 +334,7 @@ function filterAdminVehicles() {
     const statusFilter = document.getElementById('vehicleStatusFilter').value;
 
     let filtered = allAdminVehicles;
-    if (ownerFilter) filtered = filtered.filter(v => v.owner_name === ownerFilter);
+    if (ownerFilter) filtered = filtered.filter(v => v.added_by_staff_name === ownerFilter);
     if (catFilter) filtered = filtered.filter(v => v.category === catFilter);
     if (statusFilter) filtered = filtered.filter(v => v.status === statusFilter);
 
@@ -350,7 +350,7 @@ function renderAdminVehicles(vehicles) {
     el.innerHTML = `<div style="font-size:0.8rem;color:var(--gray-400);margin-bottom:8px;">Showing ${vehicles.length} vehicle(s)</div>
     <div style="overflow-x:auto;"><table class="admin-table">
         <thead><tr>
-            <th>Vehicle</th><th>Owner</th><th>License</th><th>Price/Day</th><th>Bookings</th><th>Status</th><th>Actions</th>
+            <th>Vehicle</th><th>Added By Staff</th><th>Driver</th><th>License</th><th>Bookings</th><th>Status</th><th>Actions</th>
         </tr></thead>
         <tbody>${vehicles.map(v => `<tr>
             <td>
@@ -364,13 +364,32 @@ function renderAdminVehicles(vehicles) {
                     </div>
                 </div>
             </td>
-            <td>${v.owner_name || 'Unknown'}<br><span style="font-size:0.75rem;color:var(--gray-400);">${v.owner_email || ''}</span></td>
+            <td>${v.added_by_staff_name || 'N/A'}<br><span style="font-size:0.75rem;color:var(--gray-400);">${v.added_by_staff_email || ''}</span></td>
+            <td>${v.assigned_driver_name || 'Unassigned'}<br><span style="font-size:0.75rem;color:var(--gray-400);">${v.assigned_driver_email || ''}</span></td>
             <td>${v.license_plate || '—'}</td>
-            <td>$${v.price_per_day}</td>
-            <td>${v.total_bookings || 0} <span style="font-size:0.75rem;color:var(--gray-400);">(${v.active_bookings || 0} active)</span></td>
+            <td>${v.bookings_total || 0}</td>
             <td><span class="admin-badge ${v.status === 'available' ? 'active' : 'inactive'}">${v.status || 'N/A'}</span></td>
-            <td><button class="btn-xs danger" onclick="adminDeleteVehicle('${v.id}')">Delete</button></td>
+            <td>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn-xs toggle" ${v.can_set_maintenance ? '' : 'disabled'} onclick="adminSetVehicleMaintenance('${v.id}')">Maintenance</button>
+                    <button class="btn-xs danger" onclick="adminDeleteVehicle('${v.id}')">Delete</button>
+                </div>
+            </td>
         </tr>`).join('')}</tbody></table></div>`;
+}
+
+async function adminSetVehicleMaintenance(id) {
+    if (!confirm('Set this vehicle to maintenance? This is only allowed when vehicle is available and unassigned.')) return;
+    try {
+        const res = await fetch(ADMIN_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'admin-set-vehicle-maintenance', vehicle_id: id })
+        });
+        const data = await res.json();
+        adminNotify(data.message, data.success ? 'success' : 'error');
+        if (data.success) loadAdminVehicles();
+    } catch (e) { adminNotify('Failed.', 'error'); }
 }
 
 async function adminDeleteVehicle(id) {
@@ -413,9 +432,9 @@ function filterAdminBookings() {
     let filtered = allAdminBookings;
     if (search) {
         filtered = filtered.filter(b =>
-            (b.renter_name || '').toLowerCase().includes(search) ||
-            (b.renter_email || '').toLowerCase().includes(search) ||
-            (b.owner_name || '').toLowerCase().includes(search)
+            (b.customer_name || b.user_name || '').toLowerCase().includes(search) ||
+            (b.customer_email || b.email || '').toLowerCase().includes(search) ||
+            (b.driver_name || '').toLowerCase().includes(search)
         );
     }
     if (statusFilter) filtered = filtered.filter(b => b.status === statusFilter);
@@ -438,25 +457,21 @@ function renderAdminBookings(bookings) {
     el.innerHTML = `<div style="font-size:0.8rem;color:var(--gray-400);margin-bottom:8px;">Showing ${bookings.length} booking(s)</div>
     <div style="overflow-x:auto;"><table class="admin-table">
         <thead><tr>
-            <th>Vehicle</th><th>Renter</th><th>Owner</th><th>Pickup Date</th><th>Return Date</th><th>Days</th><th>Total</th><th>Status</th><th>Actions</th>
+            <th>Vehicle</th><th>Customer</th><th>Driver Name</th><th>Pickup Date</th><th>Time Pickup</th><th>Total</th><th>Status</th><th>Actions</th>
         </tr></thead>
         <tbody>${bookings.map(b => {
             const vehicle = b.brand ? `${b.brand} ${b.model} ${b.year}` : 'Unknown';
             const pickupDate = (b.pickup_date || b.start_date) ? new Date(b.pickup_date || b.start_date).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'}) : '—';
-            const returnDate = (b.return_date || b.end_date) ? new Date(b.return_date || b.end_date).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'}) : '—';
-            const rawStart = b.pickup_date || b.start_date;
-            const rawEnd = b.return_date || b.end_date;
-            const days = (rawStart && rawEnd) ? Math.max(1, Math.ceil((new Date(rawEnd) - new Date(rawStart)) / (1000*60*60*24))) : (b.total_days || '—');
+            const pickupTime = b.pickup_time || '—';
             const color = statusColors[b.status] || '#6b7280';
             const totalVal = b.total_amount || b.total_price;
             const total = totalVal ? '$' + parseFloat(totalVal).toFixed(2) : '—';
             return `<tr>
                 <td><strong>${vehicle}</strong><br><span style="font-size:0.75rem;color:var(--gray-400);">${b.license_plate || ''}</span></td>
-                <td>${b.renter_name || 'Unknown'}<br><span style="font-size:0.75rem;color:var(--gray-400);">${b.renter_email || ''}</span></td>
-                <td>${b.owner_name || 'Unknown'}</td>
+                <td>${b.customer_name || b.user_name || 'Unknown'}<br><span style="font-size:0.75rem;color:var(--gray-400);">${b.customer_email || b.email || ''}</span></td>
+                <td>${b.driver_name || 'Unassigned'}</td>
                 <td style="white-space:nowrap;">${pickupDate}</td>
-                <td style="white-space:nowrap;">${returnDate}</td>
-                <td style="text-align:center;">${days}</td>
+                <td style="white-space:nowrap;">${pickupTime}</td>
                 <td style="font-weight:700;color:var(--primary);">${total}</td>
                 <td><span style="color:${color};font-weight:600;font-size:0.8rem;text-transform:capitalize;">${(b.status || 'N/A').replace('_',' ')}</span></td>
                 <td><button class="btn-xs danger" onclick="adminDeleteBooking('${b.id}')">Delete</button></td>

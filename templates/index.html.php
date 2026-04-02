@@ -438,8 +438,10 @@
             padding: 30px;
             box-shadow: 0 20px 40px rgba(15, 118, 110, 0.25);
         }
-        .review-card-highlight .review-stars { color: var(--primary-50); }
-        .review-card-highlight .review-author-trip { color: rgba(255,255,255,0.7); }
+        .review-card-highlight .review-stars { color: #fcd34d; }
+        .review-card-highlight .review-text { color: rgba(255,255,255,0.96); }
+        .review-card-highlight .review-author-name { color: #ffffff; }
+        .review-card-highlight .review-author-trip { color: rgba(255,255,255,0.82); }
         .review-metrics {
             margin-top: 30px;
             display: grid;
@@ -549,12 +551,13 @@
     <!-- ===== REVIEWS PREVIEW ===== -->
     <section class="section reviews-section">
         <div class="section-container">
-            <div class="section-header section-header-centered">
+            <div class="section-header section-header-space">
                 <div>
                     <span class="section-eyebrow">Trust & Excellence</span>
                     <h2 class="section-title">Experience Refined Precision</h2>
                     <p class="section-subtitle">Join thousands of discerning travelers who trust our concierge for their most critical journeys.</p>
                 </div>
+                <a href="/reviews.php" class="section-link">View All Feedback →</a>
             </div>
             <div class="review-grid review-grid-redesign" id="homeReviewGrid">
                 <!-- Fallback static reviews (replaced dynamically if DB reviews exist) -->

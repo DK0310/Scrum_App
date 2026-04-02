@@ -28,6 +28,52 @@ $bookingRepo = new BookingRepository($pdo);
 $staffBookingRepo = new StaffBookingRepository($pdo);
 $authRepo = new AuthRepository($pdo);
 
+function cc_decode_payment_details($raw): array
+{
+    if (is_array($raw)) {
+        return $raw;
+    }
+    if (is_string($raw) && $raw !== '') {
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+    return [];
+}
+
+function cc_effective_payment_method(array $payment): string
+{
+    $method = strtolower(trim((string)($payment['method'] ?? '')));
+    $details = cc_decode_payment_details($payment['payment_details'] ?? []);
+    $original = strtolower(trim((string)($details['original_method'] ?? '')));
+    return $original !== '' ? $original : $method;
+}
+
+function cc_refund_account_balance(UserRepository $userRepo, BookingRepository $bookingRepo, string $bookingId, array $booking, array $payment): bool
+{
+    $amount = isset($payment['amount']) ? (float)$payment['amount'] : 0.0;
+    if ($amount <= 0) {
+        return false;
+    }
+
+    $targetUserId = (string)($payment['user_id'] ?? $booking['renter_id'] ?? '');
+    if ($targetUserId === '') {
+        return false;
+    }
+
+    if (!$userRepo->addAccountBalance($targetUserId, $amount)) {
+        return false;
+    }
+
+    $details = cc_decode_payment_details($payment['payment_details'] ?? []);
+    $details['provider'] = 'account_balance';
+    $details['stage'] = 'refund';
+    $details['refunded_amount'] = round($amount, 2);
+    $details['refunded_at'] = gmdate('c');
+
+    $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
+    return true;
+}
+
 function cc_normalize_role(string $role): string
 {
     $normalized = strtolower(trim($role));
@@ -366,6 +412,18 @@ try {
         $currentStatus = (string)($booking['status'] ?? '');
         if (!in_array($currentStatus, ['pending', 'in_progress'], true)) {
             throw new Exception('Only pending or in-progress requests can be cancelled');
+        }
+
+        $payment = $bookingRepo->getPaymentByBookingId($bookingId);
+        if ($payment) {
+            $paymentMethod = cc_effective_payment_method($payment);
+            $paymentStatus = strtolower(trim((string)($payment['status'] ?? '')));
+            if ($paymentMethod === 'account_balance' && $paymentStatus === 'paid') {
+                $okRefund = cc_refund_account_balance($userRepo, $bookingRepo, $bookingId, $booking, $payment);
+                if (!$okRefund) {
+                    throw new Exception('Unable to refund account balance for this request');
+                }
+            }
         }
 
         $ok = $bookingRepo->updateStatus($bookingId, 'cancelled');

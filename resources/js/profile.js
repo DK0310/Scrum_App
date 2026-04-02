@@ -16,6 +16,7 @@ const REQUIRED_SCANS = 5;
 let currentProfile = null;
 let originalEmail = '';
 let ecCountdownInterval = null;
+let currentBalance = 0;
 
 // Face ID state
 let faceApiLoaded = false;
@@ -27,8 +28,10 @@ let faceIdScans = [];
 function switchProfileTab(tab) {
     document.querySelectorAll('.profile-panel').forEach(p => p.style.display = 'none');
     document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('panel-' + tab).style.display = 'block';
-    document.getElementById('tab-' + tab).classList.add('active');
+    const panel = document.getElementById('panel-' + tab);
+    const tabBtn = document.getElementById('tab-' + tab);
+    if (panel) panel.style.display = 'block';
+    if (tabBtn) tabBtn.classList.add('active');
 }
 
 // ===== AVATAR UPLOAD =====
@@ -130,6 +133,8 @@ async function loadProfile() {
         const membershipTextEl = document.getElementById('pMembershipText');
         if (membershipTextEl) membershipTextEl.textContent = (u.membership || 'free').toLowerCase();
         document.getElementById('pBio').value = u.bio || '';
+        currentBalance = Number(u.account_balance || 0);
+        setBalanceAmount(currentBalance);
 
         // Security tab
         document.getElementById('emailVerifiedStatus').textContent = u.email_verified ? 'Your email is verified' : 'Not verified yet';
@@ -163,6 +168,125 @@ async function loadProfile() {
         showToast('Error loading profile.', 'error');
         console.error(e);
     }
+}
+
+function setBalanceAmount(value) {
+    const balanceEl = document.getElementById('balanceAmount');
+    if (!balanceEl) return;
+    balanceEl.textContent = '£ ' + Number(value || 0).toFixed(2);
+}
+
+function setTopupStatus(message, isError) {
+    const statusEl = document.getElementById('topupStatus');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.style.color = isError ? '#b91c1c' : '#0f766e';
+}
+
+async function startPaypalTopup() {
+    const amountInput = document.getElementById('topupAmount');
+    const btn = document.getElementById('topupBtn');
+    const amount = Number(amountInput ? amountInput.value : 0);
+
+    if (!Number.isFinite(amount) || amount < 1) {
+        setTopupStatus('Please enter a valid amount (minimum GBP 1.00).', true);
+        return;
+    }
+    if (amount > 10000) {
+        setTopupStatus('Maximum top-up per transaction is GBP 10,000.00.', true);
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Redirecting to PayPal...';
+    }
+
+    try {
+        const res = await fetch(PROFILE_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'paypal-topup-create', amount })
+        });
+        const data = await res.json();
+
+        if (!data.success || !data.paypal || !data.paypal.approval_url) {
+            setTopupStatus(data.message || 'Unable to start PayPal top-up.', true);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Top Up with PayPal';
+            }
+            return;
+        }
+
+        window.location.href = data.paypal.approval_url;
+    } catch (err) {
+        setTopupStatus('Network error while creating PayPal top-up.', true);
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Top Up with PayPal';
+        }
+    }
+}
+
+async function processBalancePaypalCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const paypalState = (params.get('paypal') || '').toLowerCase();
+    if (!paypalState) return false;
+
+    const orderId = params.get('token') || '';
+
+    if (paypalState === 'cancel') {
+        if (orderId) {
+            try {
+                await fetch(PROFILE_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'paypal-topup-cancel', order_id: orderId })
+                });
+            } catch (err) {}
+        }
+        setTopupStatus('PayPal top-up was cancelled.', true);
+        if (typeof showToast === 'function') showToast('Top-up cancelled.', 'warning');
+        clearPaypalQueryParams();
+        return true;
+    }
+
+    if (paypalState === 'return' && orderId) {
+        try {
+            const res = await fetch(PROFILE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'paypal-topup-capture', order_id: orderId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setTopupStatus('Top-up successful! Credited £ ' + Number(data.credited_amount || 0).toFixed(2) + '.', false);
+                if (typeof showToast === 'function') showToast('Deposit Successfully.', 'success');
+            } else {
+                setTopupStatus(data.message || 'Failed to capture top-up payment.', true);
+                if (typeof showToast === 'function') showToast(data.message || 'Top-up failed.', 'error');
+            }
+        } catch (err) {
+            setTopupStatus('Network error while confirming top-up.', true);
+            if (typeof showToast === 'function') showToast('Network error while confirming top-up.', 'error');
+        }
+        clearPaypalQueryParams();
+        return true;
+    }
+
+    return false;
+}
+
+function clearPaypalQueryParams() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete('paypal');
+    params.delete('token');
+    params.delete('PayerID');
+
+    const qs = params.toString();
+    const newUrl = window.location.pathname + (qs ? ('?' + qs) : '');
+    window.history.replaceState({}, '', newUrl);
 }
 
 // ===== SAVE PROFILE =====
@@ -258,6 +382,56 @@ async function sendMyPasswordResetLink(buttonEl) {
 
     btn.disabled = false;
     btn.textContent = oldText;
+}
+
+async function deleteMyAccount() {
+    const confirmInput = document.getElementById('deleteAccountConfirm');
+    const btn = document.getElementById('deleteAccountBtn');
+    const confirmText = (confirmInput?.value || '').trim().toUpperCase();
+
+    if (confirmText !== 'DELETE') {
+        showToast('Please type DELETE to confirm account deletion.', 'error');
+        confirmInput?.focus();
+        return;
+    }
+
+    const proceed = window.confirm('This will permanently delete your account and related data. This action cannot be undone. Continue?');
+    if (!proceed) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+    }
+
+    try {
+        const res = await fetch(PROFILE_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'delete-account',
+                confirm_text: 'DELETE'
+            })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message || 'Account deleted successfully.', 'success');
+            setTimeout(() => {
+                window.location.href = data.redirect_to || '/';
+            }, 600);
+            return;
+        }
+
+        showToast(data.message || 'Unable to delete account.', 'error');
+    } catch (e) {
+        showToast('Network error while deleting account.', 'error');
+        console.error(e);
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Delete Account';
+    }
 }
 
 // ===== EMAIL CHANGE WITH DOUBLE OTP =====
@@ -589,4 +763,18 @@ function stopFaceIdCamera() {
 }
 
 // ===== INITIALIZATION =====
-document.addEventListener('DOMContentLoaded', () => loadProfile());
+document.addEventListener('DOMContentLoaded', async () => {
+    const handledPaypal = await processBalancePaypalCallback();
+    await loadProfile();
+
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get('tab');
+    if (requestedTab === 'balance' || handledPaypal) {
+        switchProfileTab('balance');
+        if (!handledPaypal) {
+            setTopupStatus('Ready to top up your account balance.', false);
+        }
+    }
+});
+
+window.startPaypalTopup = startPaypalTopup;

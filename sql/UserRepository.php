@@ -9,6 +9,45 @@ final class UserRepository
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+        $this->ensureAccountBalanceColumnExists();
+    }
+
+    public function ensureAccountBalanceColumnExists(): void
+    {
+        try {
+            $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS account_balance DECIMAL(12,2) NOT NULL DEFAULT 0");
+        } catch (PDOException $e) {
+            // Keep runtime resilient if DB role has limited DDL privileges.
+        }
+    }
+
+    public function getAccountBalance(string $userId): float
+    {
+        $stmt = $this->pdo->prepare('SELECT COALESCE(account_balance, 0) FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$userId]);
+        return (float)$stmt->fetchColumn();
+    }
+
+    public function addAccountBalance(string $userId, float $amount): bool
+    {
+        if ($amount <= 0) {
+            return false;
+        }
+        $stmt = $this->pdo->prepare('UPDATE users SET account_balance = COALESCE(account_balance, 0) + ?, updated_at = NOW() WHERE id = ?');
+        return $stmt->execute([$amount, $userId]) && $stmt->rowCount() > 0;
+    }
+
+    public function deductAccountBalance(string $userId, float $amount): bool
+    {
+        if ($amount < 0) {
+            return false;
+        }
+        if ($amount == 0.0) {
+            return true;
+        }
+
+        $stmt = $this->pdo->prepare('UPDATE users SET account_balance = COALESCE(account_balance, 0) - ?, updated_at = NOW() WHERE id = ? AND COALESCE(account_balance, 0) >= ?');
+        return $stmt->execute([$amount, $userId, $amount]) && $stmt->rowCount() > 0;
     }
 
     /**
@@ -179,9 +218,9 @@ final class UserRepository
         string $passwordHash
     ): ?array {
         $stmt = $this->pdo->prepare(
-            "INSERT INTO users (full_name, email, phone, date_of_birth, role, address, auth_provider, password_hash, email_verified, profile_completed, last_login_at)\n             VALUES (?, ?, ?, ?::DATE, ?::user_role_v2, NULLIF(?, ''), 'email', ?, TRUE, TRUE, NOW())\n             RETURNING *"
+            "INSERT INTO users (full_name, email, phone, date_of_birth, role, auth_provider, password_hash, email_verified, profile_completed, last_login_at)\n             VALUES (?, ?, ?, ?::DATE, ?::user_role_v2, 'email', ?, TRUE, TRUE, NOW())\n             RETURNING *"
         );
-        $stmt->execute([$fullName, $email, $phone, $dateOfBirth, $role, $address ?? '', $passwordHash]);
+        $stmt->execute([$fullName, $email, $phone, $dateOfBirth, $role, $passwordHash]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -234,7 +273,7 @@ final class UserRepository
     public function getUserPublicProfile(string $userId): ?array
     {
         $stmt = $this->pdo->prepare("
-            SELECT id, full_name, avatar_url, role, bio, city, country, membership, created_at
+            SELECT id, full_name, avatar_url, role, bio, membership, created_at
             FROM users WHERE id = ?
         ");
         $stmt->execute([$userId]);
@@ -277,8 +316,7 @@ final class UserRepository
 
         // Allowed fields for update
         $allowedFields = [
-            'full_name', 'date_of_birth', 'phone', 'email', 'role', 'address', 'city',
-            'country', 'driving_license', 'license_expiry', 'id_card_number', 'bio', 'avatar_url',
+            'full_name', 'date_of_birth', 'phone', 'email', 'role', 'bio', 'avatar_url',
             'profile_completed'
         ];
 
@@ -317,7 +355,7 @@ final class UserRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT id, email, phone, auth_provider, role, full_name, date_of_birth,
-                   avatar_url, city, country, driving_license, membership,
+                   avatar_url, membership,
                    is_active, email_verified, phone_verified, faceid_enabled,
                    profile_completed, created_at, last_login_at
             FROM users
@@ -424,7 +462,7 @@ final class UserRepository
      */
     public function getSessionInfo(string $userId): ?array
     {
-        $stmt = $this->pdo->prepare("SELECT id, full_name, email, phone, role, avatar_url, profile_completed, faceid_enabled, membership FROM users WHERE id = ? LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT id, full_name, email, phone, role, avatar_url, profile_completed, faceid_enabled, membership, account_balance FROM users WHERE id = ? LIMIT 1");
         $stmt->execute([$userId]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
@@ -572,7 +610,7 @@ final class UserRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT id, email, phone, auth_provider, role, full_name, date_of_birth, avatar_url,
-                   address, city, country, driving_license, license_expiry, id_card_number, bio,
+                   bio, account_balance,
                    faceid_enabled, profile_completed, membership, email_verified, phone_verified,
                    created_at, last_login_at
             FROM users WHERE id = ?

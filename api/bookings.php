@@ -211,7 +211,7 @@ if ($action === 'create') {
     }
 
     // Validate payment method
-    $validMethods = ['cash', 'bank_transfer', 'credit_card', 'paypal'];
+    $validMethods = ['cash', 'bank_transfer', 'credit_card', 'paypal', 'account_balance'];
     if (!in_array($paymentMethod, $validMethods)) {
         echo json_encode(['success' => false, 'message' => 'Invalid payment method.']);
         exit;
@@ -285,6 +285,17 @@ if ($action === 'create') {
 
         $totalAmount = max(0, $subtotal - $discountAmount);
 
+        if ($paymentMethod === 'account_balance') {
+            $currentBalance = $userRepo->getAccountBalance((string)$renterId);
+            if ($currentBalance < $totalAmount) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Insufficient account balance. Please top up and try again.'
+                ]);
+                exit;
+            }
+        }
+
         // Ensure booking columns exist
         $bookingRepo->ensureBookingColumnsExist();
 
@@ -341,7 +352,45 @@ if ($action === 'create') {
         }
 
         // Create payment record
-        $bookingRepo->createPayment($booking['id'], $renterId, $totalAmount, $paymentMethod);
+        $paymentMethodForDb = $paymentMethod === 'account_balance' ? 'bank_transfer' : $paymentMethod;
+        $bookingRepo->createPayment($booking['id'], $renterId, $totalAmount, $paymentMethodForDb);
+
+        if ($paymentMethod === 'account_balance') {
+            $bookingRepo->updatePaymentByBookingId(
+                (string)$booking['id'],
+                'pending',
+                [
+                    'original_method' => 'account_balance',
+                    'provider' => 'account_balance',
+                    'stage' => 'authorize',
+                    'authorized_amount' => round((float)$totalAmount, 2),
+                    'authorized_at' => gmdate('c'),
+                ]
+            );
+        }
+
+        if ($paymentMethod === 'account_balance') {
+            $deducted = $userRepo->deductAccountBalance((string)$renterId, (float)$totalAmount);
+            if (!$deducted) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Insufficient account balance at payment time. Please retry.'
+                ]);
+                exit;
+            }
+            $bookingRepo->updatePaymentByBookingId(
+                (string)$booking['id'],
+                'paid',
+                [
+                    'original_method' => 'account_balance',
+                    'provider' => 'account_balance',
+                    'stage' => 'charge',
+                    'charged_amount' => round((float)$totalAmount, 2),
+                    'charged_at' => gmdate('c'),
+                ],
+                true
+            );
+        }
 
         $paypalMeta = null;
         if ($paymentMethod === 'paypal') {
@@ -559,39 +608,15 @@ if ($action === 'paypal-cancel') {
 // ==========================================================
 // ORDER ACTIONS MOVED TO /api/orders.php
 // ==========================================================
-$movedOrderActions = ['my-orders', 'modify-booking', 'update-status', 'submit-review'];
+$movedOrderActions = ['my-orders', 'modify-booking', 'update-status', 'submit-review', 'get-reviews'];
 if (in_array($action, $movedOrderActions, true)) {
+    $targetApi = ($action === 'get-reviews' || $action === 'submit-review') ? '/api/reviews.php' : '/api/orders.php';
     echo json_encode([
         'success' => false,
-        'message' => 'This action has moved to /api/orders.php.',
-        'moved_to' => '/api/orders.php',
+        'message' => 'This action has moved to ' . $targetApi . '.',
+        'moved_to' => $targetApi,
         'action' => $action,
     ]);
-    exit;
-}
-
-// ==========================================================
-// GET REVIEWS (public, for reviews page & homepage)
-// ==========================================================
-if ($action === 'get-reviews') {
-    $limit = (int)($_GET['limit'] ?? $input['limit'] ?? 50);
-    $vehicleId = $_GET['vehicle_id'] ?? $input['vehicle_id'] ?? '';
-
-    try {
-        $reviews = [];
-        $stats = [];
-
-        // Get reviews with details using repository
-        if (!empty($vehicleId)) {
-            $limit = max(1, min($limit, 100));
-            $reviews = $bookingRepo->getReviewsWithDetailsAndStats($vehicleId, $limit);
-            $stats = $bookingRepo->getReviewStatsComplete($vehicleId);
-        }
-
-        echo json_encode(['success' => true, 'reviews' => $reviews, 'stats' => $stats]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
-    }
     exit;
 }
 

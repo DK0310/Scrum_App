@@ -11,15 +11,64 @@ $action = api_action($input);
 
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
+require_once __DIR__ . '/../sql/UserRepository.php';
 require_once __DIR__ . '/../sql/VehicleRepository.php';
 require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 require_once __DIR__ . '/notification-helpers.php';
 require_once __DIR__ . '/../lib/payments/PayPalGateway.php';
 
 $bookingRepo = new BookingRepository($pdo);
+$userRepo = new UserRepository($pdo);
 $vehicleRepo = new VehicleRepository($pdo);
 $vehicleImageRepo = new VehicleImageRepository($pdo);
 $paypalGateway = new PayPalGateway();
+
+function decodePaymentDetailsOrders($raw): array {
+    if (is_array($raw)) {
+        return $raw;
+    }
+    if (is_string($raw) && $raw !== '') {
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+    return [];
+}
+
+function effectivePaymentMethodOrders(array $payment): string {
+    $method = strtolower(trim((string)($payment['method'] ?? '')));
+    $details = decodePaymentDetailsOrders($payment['payment_details'] ?? []);
+    $original = strtolower(trim((string)($details['original_method'] ?? '')));
+    if ($original !== '') {
+        return $original;
+    }
+    return $method;
+}
+
+function refundAccountBalanceOrders(UserRepository $userRepo, BookingRepository $bookingRepo, string $bookingId, array $booking, array $payment): bool {
+    $amount = isset($payment['amount']) ? (float)$payment['amount'] : 0.0;
+    if ($amount <= 0) {
+        return false;
+    }
+
+    $targetUserId = (string)($payment['user_id'] ?? $booking['renter_id'] ?? '');
+    if ($targetUserId === '') {
+        return false;
+    }
+
+    $credited = $userRepo->addAccountBalance($targetUserId, $amount);
+    if (!$credited) {
+        return false;
+    }
+
+    $details = decodePaymentDetailsOrders($payment['payment_details'] ?? []);
+    $details['provider'] = 'account_balance';
+    $details['stage'] = 'refund';
+    $details['refunded_amount'] = round($amount, 2);
+    $details['refunded_at'] = gmdate('c');
+
+    $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
+    return true;
+}
 
 function parseOrderPickupDateTime(array $booking): ?DateTimeImmutable {
     $pickupDateRaw = trim((string)($booking['pickup_date'] ?? ''));
@@ -87,6 +136,10 @@ function countAvailableVehiclesForTierAndSeats(PDO $pdo, string $tier, int $seat
     );
     $stmt->execute([$seats, $normalizedTier]);
     return (int)$stmt->fetchColumn();
+}
+
+function requireAuthOrders(): void {
+    api_require_auth();
 }
 
 if ($action === 'my-orders') {
@@ -334,7 +387,7 @@ if ($action === 'update-status') {
         if ($newStatus === 'cancelled') {
             $payment = $bookingRepo->getPaymentByBookingId($bookingId);
             if ($payment) {
-                $paymentMethod = strtolower(trim((string)($payment['method'] ?? '')));
+                $paymentMethod = effectivePaymentMethodOrders($payment);
                 $paymentStatus = strtolower(trim((string)($payment['status'] ?? '')));
 
                 if ($paymentMethod === 'paypal' && $paymentStatus === 'paid') {
@@ -380,6 +433,15 @@ if ($action === 'update-status') {
                         'mock' => !empty($refund['mock']),
                         'refunded_at' => gmdate('c'),
                     ]);
+                } elseif ($paymentMethod === 'account_balance' && $paymentStatus === 'paid') {
+                    $refunded = refundAccountBalanceOrders($userRepo, $bookingRepo, $bookingId, $booking, $payment);
+                    if (!$refunded) {
+                        echo json_encode([
+                            'success' => false,
+                            'message' => 'Unable to refund account balance. Cancellation was not completed.',
+                        ]);
+                        exit;
+                    }
                 }
             }
         }
@@ -456,47 +518,13 @@ if ($action === 'update-status') {
     exit;
 }
 
-if ($action === 'submit-review') {
-    requireAuthOrders();
-    $userId = $_SESSION['user_id'];
-    $bookingId = trim((string)($input['booking_id'] ?? ''));
-    $rating = (int)($input['rating'] ?? 0);
-    $content = trim((string)($input['content'] ?? ''));
-
-    if ($bookingId === '' || $rating < 1 || $rating > 5 || $content === '') {
-        echo json_encode(['success' => false, 'message' => 'Booking ID, rating (1-5), and review content are required.']);
-        exit;
-    }
-
-    try {
-        $booking = $bookingRepo->getBookingInfo($bookingId);
-        if (!$booking) {
-            echo json_encode(['success' => false, 'message' => 'Booking not found.']);
-            exit;
-        }
-        if ((string)$booking['renter_id'] !== (string)$userId) {
-            echo json_encode(['success' => false, 'message' => 'Only the renter can review this booking.']);
-            exit;
-        }
-        if ((string)$booking['status'] !== 'completed') {
-            echo json_encode(['success' => false, 'message' => 'You can only review completed orders.']);
-            exit;
-        }
-        if ($bookingRepo->userHasReviewed($bookingId, $userId)) {
-            echo json_encode(['success' => false, 'message' => 'You have already reviewed this booking.']);
-            exit;
-        }
-
-        $bookingRepo->insertReview($bookingId, $booking['vehicle_id'], $userId, $rating, $content);
-        $avgData = $bookingRepo->getVehicleReviewStats($booking['vehicle_id']);
-        if ($avgData['avg_rating'] !== null) {
-            $bookingRepo->updateVehicleRating($booking['vehicle_id'], (float)$avgData['avg_rating'], (int)$avgData['total']);
-        }
-
-        echo json_encode(['success' => true, 'message' => 'Review submitted successfully! Thank you for your feedback.']);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
-    }
+if ($action === 'submit-review' || $action === 'get-reviews') {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Review actions moved to /api/reviews.php.',
+        'moved_to' => '/api/reviews.php',
+        'action' => $action,
+    ]);
     exit;
 }
 
