@@ -7,6 +7,7 @@
 const BOOKINGS_API = '/api/orders.php';
 const REVIEWS_API = '/api/reviews.php';
 const VEHICLES_API = '/api/vehicles.php';
+const PROFILE_API = '/api/profile.php';
 const ORDER_STATUS_LABELS = {
     pending: 'Pending',
     confirmed: 'Confirmed',
@@ -49,8 +50,31 @@ document.addEventListener('DOMContentLoaded', () => {
     initTripDetailModalEvents();
     initModifyLocationAutocomplete();
     initModifyAvailabilityHandlers();
+    loadLoyaltyPoints();
     loadOrders();
 });
+
+function setOrdersLoyaltyPoints(points) {
+    const el = document.getElementById('ordersLoyaltyPoints');
+    if (!el) return;
+    const safePoints = Math.max(0, parseInt(points, 10) || 0);
+    el.textContent = safePoints.toLocaleString('en-GB') + ' Points';
+}
+
+async function loadLoyaltyPoints() {
+    try {
+        const res = await fetch(PROFILE_API + '?action=get-profile', {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        if (data && data.success && data.user) {
+            setOrdersLoyaltyPoints(data.user.loyalty_point);
+        }
+    } catch (err) {
+        console.error('Failed to load loyalty points:', err);
+    }
+}
 
 // ===== LOAD ORDERS =====
 async function loadOrders() {
@@ -102,20 +126,14 @@ function filterOrders(status) {
 function renderOrders(orders) {
     const container = document.getElementById('ordersList');
     const cards = orders.map(order => {
-        const statusLabels = {
-            pending: '⏳ Pending',
-            confirmed: '✅ Confirmed',
-            in_progress: '🚗 In Progress',
-            completed: '✔️ Completed',
-            cancelled: '❌ Cancelled'
+        const statusUi = {
+            pending: { label: 'Pending •' },
+            confirmed: { label: 'Confirmed •' },
+            in_progress: { label: 'In Progress ⟳' },
+            completed: { label: 'Completed ✓' },
+            cancelled: { label: 'Cancelled ×' }
         };
         const typeLabels = ORDER_TYPE_LABELS;
-        const pmLabels = {
-            cash: '💵 Cash',
-            bank_transfer: '🏦 Banking',
-            paypal: '🅿️ PayPal',
-            credit_card: '💳 Card'
-        };
 
         const canOpenTripDetail = order.status !== 'cancelled';
         const cardClassName = canOpenTripDetail ? 'order-card can-open' : 'order-card';
@@ -130,11 +148,34 @@ function renderOrders(orders) {
         const displayVehicleName = shouldHideVehicle
             ? 'Vehicle will be assigned'
             : (((order.brand || '') + ' ' + (order.model || '')).trim() || 'Vehicle');
+        const displayVehicleNameSafe = escapeHtml(displayVehicleName);
+        const orderIdShort = '#' + String(order.id || '').substring(0, 8).toUpperCase();
+
+        const bookingTypeLabel = typeLabels[order.booking_type] || order.booking_type || 'Trip';
+        const serviceTypeLabel = formatServiceType(order.service_type);
+        const cardSubtitle = serviceTypeLabel && serviceTypeLabel !== '-'
+            ? bookingTypeLabel + ' - ' + serviceTypeLabel
+            : bookingTypeLabel;
+        const cardSubtitleSafe = escapeHtml(cardSubtitle);
+
+        const pickupLabel = order.status === 'in_progress' ? 'Current Trip' : (order.status === 'pending' ? 'Pickup Time' : 'Scheduled');
+        const pickupValue = order.status === 'in_progress'
+            ? 'On route to destination'
+            : formatPickupDate(order);
+        const pickupValueSafe = escapeHtml(pickupValue || '-');
+
+        const distanceText = order.distance_km
+            ? parseFloat(order.distance_km).toFixed(1) + ' km'
+            : '-';
+
+        const totalAmountNumber = parseFloat(order.total_amount);
+        const totalAmountText = Number.isFinite(totalAmountNumber) ? '£' + totalAmountNumber.toFixed(2) : '£0.00';
+        const paymentLabel = PAYMENT_METHOD_LABELS[order.payment_method] || order.payment_method || 'N/A';
 
         const thumbUrl = shouldHideVehicle ? '' : (order.thumbnail_url || '');
         const thumbHtml = thumbUrl
-            ? '<img src="' + thumbUrl + '" alt="' + displayVehicleName + '">'
-            : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:0.7rem;">No Photo</div>';
+            ? '<img src="' + thumbUrl + '" alt="' + displayVehicleNameSafe + '">'
+            : '<img src="/resources/images/logo/logo.png" alt="PrivateHire logo" style="width:100%;height:100%;object-fit:cover;display:block;">';
 
         let actionsHtml = '';
 
@@ -164,7 +205,7 @@ function renderOrders(orders) {
 
         // Renter: can review if completed and not yet reviewed
         if (order.is_renter && order.status === 'completed' && !order.review_id) {
-            actionsHtml += '<button class="btn btn-primary btn-sm" onclick="openReviewModal(\'' + order.id + '\', \'' + (order.brand + ' ' + order.model).replace(/'/g, "\\'") + '\')">⭐ Rate & Feedback</button>';
+            actionsHtml += '<button class="btn btn-primary btn-sm" onclick="openReviewModal(\'' + order.id + '\', \'' + (((order.brand || '') + ' ' + (order.model || '')).trim() || 'this trip').replace(/'/g, "\\'") + '\')">⭐ Rate & Feedback (+ Loyalty Points)</button>';
         }
         // Show "Reviewed" badge if already reviewed
         if (order.is_renter && order.status === 'completed' && order.review_id) {
@@ -174,31 +215,44 @@ function renderOrders(orders) {
         // Renter info for owner view
         let renterInfoHtml = '';
         if (order.is_owner && order.renter_name) {
-            renterInfoHtml = '<div class="owner-renter-info">👤 Renter: <span>' + order.renter_name + '</span> — ' + (order.renter_email || '') + '</div>';
+            renterInfoHtml = '<div class="owner-renter-info">👤 Renter: <span>' + escapeHtml(order.renter_name) + '</span> — ' + escapeHtml(order.renter_email || '') + '</div>';
         }
+
+        const loyaltyPopoverHtml = (order.is_renter && order.status === 'completed' && !order.review_id)
+            ? '<div class="order-loyalty-popover">Earn loyalty points after feedback</div>'
+            : '';
+
+        const footerTitle = order.status === 'cancelled'
+            ? '<div class="order-detail-label">Refund Status</div><div class="order-total" style="font-size:1.18rem;color:#64748b;">Processed</div>'
+            : '<div class="order-detail-label">Total Fare (' + escapeHtml(paymentLabel) + ')</div><div class="order-total">' + totalAmountText + '</div>';
+
+        const detailRowsHtml =
+            '<div class="order-detail-item"><div class="order-detail-label">' + pickupLabel + '</div><div class="order-detail-value">' + pickupValueSafe + '</div></div>' +
+            '<div class="order-detail-item"><div class="order-detail-label">Distance</div><div class="order-detail-value">' + distanceText + '</div></div>' +
+            '<div class="order-detail-item is-wide"><div class="order-detail-label">Pick-up Location</div><div class="order-detail-value">' + escapeHtml(truncate(order.pickup_location || '-', 70)) + '</div></div>' +
+            (order.return_location ? '<div class="order-detail-item is-wide"><div class="order-detail-label">Destination</div><div class="order-detail-value">' + escapeHtml(truncate(order.return_location || '-', 70)) + '</div></div>' : '');
 
         return '<div class="' + cardClassName + ' status-' + order.status + '"' + cardAttrs + '>' +
             '<div class="order-card-header">' +
                 '<div class="order-card-left">' +
                     '<div class="order-car-thumb">' + thumbHtml + '</div>' +
                     '<div class="order-car-info">' +
-                        '<h4>' + (typeLabels[order.booking_type] || order.booking_type) + (order.service_type ? ' - ' + order.service_type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '') + '</h4>' +
-                        '<p>#' + order.id.substring(0, 8).toUpperCase() + '</p>' +
+                        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">' +
+                            '<span class="order-status-badge status-' + order.status + '">' + (statusUi[order.status]?.label || ORDER_STATUS_LABELS[order.status] || order.status) + '</span>' +
+                            '<span style="font-size:0.74rem;color:#64748b;font-weight:700;">' + orderIdShort + '</span>' +
+                        '</div>' +
+                        '<h4>' + displayVehicleNameSafe + '</h4>' +
+                        '<p>' + cardSubtitleSafe + '</p>' +
+                        renterInfoHtml +
                     '</div>' +
                 '</div>' +
-                '<div class="order-status-badge status-' + order.status + '">' + (statusLabels[order.status] || order.status) + '</div>' +
             '</div>' +
-            renterInfoHtml +
             '<div class="order-card-body">' +
-                '<div class="order-detail-item"><div class="order-detail-label">Pick-up Date & Time</div><div class="order-detail-value">' + formatPickupDate(order) + '</div></div>' +
-                (order.distance_km ? '<div class="order-detail-item"><div class="order-detail-label">📏 Distance</div><div class="order-detail-value">' + parseFloat(order.distance_km).toFixed(1) + ' km</div></div>' : '') +
-                '<div class="order-detail-item is-wide"><div class="order-detail-label">Pick-up Location</div><div class="order-detail-value">' + truncate(order.pickup_location || '-', 65) + '</div></div>' +
-                (order.return_location && order.booking_type === 'minicab' ? '<div class="order-detail-item is-wide"><div class="order-detail-label">Destination</div><div class="order-detail-value">' + truncate(order.return_location || '-', 65) + '</div></div>' : '') +
-                '<div class="order-detail-item is-wide"><div class="order-detail-label">Payment Method</div><div class="order-detail-value">' + (pmLabels[order.payment_method] || order.payment_method || 'N/A') + '</div></div>' +
+                detailRowsHtml +
             '</div>' +
             '<div class="order-card-footer">' +
-                '<div><div class="order-detail-label">Total Fare</div><div class="order-total">£' + parseFloat(order.total_amount).toFixed(2) + '</div></div>' +
-                '<div class="order-actions">' + actionsHtml + '</div>' +
+                '<div>' + footerTitle + '</div>' +
+                '<div class="order-actions" style="position:relative;">' + loyaltyPopoverHtml + actionsHtml + '</div>' +
             '</div>' +
         '</div>';
     }).join('');
@@ -1041,7 +1095,17 @@ async function submitOrderReview() {
         });
         const data = await res.json();
         if (data.success) {
-            showToast('⭐ ' + data.message, 'success');
+            const earnedPoints = Number(data.earned_points || 0);
+            if (typeof data.loyalty_point !== 'undefined') {
+                setOrdersLoyaltyPoints(data.loyalty_point);
+            } else {
+                loadLoyaltyPoints();
+            }
+            if (earnedPoints > 0) {
+                showToast('⭐ Feedback submitted! You earned ' + earnedPoints + ' loyalty points.', 'success');
+            } else {
+                showToast('⭐ ' + data.message, 'success');
+            }
             closeReviewModal();
             loadOrders(); // Refresh to show "Reviewed" badge
         } else {
@@ -1052,6 +1116,6 @@ async function submitOrderReview() {
         showToast('Connection error. Please try again.', 'error');
     } finally {
         btn.disabled = false;
-        btn.textContent = '⭐ Submit Feedback';
+        btn.textContent = '⭐ Submit Feedback (+ Loyalty Points)';
     }
 }

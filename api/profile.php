@@ -155,6 +155,45 @@ if ($action === 'get-balance') {
     exit;
 }
 
+if ($action === 'redeem-loyalty-gift') {
+    api_require_auth();
+
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    $pointsCost = 500;
+    $rewardAmount = 25.0;
+
+    $redeemed = $userRepo->redeemLoyaltyGift($userId, $pointsCost, $rewardAmount);
+    if (!$redeemed) {
+        $currentPoints = $userRepo->getLoyaltyPoint($userId);
+        echo json_encode([
+            'success' => false,
+            'message' => 'You need at least 500 loyalty points to redeem this gift.',
+            'loyalty_point' => $currentPoints,
+            'required_points' => $pointsCost,
+        ]);
+        exit;
+    }
+
+    createNotification(
+        $pdo,
+        $userId,
+        'promo',
+        '🎁 Gift Redeemed',
+        'You redeemed 500 loyalty points and received £25 in your account balance.'
+    );
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Redeemed successfully! £25 has been added to your account balance.',
+        'redeemed_points' => $pointsCost,
+        'credited_amount' => round($rewardAmount, 2),
+        'loyalty_point' => (int)($redeemed['loyalty_point'] ?? 0),
+        'balance' => round((float)($redeemed['account_balance'] ?? 0), 2),
+        'currency' => 'GBP'
+    ]);
+    exit;
+}
+
 if ($action === 'paypal-topup-create') {
     api_require_auth();
 

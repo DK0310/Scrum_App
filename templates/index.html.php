@@ -4,7 +4,7 @@
     <section class="hero">
         <div class="hero-container">
             <div class="hero-content">
-                <div class="hero-badge">⚡ #1 Car Rental Platform Worldwide</div>
+                <div class="hero-badge">#1 Car Rental Platform Worldwide</div>
                 <h1 class="hero-title">
                     Find Your Perfect <span>Drive</span> Today
                 </h1>
@@ -117,6 +117,7 @@
         <div class="section-container">
             <div class="section-header section-header-centered">
                 <div>
+                    <span class="section-eyebrow">Exclusive Access</span>
                     <h2 class="section-title">Browse by Category</h2>
                     <p class="section-subtitle">Select your experience</p>
                 </div>
@@ -149,6 +150,7 @@
         <div class="section-container">
             <div class="section-header section-header-vehicles section-header-centered">
                 <div>
+                    <span class="section-eyebrow">Premium Fleet</span>
                     <h2 class="section-title">Available Vehicles</h2>
                     <p class="section-subtitle">Instant booking available for our premium fleet across your city.</p>
                 </div>
@@ -473,6 +475,7 @@
         <div class="section-container">
             <div class="section-header section-header-centered">
                 <div>
+                    <span class="section-eyebrow">Precision Workflow</span>
                     <h2 class="section-title">How It Works</h2>
                     <p class="section-subtitle">Experience a seamless transition from selection to the driver's seat with our curated 4-step process.</p>
                 </div>
@@ -511,7 +514,7 @@
         <div class="section-container">
             <div class="section-header section-header-space">
                 <div>
-                    <span class="section-eyebrow">Exclusive Access</span>
+                    <span class="section-eyebrow">Seasonal Benefits</span>
                     <h2 class="section-title">Promotions and Deals</h2>
                 </div>
                 <a href="/promotions.php" class="section-link">All Promotions →</a>

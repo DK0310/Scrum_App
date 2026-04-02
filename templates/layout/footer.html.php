@@ -1,6 +1,10 @@
 <!-- ===== FOOTER ===== -->
     <footer class="footer">
         <div class="footer-container">
+            <div class="footer-legal-top">
+                <a href="#" class="footer-legal-link">Privacy Policy</a>
+                <a href="#" class="footer-legal-link">Terms Of Service</a>
+            </div>
             <div class="footer-grid">
                 <div>
                     <div class="footer-brand">PrivateHire</div>
@@ -8,12 +12,15 @@
                         The world's leading car rental platform. Book minicabs or hire cars with drivers from trusted owners in 120+ countries.
                     </p>
                     <div class="social-links">
-                        <a href="#" class="social-link" title="Facebook">📘</a>
-                        <a href="#" class="social-link" title="Twitter/X">🐦</a>
-                        <a href="#" class="social-link" title="Instagram">📸</a>
-                        <a href="#" class="social-link" title="YouTube">🎬</a>
-                        <a href="#" class="social-link" title="TikTok">🎵</a>
-                        <a href="#" class="social-link" title="LinkedIn">💼</a>
+                        <a href="#" class="social-link" title="Instagram" aria-label="Instagram">
+                            <img src="/resources/images/logo/instagram.jpg" alt="Instagram" class="social-link-img">
+                        </a>
+                        <a href="#" class="social-link" title="Facebook" aria-label="Facebook">
+                            <img src="/resources/images/logo/Logo_de_Facebook.png" alt="Facebook" class="social-link-img">
+                        </a>
+                        <a href="#" class="social-link" title="YouTube" aria-label="YouTube">
+                            <img src="/resources/images/logo/youtube.png" alt="YouTube" class="social-link-img">
+                        </a>
                     </div>
                 </div>
                 <div>
@@ -47,22 +54,20 @@
                 </div>
                 <div>
                     <h4 class="footer-title">Download App</h4>
-                    <div class="footer-devices" style="flex-direction:column;">
-                        <a href="#" class="footer-device-badge">App Store</a>
-                        <a href="#" class="footer-device-badge">Google Play</a>
-                        <a href="#" class="footer-device-badge">Web App</a>
+                    <div class="footer-devices footer-devices-images" style="flex-direction:row;">
+                        <a href="#" class="footer-device-badge footer-device-image-badge" aria-label="App Store">
+                            <img src="/resources/images/logo/app-store.png" alt="App Store" class="footer-device-img">
+                        </a>
+                        <a href="#" class="footer-device-badge footer-device-image-badge" aria-label="Google Play">
+                            <img src="/resources/images/logo/chplay.jpg" alt="Google Play" class="footer-device-img">
+                        </a>
                     </div>
                     <h4 class="footer-title" style="margin-top:24px;">Supported Devices</h4>
-                    <p style="font-size:0.813rem;color:var(--gray-400);">iOS, Android, Web Browser, Desktop, Tablet — all devices supported.</p>
+                    <p style="font-size:0.813rem;color:var(--gray-400);">iOS, Android, Desktop, Tablet - all devices supported.</p>
                 </div>
             </div>
             <div class="footer-bottom">
                 <span>© 2026 PrivateHire. All rights reserved. Available in 120+ countries worldwide.</span>
-                <div style="display:flex;gap:16px;">
-                    <a href="#" style="color:var(--gray-400);transition:var(--transition);">Privacy</a>
-                    <a href="#" style="color:var(--gray-400);">Terms</a>
-                    <a href="#" style="color:var(--gray-400);">Cookies</a>
-                </div>
             </div>
         </div>
     </footer>

@@ -1,12 +1,22 @@
 <?php include __DIR__ . '/layout/header.html.php'; ?>
 
     <!-- ===== MY ORDERS PAGE ===== -->
-    <section class="section" style="padding-top:110px;min-height:100vh;background:var(--gray-50);" id="orders">
-        <div class="section-container" style="max-width:1200px;">
-            <div class="section-header" style="margin-bottom:32px;">
-                <div>
-                    <h2 class="section-title">📋 My Orders</h2>
-                    <p class="section-subtitle">Track and manage your bookings</p>
+    <section class="section" style="padding-top:110px;min-height:100vh;background:linear-gradient(180deg,#f8faf9 0%,#f2f5f4 100%);" id="orders">
+        <div class="section-container" style="max-width:980px;">
+            <div class="section-header orders-header-shell" style="margin-bottom:26px;">
+                <div class="orders-title-wrap">
+                    <h2 class="section-title" style="margin:0;color:#0f172a;font-size:2rem;font-weight:900;letter-spacing:-0.02em;">Rate Your Recent Trips</h2>
+                    <p class="section-subtitle" style="margin:6px 0 0;color:#64748b;">Track all trip statuses and submit feedback to earn loyalty points.</p>
+                </div>
+                <div class="orders-points-actions">
+                    <div class="orders-points-pill">
+                        <img src="/resources/images/logo/star.png" alt="Star" class="orders-points-icon">
+                        <span id="ordersLoyaltyPoints">0 Points</span>
+                    </div>
+                    <a href="/profile.php?tab=exchange-gifts" class="orders-exchange-link">
+                        <span>To Exchange Points</span>
+                        <span aria-hidden="true">➜</span>
+                    </a>
                 </div>
             </div>
 
@@ -41,15 +51,74 @@
     <style>
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        .orders-header-shell {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .orders-title-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .orders-points-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .orders-points-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid #bfd7d1;
+            background: #eef7f5;
+            color: #0f766e;
+            font-size: 0.82rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .orders-points-icon {
+            width: 20px;
+            height: 20px;
+            object-fit: cover;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .orders-exchange-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 13px;
+            border-radius: 12px;
+            border: 1px solid #bfdbd3;
+            background: #ffffff;
+            color: #0f766e;
+            font-size: 0.8rem;
+            font-weight: 800;
+            text-decoration: none;
+            transition: all 0.18s ease;
+            white-space: nowrap;
+        }
+        .orders-exchange-link:hover {
+            background: #ecfdf5;
+            border-color: #86efac;
+            transform: translateX(1px);
+        }
+
         .order-tabs {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
             margin-bottom: 28px;
             padding: 6px;
-            background: white;
+            background: #ffffff;
             border-radius: 999px;
-            border: 1px solid var(--gray-200);
+            border: 1px solid #d5dfdc;
+            box-shadow: 0 8px 24px rgba(0, 79, 69, 0.06);
         }
         .order-tab {
             padding: 10px 18px;
@@ -66,11 +135,7 @@
         .order-tab:hover { background: var(--gray-100); color: var(--gray-700); }
         .order-tab.active { background: var(--primary); color: white; }
 
-        .orders-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 18px;
-        }
+        .orders-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
 
         .order-card {
             background: #fff;
@@ -78,10 +143,15 @@
             overflow: hidden;
             border: 1px solid #d5dfdc;
             box-shadow: 0 12px 40px rgba(0, 79, 69, 0.06);
-            transition: all 0.2s;
+            transition: all 0.22s ease;
+            position: relative;
         }
-        .order-card:hover { transform: translateY(-1px); box-shadow: 0 16px 50px rgba(0, 79, 69, 0.09); }
-        .order-card.status-in_progress { border-left: 4px solid #00695c; background: #f3fbf9; }
+        .order-card:hover { transform: translateY(-2px); box-shadow: 0 18px 48px rgba(0, 79, 69, 0.12); }
+        .order-card.status-cancelled { opacity: 0.84; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.04); }
+        .order-card.status-in_progress {
+            border-left: 6px solid #00695c;
+            box-shadow: 0 14px 42px rgba(0, 79, 69, 0.11);
+        }
         .order-card.can-open { cursor: pointer; }
 
         .trip-vehicle-spotlight {
@@ -109,32 +179,32 @@
             align-items: flex-start;
             justify-content: space-between;
             gap: 14px;
-            padding: 20px 22px;
-            border-bottom: 1px solid var(--gray-100);
+            padding: 22px 22px 16px;
         }
         .order-card-left { display: flex; align-items: center; gap: 16px; }
         .order-car-thumb {
-            width: 80px; height: 56px; border-radius: var(--radius-md); overflow: hidden;
+            width: 172px; height: 124px; border-radius: 12px; overflow: hidden;
             background: var(--gray-100); flex-shrink: 0;
         }
         .order-car-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .order-car-info h4 { font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 2px; }
-        .order-car-info p { font-size: 0.8rem; color: var(--gray-500); }
+        .order-car-info { padding-top: 2px; }
+        .order-car-info h4 { font-size: 1.28rem; line-height: 1.25; font-weight: 900; color: #0f172a; margin-bottom: 4px; letter-spacing: -0.01em; }
+        .order-car-info p { font-size: 0.84rem; color: #64748b; font-weight: 600; }
 
         .order-status-badge {
             display: inline-flex; align-items: center; gap: 6px;
-            padding: 6px 12px; border-radius: 10px; font-size: 0.72rem; font-weight: 800;
+            padding: 6px 12px; border-radius: 8px; font-size: 0.66rem; font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.08em;
         }
-        .status-pending { background: #fef3c7; color: #92400e; }
-        .status-confirmed { background: #ecfdf5; color: #065f46; }
-        .status-in_progress { background: #ecfdf5; color: #065f46; }
-        .status-completed { background: #f0f9ff; color: #075985; }
-        .status-cancelled { background: #fee2e2; color: #991b1b; }
+        .status-pending { background: rgba(89, 96, 95, 0.12); color: #59605f; }
+        .status-confirmed { background: rgba(4, 107, 94, 0.12); color: #046b5e; }
+        .status-in_progress { background: rgba(0, 79, 69, 0.12); color: #004f45; }
+        .status-completed { background: rgba(0, 105, 92, 0.14); color: #00695c; }
+        .status-cancelled { background: rgba(186, 26, 26, 0.14); color: #ba1a1a; }
 
         .order-card-body {
-            padding: 18px 22px;
+            padding: 0 22px 0;
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 14px 16px;
@@ -143,13 +213,13 @@
             display: flex; flex-direction: column; gap: 2px;
         }
         .order-detail-label {
-            font-size: 0.66rem;
-            color: var(--gray-400);
+            font-size: 0.64rem;
+            color: #94a3b8;
             font-weight: 800;
             letter-spacing: 0.08em;
             text-transform: uppercase;
         }
-        .order-detail-value { font-size: 0.84rem; font-weight: 700; color: var(--gray-800); }
+        .order-detail-value { font-size: 0.86rem; font-weight: 800; color: #1f2937; }
         .order-detail-item.is-wide { grid-column: 1 / -1; }
 
         .order-card-footer {
@@ -157,28 +227,69 @@
             align-items: center;
             justify-content: space-between;
             padding: 16px 22px;
-            background: var(--gray-50);
-            border-top: 1px solid var(--gray-100);
+            margin-top: 16px;
+            background: rgba(236, 238, 238, 0.45);
+            border-top: 1px solid #e2e8f0;
         }
-        .order-total { font-size: 1.45rem; font-weight: 900; color: var(--primary); }
+        .order-total { font-size: 1.52rem; font-weight: 900; color: #00695c; letter-spacing: -0.01em; }
         .order-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+        .order-loyalty-popover {
+            position: absolute;
+            top: -46px;
+            right: 0;
+            background: #00695c;
+            color: #fff;
+            font-size: 0.68rem;
+            font-weight: 800;
+            border-radius: 10px;
+            padding: 8px 12px;
+            box-shadow: 0 12px 26px rgba(0, 105, 92, 0.32);
+            white-space: nowrap;
+            animation: popBounce 1.8s ease-in-out infinite;
+        }
+        .order-loyalty-popover::after {
+            content: '';
+            position: absolute;
+            right: 20px;
+            bottom: -7px;
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-top: 7px solid #00695c;
+        }
+
+        @keyframes popBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
 
         /* Owner section */
         .owner-renter-info {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 14px; background: var(--primary-50); border-radius: var(--radius-md);
-            margin: 0 24px 16px; font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            padding: 6px 10px;
+            background: #ecfdf5;
+            border: 1px solid #bbf7d0;
+            border-radius: 999px;
+            font-size: 0.74rem;
         }
-        .owner-renter-info span { font-weight: 600; color: var(--primary); }
-
-        @media (min-width: 1024px) {
-            .orders-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
+        .owner-renter-info span { font-weight: 700; color: #065f46; }
 
         @media (max-width: 700px) {
+            .orders-points-actions {
+                width: 100%;
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .orders-points-pill { width: 100%; justify-content: center; }
+            .orders-exchange-link { width: 100%; justify-content: center; }
             .order-card-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+            .order-car-thumb { width: 100%; height: 180px; }
+            .order-card-left { width: 100%; flex-direction: column; align-items: flex-start; }
             .order-card-body { grid-template-columns: 1fr; }
             .order-card-footer { flex-direction: column; align-items: flex-start; gap: 12px; }
             .order-actions { width: 100%; }
@@ -305,7 +416,7 @@
             <div class="review-modal-header">
                 <h3 id="reviewModalTitle" style="margin:0 0 6px;color:var(--gray-900);">Rate & Feedback</h3>
                 <p style="margin:0;color:var(--gray-600);font-size:0.9rem;">
-                    Share your experience for <strong id="reviewCarName">this trip</strong>
+                    Share your experience for <strong id="reviewCarName">this trip</strong> and earn loyalty points.
                 </p>
             </div>
             <div class="review-modal-body">
@@ -323,7 +434,7 @@
             </div>
             <div class="review-modal-footer" style="justify-content:flex-end;">
                 <button type="button" class="btn btn-secondary" onclick="closeReviewModal()">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitOrderReview()">⭐ Submit Feedback</button>
+                <button type="button" class="btn btn-primary" onclick="submitOrderReview()">⭐ Submit Feedback (+ Loyalty Points)</button>
             </div>
         </div>
     </div>

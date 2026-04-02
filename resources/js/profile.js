@@ -17,6 +17,7 @@ let currentProfile = null;
 let originalEmail = '';
 let ecCountdownInterval = null;
 let currentBalance = 0;
+let currentLoyaltyPoints = 0;
 
 // Face ID state
 let faceApiLoaded = false;
@@ -134,7 +135,9 @@ async function loadProfile() {
         if (membershipTextEl) membershipTextEl.textContent = (u.membership || 'free').toLowerCase();
         document.getElementById('pBio').value = u.bio || '';
         currentBalance = Number(u.account_balance || 0);
+        currentLoyaltyPoints = Number(u.loyalty_point || 0);
         setBalanceAmount(currentBalance);
+        setLoyaltyPoints(currentLoyaltyPoints);
 
         // Security tab
         document.getElementById('emailVerifiedStatus').textContent = u.email_verified ? 'Your email is verified' : 'Not verified yet';
@@ -174,6 +177,33 @@ function setBalanceAmount(value) {
     const balanceEl = document.getElementById('balanceAmount');
     if (!balanceEl) return;
     balanceEl.textContent = '£ ' + Number(value || 0).toFixed(2);
+}
+
+function setLoyaltyPoints(value) {
+    currentLoyaltyPoints = Number(value || 0);
+    const pointsEl = document.getElementById('loyaltyPointsValue');
+    if (pointsEl) pointsEl.textContent = String(Math.max(0, Math.floor(currentLoyaltyPoints)));
+
+    const redeemBtn = document.getElementById('redeemGiftBtn');
+    const hintEl = document.getElementById('redeemGiftHint');
+    const canRedeem = currentLoyaltyPoints >= 500;
+
+    if (redeemBtn) {
+        redeemBtn.disabled = !canRedeem;
+        redeemBtn.style.opacity = canRedeem ? '1' : '0.55';
+        redeemBtn.style.cursor = canRedeem ? 'pointer' : 'not-allowed';
+    }
+
+    if (hintEl) {
+        if (canRedeem) {
+            hintEl.textContent = 'Ready to redeem. £25 will be added directly to Account Balance.';
+            hintEl.style.color = '#0f766e';
+        } else {
+            const remaining = 500 - Math.max(0, Math.floor(currentLoyaltyPoints));
+            hintEl.textContent = 'You need ' + remaining + ' more points to redeem this gift.';
+            hintEl.style.color = 'var(--gray-500)';
+        }
+    }
 }
 
 function setTopupStatus(message, isError) {
@@ -476,6 +506,41 @@ async function initiateEmailChange(newEmail) {
     btn.textContent = '💾 Save Changes';
 }
 
+async function redeemLoyaltyGift() {
+    const btn = document.getElementById('redeemGiftBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Redeeming...';
+    }
+
+    try {
+        const res = await fetch(PROFILE_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'redeem-loyalty-gift' })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+            showToast(data.message || 'Unable to redeem loyalty gift.', 'error');
+            if (typeof data.loyalty_point !== 'undefined') {
+                setLoyaltyPoints(Number(data.loyalty_point || 0));
+            }
+            return;
+        }
+
+        setLoyaltyPoints(Number(data.loyalty_point || 0));
+        setBalanceAmount(Number(data.balance || 0));
+        showToast('🎁 Redeemed successfully! £25 has been added to your account balance.', 'success');
+    } catch (err) {
+        showToast('Network error while redeeming gift.', 'error');
+    } finally {
+        if (btn) {
+            btn.textContent = 'Redeem 500 Points → £25';
+        }
+    }
+}
+
 function ecOtpInput(el, nextId) {
     el.value = el.value.replace(/[^0-9]/g, '');
     if (el.value && nextId) document.getElementById(nextId).focus();
@@ -774,7 +839,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!handledPaypal) {
             setTopupStatus('Ready to top up your account balance.', false);
         }
+    } else if (requestedTab === 'exchange-gifts' || requestedTab === 'gifts') {
+        switchProfileTab('exchange-gifts');
     }
 });
 
 window.startPaypalTopup = startPaypalTopup;
+window.redeemLoyaltyGift = redeemLoyaltyGift;

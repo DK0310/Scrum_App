@@ -11,8 +11,11 @@ $action = api_action($input);
 
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
+require_once __DIR__ . '/../sql/UserRepository.php';
+require_once __DIR__ . '/notification-helpers.php';
 
 $bookingRepo = new BookingRepository($pdo);
+$userRepo = new UserRepository($pdo);
 
 if ($action === 'get-reviews') {
     $limit = (int)($_GET['limit'] ?? ($input['limit'] ?? 50));
@@ -81,7 +84,36 @@ if ($action === 'submit-review') {
             $bookingRepo->updateVehicleRating((string)$booking['vehicle_id'], (float)$avgData['avg_rating'], (int)$avgData['total']);
         }
 
-        echo json_encode(['success' => true, 'message' => 'Review submitted successfully! Thank you for your feedback.']);
+        // Loyalty points are awarded only after review submission.
+        // Formula: points = distance_miles + amount_paid
+        $earningStmt = $pdo->prepare("SELECT COALESCE(distance_km, 0) AS distance_km, COALESCE(total_amount, 0) AS total_amount FROM bookings WHERE id = ? LIMIT 1");
+        $earningStmt->execute([$bookingId]);
+        $earningRow = $earningStmt->fetch(PDO::FETCH_ASSOC) ?: ['distance_km' => 0, 'total_amount' => 0];
+
+        $distanceKm = (float)($earningRow['distance_km'] ?? 0);
+        $distanceMiles = $distanceKm * 0.621371;
+        $amountPaid = (float)($earningRow['total_amount'] ?? 0);
+        $earnedPoints = (int)max(0, round($distanceMiles + $amountPaid));
+
+        $updatedUser = $userRepo->addLoyaltyPoints($userId, $earnedPoints);
+        $currentPoints = (int)($updatedUser['loyalty_point'] ?? $userRepo->getLoyaltyPoint($userId));
+
+        if ($earnedPoints > 0) {
+            createNotification(
+                $pdo,
+                $userId,
+                'promo',
+                '🎁 Loyalty Points Earned',
+                'You earned ' . $earnedPoints . ' loyalty points after completing your trip review.'
+            );
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Review submitted successfully! Thank you for your feedback.',
+            'earned_points' => $earnedPoints,
+            'loyalty_point' => $currentPoints,
+        ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }

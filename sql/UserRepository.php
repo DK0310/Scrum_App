@@ -10,12 +10,22 @@ final class UserRepository
     {
         $this->pdo = $pdo;
         $this->ensureAccountBalanceColumnExists();
+        $this->ensureLoyaltyPointColumnExists();
     }
 
     public function ensureAccountBalanceColumnExists(): void
     {
         try {
             $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS account_balance DECIMAL(12,2) NOT NULL DEFAULT 0");
+        } catch (PDOException $e) {
+            // Keep runtime resilient if DB role has limited DDL privileges.
+        }
+    }
+
+    public function ensureLoyaltyPointColumnExists(): void
+    {
+        try {
+            $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS loyalty_point INT NOT NULL DEFAULT 0");
         } catch (PDOException $e) {
             // Keep runtime resilient if DB role has limited DDL privileges.
         }
@@ -48,6 +58,56 @@ final class UserRepository
 
         $stmt = $this->pdo->prepare('UPDATE users SET account_balance = COALESCE(account_balance, 0) - ?, updated_at = NOW() WHERE id = ? AND COALESCE(account_balance, 0) >= ?');
         return $stmt->execute([$amount, $userId, $amount]) && $stmt->rowCount() > 0;
+    }
+
+    public function getLoyaltyPoint(string $userId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COALESCE(loyalty_point, 0) FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$userId]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    public function addLoyaltyPoints(string $userId, int $points): ?array
+    {
+        if ($points <= 0) {
+            return [
+                'loyalty_point' => $this->getLoyaltyPoint($userId),
+                'account_balance' => $this->getAccountBalance($userId),
+            ];
+        }
+
+        $stmt = $this->pdo->prepare("UPDATE users
+            SET loyalty_point = COALESCE(loyalty_point, 0) + ?,
+                updated_at = NOW()
+            WHERE id = ?
+            RETURNING COALESCE(loyalty_point, 0) AS loyalty_point, COALESCE(account_balance, 0) AS account_balance");
+        $stmt->execute([$points, $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    public function redeemLoyaltyGift(string $userId, int $pointsCost, float $rewardAmount): ?array
+    {
+        if ($pointsCost <= 0 || $rewardAmount <= 0) {
+            return null;
+        }
+
+        $stmt = $this->pdo->prepare("UPDATE users
+            SET loyalty_point = COALESCE(loyalty_point, 0) - ?,
+                account_balance = COALESCE(account_balance, 0) + ?,
+                updated_at = NOW()
+            WHERE id = ?
+              AND COALESCE(loyalty_point, 0) >= ?
+            RETURNING COALESCE(loyalty_point, 0) AS loyalty_point, COALESCE(account_balance, 0) AS account_balance");
+        $stmt->execute([$pointsCost, $rewardAmount, $userId, $pointsCost]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     /**
@@ -462,7 +522,7 @@ final class UserRepository
      */
     public function getSessionInfo(string $userId): ?array
     {
-        $stmt = $this->pdo->prepare("SELECT id, full_name, email, phone, role, avatar_url, profile_completed, faceid_enabled, membership, account_balance FROM users WHERE id = ? LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT id, full_name, email, phone, role, avatar_url, profile_completed, faceid_enabled, membership, account_balance, loyalty_point FROM users WHERE id = ? LIMIT 1");
         $stmt->execute([$userId]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
@@ -610,7 +670,7 @@ final class UserRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT id, email, phone, auth_provider, role, full_name, date_of_birth, avatar_url,
-                   bio, account_balance,
+                   bio, account_balance, loyalty_point,
                    faceid_enabled, profile_completed, membership, email_verified, phone_verified,
                    created_at, last_login_at
             FROM users WHERE id = ?

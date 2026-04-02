@@ -17,6 +17,9 @@ function showLoginModal() {
 
 function closeLoginModal() {
     document.getElementById('loginModalOverlay').style.display = 'none';
+    if (typeof closeFaceIdLoginModal === 'function') {
+        closeFaceIdLoginModal();
+    }
     document.getElementById('loginForm').reset();
     document.getElementById('loginStatus').style.display = 'none';
 }
@@ -71,8 +74,218 @@ function showLoginStatus(message, type = 'info') {
     }
 }
 
-function showFaceIdLogin() {
-    alert('👤 Face ID login coming soon!');
+const AUTH_FACEID_API = '/api/faceid.php';
+const AUTH_FACE_API_CDN = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.min.js';
+const AUTH_FACE_MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
+const AUTH_FACE_REQUIRED_SCANS = 3;
+
+let authFaceApiLoaded = false;
+let authFaceStream = null;
+let authFaceDetectionTimer = null;
+let authFaceDescriptors = [];
+
+function ensureFaceIdLoginModal() {
+    let overlay = document.getElementById('faceIdLoginOverlay');
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = 'faceIdLoginOverlay';
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'none';
+    overlay.innerHTML = '' +
+        '<div class="modal" style="max-width:520px;width:94%;padding:20px 20px 16px;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">' +
+                '<h3 style="margin:0;font-size:1.15rem;color:#0f766e;">Sign In with Face ID</h3>' +
+                '<button type="button" onclick="closeFaceIdLoginModal()" style="border:none;background:#f3f4f6;border-radius:999px;width:34px;height:34px;cursor:pointer;">✕</button>' +
+            '</div>' +
+            '<p style="margin:0 0 12px;color:#6b7280;font-size:0.88rem;">Center your face in the frame and hold still.</p>' +
+            '<div style="position:relative;border-radius:12px;overflow:hidden;background:#111827;">' +
+                '<video id="faceIdLoginVideo" autoplay playsinline muted style="width:100%;height:280px;object-fit:cover;display:block;"></video>' +
+                '<canvas id="faceIdLoginCanvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>' +
+            '</div>' +
+            '<div style="margin-top:12px;">' +
+                '<div style="height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden;">' +
+                    '<div id="faceIdLoginProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#0f766e,#14b8a6);"></div>' +
+                '</div>' +
+                '<div id="faceIdLoginProgressText" style="margin-top:8px;font-size:0.82rem;color:#374151;">Initializing...</div>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">' +
+                '<button type="button" class="btn btn-outline btn-sm" onclick="closeFaceIdLoginModal()">Cancel</button>' +
+            '</div>' +
+        '</div>';
+
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) {
+            closeFaceIdLoginModal();
+        }
+    });
+
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+async function authLoadFaceApi() {
+    if (authFaceApiLoaded) return true;
+    if (window.faceapi) {
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(AUTH_FACE_MODELS_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(AUTH_FACE_MODELS_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(AUTH_FACE_MODELS_URL)
+        ]);
+        authFaceApiLoaded = true;
+        return true;
+    }
+
+    await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = AUTH_FACE_API_CDN;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+
+    await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(AUTH_FACE_MODELS_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(AUTH_FACE_MODELS_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(AUTH_FACE_MODELS_URL)
+    ]);
+
+    authFaceApiLoaded = true;
+    return true;
+}
+
+function updateFaceIdLoginProgress(pct, text) {
+    const bar = document.getElementById('faceIdLoginProgressBar');
+    const label = document.getElementById('faceIdLoginProgressText');
+    if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    if (label) label.textContent = text;
+}
+
+function stopFaceIdLoginCamera() {
+    if (authFaceDetectionTimer) {
+        clearInterval(authFaceDetectionTimer);
+        authFaceDetectionTimer = null;
+    }
+    if (authFaceStream) {
+        authFaceStream.getTracks().forEach(track => track.stop());
+        authFaceStream = null;
+    }
+}
+
+function closeFaceIdLoginModal() {
+    const overlay = document.getElementById('faceIdLoginOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+    stopFaceIdLoginCamera();
+}
+
+async function showFaceIdLogin() {
+    const overlay = ensureFaceIdLoginModal();
+    overlay.style.display = 'flex';
+    authFaceDescriptors = [];
+    updateFaceIdLoginProgress(0, 'Loading face detection models...');
+
+    try {
+        await authLoadFaceApi();
+    } catch (error) {
+        console.error('Face API load failed:', error);
+        updateFaceIdLoginProgress(0, 'Unable to load Face ID engine. Please try again later.');
+        showLoginStatus('Face ID is temporarily unavailable. Please use password login.', 'error');
+        return;
+    }
+
+    try {
+        authFaceStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+        });
+    } catch (error) {
+        console.error('Camera access failed:', error);
+        updateFaceIdLoginProgress(0, 'Camera permission denied.');
+        showLoginStatus('Please allow camera access to use Face ID.', 'error');
+        return;
+    }
+
+    const video = document.getElementById('faceIdLoginVideo');
+    const canvas = document.getElementById('faceIdLoginCanvas');
+    const ctx = canvas ? canvas.getContext('2d') : null;
+
+    if (!video || !canvas || !ctx) {
+        showLoginStatus('Face ID UI could not be initialized.', 'error');
+        closeFaceIdLoginModal();
+        return;
+    }
+
+    video.srcObject = authFaceStream;
+    await video.play();
+    updateFaceIdLoginProgress(0, 'Looking for your face...');
+
+    authFaceDetectionTimer = setInterval(async () => {
+        if (!video.videoWidth) return;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        try {
+            const detection = await faceapi
+                .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (!detection) {
+                updateFaceIdLoginProgress(0, 'Looking for your face...');
+                return;
+            }
+
+            const box = detection.detection.box;
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
+
+            authFaceDescriptors.push(Array.from(detection.descriptor));
+            const progress = Math.min((authFaceDescriptors.length / AUTH_FACE_REQUIRED_SCANS) * 100, 100);
+            updateFaceIdLoginProgress(progress, 'Scanning... ' + Math.min(authFaceDescriptors.length, AUTH_FACE_REQUIRED_SCANS) + '/' + AUTH_FACE_REQUIRED_SCANS);
+
+            if (authFaceDescriptors.length < AUTH_FACE_REQUIRED_SCANS) {
+                return;
+            }
+
+            clearInterval(authFaceDetectionTimer);
+            authFaceDetectionTimer = null;
+            updateFaceIdLoginProgress(100, 'Authenticating...');
+
+            const avgDescriptor = new Array(128).fill(0);
+            authFaceDescriptors.forEach(descriptor => {
+                for (let i = 0; i < 128; i++) avgDescriptor[i] += descriptor[i];
+            });
+            for (let i = 0; i < 128; i++) avgDescriptor[i] /= authFaceDescriptors.length;
+
+            const res = await fetch(AUTH_FACEID_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'faceid-login', face_descriptor: avgDescriptor })
+            });
+            const data = await res.json();
+
+            if (!data.success) {
+                updateFaceIdLoginProgress(0, data.message || 'Face not recognized. Please try again.');
+                showLoginStatus(data.message || 'Face ID login failed.', 'error');
+                stopFaceIdLoginCamera();
+                return;
+            }
+
+            closeFaceIdLoginModal();
+            showLoginStatus('✅ ' + (data.message || 'Face ID login successful!'), 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
+        } catch (error) {
+            console.error('Face ID login error:', error);
+            showLoginStatus('Face ID login failed. Please try password login.', 'error');
+            closeFaceIdLoginModal();
+        }
+    }, 450);
 }
 
 function openForgotPassword() {

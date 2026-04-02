@@ -31,6 +31,7 @@
                         <button type="button" class="profile-tab" onclick="switchProfileTab('security')" id="tab-security"><span class="material-symbols-outlined" aria-hidden="true">lock</span><span>Security</span></button>
                         <button type="button" class="profile-tab" onclick="switchProfileTab('preferences')" id="tab-preferences"><span class="material-symbols-outlined" aria-hidden="true">settings</span><span>App Settings</span></button>
                         <button type="button" class="profile-tab" onclick="switchProfileTab('balance')" id="tab-balance"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Account Balance</span></button>
+                        <button type="button" class="profile-tab" onclick="switchProfileTab('exchange-gifts')" id="tab-exchange-gifts"><span class="material-symbols-outlined" aria-hidden="true">redeem</span><span>Exchange Gifts</span></button>
                     </nav>
                 </aside>
 
@@ -234,6 +235,27 @@
                             </div>
                         </div>
                         </div>
+
+                    <!-- ===== EXCHANGE GIFTS TAB ===== -->
+                    <div class="profile-panel" id="panel-exchange-gifts" style="padding:28px;display:none;">
+                        <h3 style="font-weight:700;margin-bottom:16px;color:var(--gray-800);">Exchange Gifts</h3>
+                        <p style="margin:0 0 16px;color:var(--gray-500);font-size:0.9rem;">Redeem loyalty points for instant balance credit. No promo code needed.</p>
+
+                        <div class="balance-grid">
+                            <div class="balance-card">
+                                <div style="font-size:0.8rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Current Loyalty Points</div>
+                                <div id="loyaltyPointsValue" style="font-size:2.2rem;font-weight:900;color:var(--primary);margin-top:8px;">0</div>
+                                <div style="margin-top:10px;font-size:0.82rem;color:var(--gray-500);">Earned after completing Rate &amp; Feedback in My Orders.</div>
+                            </div>
+
+                            <div class="topup-card">
+                                <h3 style="font-size:1.1rem;font-weight:800;color:var(--gray-900);margin-bottom:12px;">£25 Gift Voucher</h3>
+                                <p style="font-size:0.86rem;color:var(--gray-600);margin:8px 0 14px;">Redeem <strong>500 loyalty points</strong> to add <strong>£25</strong> directly to your account balance.</p>
+                                <button type="button" id="redeemGiftBtn" class="btn btn-primary" style="width:100%;" onclick="redeemLoyaltyGift()">Redeem 500 Points → £25</button>
+                                <div id="redeemGiftHint" style="margin-top:10px;font-size:0.82rem;color:var(--gray-500);">You need 500 points to redeem.</div>
+                            </div>
+                        </div>
+                    </div>
                     </div>
                 </div>
             </div>
