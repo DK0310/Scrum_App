@@ -314,7 +314,7 @@ final class UserRepository
     {
         $like = '%' . strtolower($query) . '%';
         $stmt = $this->pdo->prepare("
-            SELECT id, full_name, email, phone
+                        SELECT id, full_name, email, phone, COALESCE(account_balance, 0) AS account_balance
             FROM users
             WHERE role = ?
               AND is_active = true

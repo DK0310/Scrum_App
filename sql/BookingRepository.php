@@ -52,6 +52,7 @@ final class BookingRepository
             'transfer_cost DECIMAL(10,2) DEFAULT NULL',
             'number_of_passengers INT DEFAULT 1',
             'ride_tier VARCHAR(50) DEFAULT NULL',
+            'payment_method VARCHAR(50) DEFAULT NULL',
         ];
 
         foreach ($columns as $col) {
@@ -157,6 +158,7 @@ final class BookingRepository
             'service_type' => $data['service_type'] ?? null,
             'number_of_passengers' => $data['number_of_passengers'] ?? 1,
             'ride_tier' => $data['ride_tier'] ?? null,
+            'payment_method' => $data['payment_method'] ?? null,
         ];
 
         foreach ($optionalMap as $column => $value) {
@@ -516,18 +518,31 @@ final class BookingRepository
      */
     public function getBookingForCustomerEdit(string $bookingId): ?array
     {
-        $stmt = $this->pdo->prepare("\n            SELECT id, renter_id, owner_id, status, booking_type,\n                   pickup_date, pickup_time,\n                   pickup_location, return_location,\n                   ride_tier, number_of_passengers\n            FROM bookings\n            WHERE id = ?\n            LIMIT 1\n        ");
+        $stmt = $this->pdo->prepare("\n            SELECT id, renter_id, owner_id, status, booking_type,\n                   pickup_date, pickup_time,\n                   pickup_location, return_location,\n                   service_type, ride_tier, number_of_passengers,\n                   distance_km, subtotal, total_amount, price_per_day, payment_method\n            FROM bookings\n            WHERE id = ?\n            LIMIT 1\n        ");
         $stmt->execute([$bookingId]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
     /**
      * Update customer-editable booking fields only.
-     * Allowed keys: pickup_location, return_location, ride_tier, number_of_passengers.
+     * Allowed keys include service_type, pickup_date, ride_tier, seats and recalculated fare fields.
      */
     public function updateCustomerEditableFields(string $bookingId, array $updates): bool
     {
-        $allowedFields = ['pickup_location', 'return_location', 'ride_tier', 'number_of_passengers'];
+        $allowedFields = [
+            'pickup_location',
+            'return_location',
+            'service_type',
+            'pickup_date',
+            'pickup_time',
+            'ride_tier',
+            'number_of_passengers',
+            'distance_km',
+            'subtotal',
+            'total_amount',
+            'transfer_cost',
+            'payment_method'
+        ];
         $setParts = [];
         $params = [];
 
@@ -539,6 +554,15 @@ final class BookingRepository
             if ($field === 'number_of_passengers') {
                 $setParts[] = $field . ' = ?';
                 $params[] = (int)$updates[$field];
+            } elseif ($field === 'pickup_date') {
+                $setParts[] = $field . ' = ?::date';
+                $params[] = trim((string)$updates[$field]);
+            } elseif ($field === 'pickup_time') {
+                $setParts[] = $field . ' = ?';
+                $params[] = trim((string)$updates[$field]);
+            } elseif (in_array($field, ['distance_km', 'subtotal', 'total_amount', 'transfer_cost'], true)) {
+                $setParts[] = $field . ' = ?';
+                $params[] = $updates[$field] === null ? null : (float)$updates[$field];
             } else {
                 $setParts[] = $field . ' = ?';
                 $params[] = $updates[$field] === null ? null : trim((string)$updates[$field]);
@@ -562,6 +586,9 @@ final class BookingRepository
      */
     public function listUserBookings(string $userId): array
     {
+        $bookingPaymentExpr = $this->bookingHasColumn('payment_method')
+            ? 'COALESCE(b.payment_method::text, \'\')'
+            : "''";
         $stmt = $this->pdo->prepare("
             SELECT b.id, b.renter_id, b.owner_id, b.vehicle_id, b.booking_type,
                    b.pickup_date, b.pickup_time, b.return_date, b.pickup_location, b.return_location,
@@ -575,6 +602,8 @@ final class BookingRepository
                    u_renter.full_name AS renter_name,
                    u_renter.email AS renter_email,
                    CASE
+                       WHEN {$bookingPaymentExpr} <> ''
+                       THEN {$bookingPaymentExpr}
                        WHEN p.method::text = 'bank_transfer'
                             AND COALESCE(p.payment_details->>'original_method', '') = 'account_balance'
                        THEN 'account_balance'

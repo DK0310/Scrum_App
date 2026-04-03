@@ -27,6 +27,7 @@ final class StaffBookingRepository
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS phone_customer_email VARCHAR(255)");
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS created_by_staff_id UUID");
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS booking_ref VARCHAR(50)");
+            $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'");
             // Call-center minicab requests should allow null daily price.
             $this->pdo->exec("ALTER TABLE bookings ALTER COLUMN price_per_day DROP NOT NULL");
         } catch (PDOException $e) {
@@ -78,19 +79,24 @@ final class StaffBookingRepository
                     total_days, subtotal, discount_amount, total_amount,
                     special_requests, driver_requested, phone_customer_name,
                     phone_customer_phone, phone_customer_email, created_by_staff_id,
-                    booking_ref, created_at, updated_at
+                    booking_ref, payment_method, service_type, number_of_passengers,
+                    ride_tier, distance_km, transfer_cost, created_at, updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?,
-                    ?, NOW(), NOW()
+                    ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
                 )
                 RETURNING id, status, created_at, total_amount
             ");
 
             $initialStatus = $data['initial_status'] ?? 'pending';
             $bookingType = (string)($data['booking_type'] ?? 'with-driver');
+            $paymentMethod = trim((string)($data['payment_method'] ?? 'cash'));
+            if ($paymentMethod === '') {
+                $paymentMethod = 'cash';
+            }
             $stmt->execute([
                 $renterId,
                 $vehicle['owner_id'],
@@ -111,7 +117,13 @@ final class StaffBookingRepository
                 $data['customer_phone'],
                 $data['customer_email'],
                 $data['staff_id'],
-                $bookingRef
+                $bookingRef,
+                $paymentMethod,
+                $data['service_type'] ?? 'local',
+                $data['number_of_passengers'] ?? 1,
+                $data['ride_tier'] ?? null,
+                $data['distance_km'] ?? null,
+                $data['subtotal'] ?? 0
             ]);
 
             $booking = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -124,7 +136,6 @@ final class StaffBookingRepository
                 INSERT INTO payments (booking_id, user_id, amount, method, status, created_at)
                 VALUES (?, ?, ?, ?, 'pending', NOW())
             ");
-            $paymentMethod = $data['payment_method'] ?? 'cash';
             $paymentStmt->execute([
                 $booking['id'],
                 $renterId,

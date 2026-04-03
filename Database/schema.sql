@@ -290,6 +290,7 @@ CREATE TABLE bookings (
     discount_amount DECIMAL(10, 2) DEFAULT 0,
     total_amount    DECIMAL(10, 2) NOT NULL,
     promo_code      VARCHAR(50),
+    payment_method  VARCHAR(50),
     
     -- Status
     status          booking_status NOT NULL DEFAULT 'pending',

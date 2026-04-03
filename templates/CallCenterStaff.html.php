@@ -493,6 +493,15 @@
                             <small id="ccSeatCapacityHint" class="cc-help">Choose seat capacity based on available fleet.</small>
                         </div>
                         <div class="cc-form-field">
+                            <label>Service Type *</label>
+                            <select class="cc-select" id="ccServiceType" required>
+                                <option value="local">Local Journey</option>
+                                <option value="long-distance">Long Distance Journey</option>
+                                <option value="airport-transfer">Airport Transfer</option>
+                                <option value="hotel-transfer">Hotel Transfer</option>
+                            </select>
+                        </div>
+                        <div class="cc-form-field">
                             <label>Pickup Date & Time *</label>
                             <input class="cc-input" id="ccPickupDate" type="datetime-local" required>
                             <small id="ccPickupDateHint" class="cc-help">Pickup must be at least 30 minutes from now.</small>
@@ -516,9 +525,29 @@
                         </div>
                         <div class="cc-form-field">
                             <label>Destination *</label>
-                            <div class="location-input-wrapper">
+                            <div class="location-input-wrapper" id="ccReturnInputWrapper">
                                 <input class="cc-input" id="ccReturnLocation" placeholder="Search destination" autocomplete="off" required>
-                                <button type="button" class="location-map-btn" onclick="openMapPicker('return')" title="Choose on map">📍</button>
+                                <button type="button" class="location-map-btn" id="ccReturnMapBtn" onclick="openMapPicker('return')" title="Choose on map">📍</button>
+                            </div>
+                            <div id="ccAirportSelectWrapper" style="display:none;">
+                                <select class="cc-select" id="ccAirportSelect">
+                                    <option value="">-- Select Airport --</option>
+                                    <option value="Heathrow Airport, London, United Kingdom" data-lat="51.4700" data-lon="-0.4543">Heathrow (LHR) - London</option>
+                                    <option value="Gatwick Airport, London, United Kingdom" data-lat="51.1537" data-lon="-0.1821">Gatwick (LGW) - London</option>
+                                    <option value="Stansted Airport, London, United Kingdom" data-lat="51.8850" data-lon="0.2350">Stansted (STN) - London</option>
+                                    <option value="Luton Airport, London, United Kingdom" data-lat="51.8747" data-lon="-0.3683">Luton (LTN) - London</option>
+                                    <option value="London City Airport, London, United Kingdom" data-lat="51.5053" data-lon="0.0553">London City (LCY) - London</option>
+                                </select>
+                            </div>
+                            <div id="ccHotelSelectWrapper" style="display:none;">
+                                <select class="cc-select" id="ccHotelSelect">
+                                    <option value="">-- Select Hotel --</option>
+                                    <option value="The Savoy, Strand, London, United Kingdom" data-lat="51.5100" data-lon="-0.1206">The Savoy - Strand</option>
+                                    <option value="The Ritz London, Piccadilly, London, United Kingdom" data-lat="51.5070" data-lon="-0.1416">The Ritz London - Piccadilly</option>
+                                    <option value="Shangri-La The Shard, London, United Kingdom" data-lat="51.5045" data-lon="-0.0865">Shangri-La The Shard - Southwark</option>
+                                    <option value="The Langham, 1C Portland Place, London, United Kingdom" data-lat="51.5178" data-lon="-0.1440">The Langham - Marylebone</option>
+                                    <option value="Corinthia London, Whitehall Place, London, United Kingdom" data-lat="51.5067" data-lon="-0.1246">Corinthia London - Westminster</option>
+                                </select>
                             </div>
                             <div id="returnMapContainer" class="map-picker-container" style="display:none;">
                                 <div class="map-picker-wrapper">
@@ -535,14 +564,31 @@
                             <label>Payment Method</label>
                             <select class="cc-select" id="ccPaymentMethod">
                                 <option value="cash">Cash</option>
-                                <option value="bank_transfer">Bank Transfer</option>
-                                <option value="credit_card">Credit Card</option>
                                 <option value="paypal">PayPal</option>
+                                <option value="account_balance">Account Balance</option>
                             </select>
+                            <small id="ccPaymentMethodHint" class="cc-help">Account balance is available only for existing customers with enough balance.</small>
                         </div>
                         <div class="full cc-form-field">
                             <label>Note</label>
                             <textarea class="cc-textarea" id="ccSpecialRequests"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="cc-summary-card" id="ccBookingEstimatePanel" style="display:block;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+                            <strong>Estimated Trip Summary</strong>
+                            <small>Live preview before submit</small>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+                            <div style="background:#fff;border:1px solid #bde5da;border-radius:10px;padding:8px 10px;">
+                                <div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">Distance</div>
+                                <div id="ccEstimateDistance" style="font-size:0.98rem;font-weight:800;color:#0f766e;">-</div>
+                            </div>
+                            <div style="background:#fff;border:1px solid #bde5da;border-radius:10px;padding:8px 10px;">
+                                <div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">Estimated Total</div>
+                                <div id="ccEstimateTotal" style="font-size:1rem;font-weight:900;color:#065f46;">-</div>
+                            </div>
                         </div>
                     </div>
 

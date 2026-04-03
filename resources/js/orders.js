@@ -37,6 +37,7 @@ let USER_ROLE = ''; // Will be set from PHP
 let reviewBookingId = null;
 let reviewRating = 0;
 let modifyBookingId = null;
+let modifyOriginalOrder = null;
 let modifyAvailabilityMatrix = null;
 let modifyPickupMapObj = null;
 let modifyReturnMapObj = null;
@@ -44,6 +45,10 @@ let modifyPickupMarker = null;
 let modifyReturnMarker = null;
 let modifyAutocompleteTimers = {};
 let modifySelectedAddresses = { pickup: null, return: null };
+const MODIFY_MINICAB_RATES_PER_MILE = {
+    4: { eco: 2.0, standard: 2.5, luxury: 3.5 },
+    7: { eco: 3.0, standard: 3.5, luxury: 4.5 }
+};
 
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -485,12 +490,23 @@ function formatPickupDate(order) {
 }
 
 function canCustomerCancelOrder(order) {
-    return canCustomerModifyOrder(order);
+    if (!order || !order.is_renter || order.status !== 'pending') return false;
+    return hasAtLeast24HoursBeforePickup(order);
 }
 
 function canCustomerModifyOrder(order) {
     if (!order || !order.is_renter || order.status !== 'pending') return false;
+    const method = normalizeOrderPaymentMethod(order);
+    if (method !== 'cash') {
+        return false;
+    }
     return hasAtLeast24HoursBeforePickup(order);
+}
+
+function normalizeOrderPaymentMethod(order) {
+    const method = String(order?.payment_method || '').trim().toLowerCase();
+    if (!method) return 'cash';
+    return method;
 }
 
 function hasAtLeast24HoursBeforePickup(order) {
@@ -566,6 +582,7 @@ async function loadModifyAvailabilityMatrix() {
 function initModifyAvailabilityHandlers() {
     const tierSelect = document.getElementById('modifyRideTier');
     const seatsSelect = document.getElementById('modifySeats');
+    const serviceSelect = document.getElementById('modifyServiceType');
     if (tierSelect) {
         tierSelect.addEventListener('change', () => {
             updateModifySeatsAvailabilityUI();
@@ -574,9 +591,210 @@ function initModifyAvailabilityHandlers() {
     }
     if (seatsSelect) {
         seatsSelect.addEventListener('change', () => {
+            syncModifySeatCapacityUI(seatsSelect.value);
             updateModifyTierAvailabilityUI();
             updateModifySeatsAvailabilityUI();
         });
+    }
+    if (serviceSelect) {
+        serviceSelect.addEventListener('change', () => {
+            syncModifyServiceTypeUI(serviceSelect.value);
+            updateModifyDestinationMode(serviceSelect.value);
+            refreshModifyPreview();
+        });
+    }
+
+    const previewBindings = [
+        ['modifyPickupLocation', 'input'],
+        ['modifyDestination', 'input'],
+        ['modifyPickupDateTime', 'change'],
+        ['modifyRideTier', 'change'],
+        ['modifySeats', 'change'],
+        ['modifyAirportSelect', 'change'],
+        ['modifyHotelSelect', 'change']
+    ];
+    previewBindings.forEach(([id, eventName]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener(eventName, () => refreshModifyPreview());
+    });
+}
+
+function formatMoneyPounds(value) {
+    return '£' + Number(value || 0).toFixed(2);
+}
+
+function computeModifySubtotal(rideTier, seats, distanceKm) {
+    const tier = String(rideTier || '').toLowerCase();
+    const seatCount = parseInt(seats, 10);
+    const distance = Number(distanceKm);
+    if (!MODIFY_MINICAB_RATES_PER_MILE[seatCount] || !MODIFY_MINICAB_RATES_PER_MILE[seatCount][tier]) {
+        return null;
+    }
+    if (!Number.isFinite(distance) || distance <= 0) {
+        return null;
+    }
+    const distanceMiles = distance * 0.621371;
+    const rate = MODIFY_MINICAB_RATES_PER_MILE[seatCount][tier];
+    return Number((distanceMiles * rate).toFixed(2));
+}
+
+function setModifyPreview(distanceText, fareText, totalText) {
+    const distanceEl = document.getElementById('modifyPreviewDistance');
+    const fareEl = document.getElementById('modifyPreviewFare');
+    const totalEl = document.getElementById('modifyPreviewTotal');
+    if (distanceEl) distanceEl.textContent = distanceText;
+    if (fareEl) fareEl.textContent = fareText;
+    if (totalEl) totalEl.textContent = totalText;
+}
+
+function refreshModifyPreview() {
+    if (!modifyOriginalOrder) {
+        setModifyPreview('-', '-', '-');
+        return;
+    }
+
+    const pickupLocation = String(document.getElementById('modifyPickupLocation')?.value || '').trim();
+    const destination = String(document.getElementById('modifyDestination')?.value || '').trim();
+    const rideTier = String(document.getElementById('modifyRideTier')?.value || normalizeRideTierValue(modifyOriginalOrder.ride_tier));
+    const seats = parseInt(String(document.getElementById('modifySeats')?.value || normalizeModifySeatsValue(modifyOriginalOrder.number_of_passengers)), 10);
+
+    const originalPickup = String(modifyOriginalOrder.pickup_location || '').trim();
+    const originalDestination = String(modifyOriginalOrder.return_location || '').trim();
+    const locationChanged = pickupLocation !== originalPickup || destination !== originalDestination;
+
+    let effectiveDistance = null;
+    if (locationChanged) {
+        const pickupCoords = modifySelectedAddresses.pickup;
+        const returnCoords = modifySelectedAddresses.return;
+        if (pickupCoords && returnCoords) {
+            effectiveDistance = haversineDistanceKm(
+                Number(pickupCoords.lat),
+                Number(pickupCoords.lon),
+                Number(returnCoords.lat),
+                Number(returnCoords.lon)
+            );
+        }
+    } else {
+        const originalDistance = Number(modifyOriginalOrder.distance_km || 0);
+        if (Number.isFinite(originalDistance) && originalDistance > 0) {
+            effectiveDistance = originalDistance;
+        }
+    }
+
+    const subtotal = computeModifySubtotal(rideTier, seats, effectiveDistance);
+    if (!Number.isFinite(effectiveDistance) || effectiveDistance <= 0 || subtotal === null) {
+        const distanceText = locationChanged
+            ? 'Select map/dropdown'
+            : ((Number(modifyOriginalOrder.distance_km || 0) > 0) ? Number(modifyOriginalOrder.distance_km).toFixed(1) + ' km' : '-');
+        setModifyPreview(distanceText, '-', '-');
+        return;
+    }
+
+    const oldSubtotal = Number(modifyOriginalOrder.subtotal || 0);
+    const oldTotal = Number(modifyOriginalOrder.total_amount || oldSubtotal || 0);
+    const fixedDiscount = Math.max(0, oldSubtotal - oldTotal);
+    const newTotal = Math.max(0, subtotal - fixedDiscount);
+
+    setModifyPreview(
+        Number(effectiveDistance).toFixed(1) + ' km',
+        formatMoneyPounds(subtotal),
+        formatMoneyPounds(newTotal)
+    );
+}
+
+function isModifyPresetDestinationService(serviceType) {
+    const service = String(serviceType || '').toLowerCase();
+    return service === 'airport-transfer' || service === 'hotel-transfer';
+}
+
+function setModifyPresetSelectByDestination(serviceType, destination) {
+    const value = String(destination || '').trim();
+    const airportSelect = document.getElementById('modifyAirportSelect');
+    const hotelSelect = document.getElementById('modifyHotelSelect');
+    if (airportSelect) airportSelect.value = '';
+    if (hotelSelect) hotelSelect.value = '';
+
+    if (!value) return;
+
+    const target = String(serviceType || '').toLowerCase() === 'airport-transfer' ? airportSelect : hotelSelect;
+    if (!target) return;
+
+    const options = Array.from(target.options || []);
+    const found = options.find(opt => String(opt.value).toLowerCase() === value.toLowerCase());
+    if (found) {
+        target.value = found.value;
+    }
+}
+
+function setModifyDestinationFromSelectedOption(selectEl) {
+    if (!selectEl) return;
+    const selected = selectEl.options[selectEl.selectedIndex];
+    const destinationInput = document.getElementById('modifyDestination');
+    if (!destinationInput || !selected || !selected.value) return;
+
+    const name = String(selected.value || '').trim();
+    const lat = parseFloat(selected.getAttribute('data-lat') || '0');
+    const lon = parseFloat(selected.getAttribute('data-lon') || '0');
+
+    destinationInput.value = name;
+    if (Number.isFinite(lat) && Number.isFinite(lon) && (lat !== 0 || lon !== 0)) {
+        modifySelectedAddresses.return = { lat, lon, name };
+        updateModifyMapCoords('return', lat, lon, name);
+    } else {
+        modifySelectedAddresses.return = null;
+    }
+    refreshModifyPreview();
+}
+
+function onModifyAirportSelect() {
+    const select = document.getElementById('modifyAirportSelect');
+    setModifyDestinationFromSelectedOption(select);
+}
+
+function onModifyHotelSelect() {
+    const select = document.getElementById('modifyHotelSelect');
+    setModifyDestinationFromSelectedOption(select);
+}
+
+function updateModifyDestinationMode(serviceType) {
+    const service = String(serviceType || '').toLowerCase();
+    const destinationInputWrapper = document.getElementById('modifyDestinationInputWrapper');
+    const destinationInput = document.getElementById('modifyDestination');
+    const returnMapContainer = document.getElementById('modifyReturnMapContainer');
+    const airportWrapper = document.getElementById('modifyAirportSelectWrapper');
+    const hotelWrapper = document.getElementById('modifyHotelSelectWrapper');
+    const mapBtn = document.getElementById('modifyDestinationMapBtn');
+
+    const isAirport = service === 'airport-transfer';
+    const isHotel = service === 'hotel-transfer';
+    const isPreset = isAirport || isHotel;
+
+    if (destinationInputWrapper) {
+        destinationInputWrapper.style.display = isPreset ? 'none' : 'flex';
+    }
+    if (airportWrapper) {
+        airportWrapper.style.display = isAirport ? 'block' : 'none';
+    }
+    if (hotelWrapper) {
+        hotelWrapper.style.display = isHotel ? 'block' : 'none';
+    }
+    if (mapBtn) {
+        mapBtn.style.display = isPreset ? 'none' : 'inline-flex';
+    }
+    if (returnMapContainer && isPreset) {
+        closeModifyMapPicker('return');
+        returnMapContainer.style.display = 'none';
+    }
+
+    if (!destinationInput) return;
+
+    if (isAirport) {
+        setModifyPresetSelectByDestination(service, destinationInput.value);
+        onModifyAirportSelect();
+    } else if (isHotel) {
+        setModifyPresetSelectByDestination(service, destinationInput.value);
+        onModifyHotelSelect();
     }
 }
 
@@ -740,6 +958,7 @@ function initModifyLocationAutocomplete() {
                             modifySelectedAddresses[type] = { lat, lon, name };
                             moveModifyMapToLocation(type, lat, lon);
                             updateModifyMapCoords(type, lat, lon, name);
+                            refreshModifyPreview();
                         });
                     });
                 } catch (err) {
@@ -768,6 +987,14 @@ function closeModifyMapPicker(type) {
 }
 
 function openModifyMapPicker(type) {
+    if (type === 'return') {
+        const serviceType = document.getElementById('modifyServiceType')?.value || '';
+        if (isModifyPresetDestinationService(serviceType)) {
+            showToast('For airport/hotel transfer, please choose destination from the dropdown list.', 'warning');
+            return;
+        }
+    }
+
     if (!window.L) {
         showToast('Map is not available right now.', 'warning');
         return;
@@ -851,6 +1078,7 @@ async function confirmModifyMapLocation(type) {
     if (saved && saved.name) {
         input.value = saved.name;
         closeModifyMapPicker(type);
+        refreshModifyPreview();
         showToast('📍 Location confirmed!', 'success');
         return;
     }
@@ -873,6 +1101,7 @@ async function confirmModifyMapLocation(type) {
     }
 
     closeModifyMapPicker(type);
+    refreshModifyPreview();
     showToast('📍 Location confirmed!', 'success');
 }
 
@@ -923,10 +1152,26 @@ function openModifyBookingModal(bookingId) {
     }
 
     modifyBookingId = bookingId;
+    modifyOriginalOrder = order;
 
     document.getElementById('modifyBookingId').textContent = '#' + String(order.id).substring(0, 8);
     document.getElementById('modifyPickupLocation').value = order.pickup_location || '';
     document.getElementById('modifyDestination').value = order.return_location || '';
+    document.getElementById('modifyServiceType').value = String(order.service_type || 'local');
+    const pickupDateTimeInput = document.getElementById('modifyPickupDateTime');
+    if (pickupDateTimeInput) {
+        pickupDateTimeInput.value = toDateTimeLocalValue(order.pickup_date, order.pickup_time);
+        pickupDateTimeInput.min = getNowDateTimeLocalValue();
+
+        const originalPickup = parseOrderPickupDateTime(order);
+        if (originalPickup) {
+            const maxAllowed = new Date(originalPickup.getTime());
+            maxAllowed.setDate(maxAllowed.getDate() + 7);
+            pickupDateTimeInput.max = toYmd(maxAllowed) + 'T23:59';
+        } else {
+            pickupDateTimeInput.removeAttribute('max');
+        }
+    }
     document.getElementById('modifyRideTier').value = normalizeRideTierValue(order.ride_tier);
     document.getElementById('modifySeats').value = String(normalizeModifySeatsValue(order.number_of_passengers));
 
@@ -934,10 +1179,17 @@ function openModifyBookingModal(bookingId) {
     closeModifyMapPicker('pickup');
     closeModifyMapPicker('return');
 
+    syncModifyServiceTypeUI(document.getElementById('modifyServiceType').value);
+    syncModifySeatCapacityUI(document.getElementById('modifySeats').value);
+    updateModifyDestinationMode(document.getElementById('modifyServiceType').value);
+
     geocodeModifyAddress('pickup', order.pickup_location || '');
-    geocodeModifyAddress('return', order.return_location || '');
+    if (!isModifyPresetDestinationService(document.getElementById('modifyServiceType').value)) {
+        geocodeModifyAddress('return', order.return_location || '');
+    }
 
     loadModifyAvailabilityMatrix();
+    refreshModifyPreview();
     document.getElementById('modifyBookingModalOverlay').style.display = 'flex';
 }
 
@@ -953,12 +1205,93 @@ function normalizeModifySeatsValue(seats) {
     return value >= 7 ? 7 : 4;
 }
 
+function toDateTimeLocalValue(dateValue, timeValue) {
+    const date = String(dateValue || '').trim();
+    if (!date) return '';
+    const timeRaw = String(timeValue || '').trim();
+    const m = timeRaw.match(/^(\d{1,2}):(\d{2})/);
+    const hh = m ? String(Math.max(0, Math.min(23, parseInt(m[1], 10) || 0))).padStart(2, '0') : '00';
+    const mm = m ? String(Math.max(0, Math.min(59, parseInt(m[2], 10) || 0))).padStart(2, '0') : '00';
+    return date.substring(0, 10) + 'T' + hh + ':' + mm;
+}
+
+function getNowDateTimeLocalValue() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd + 'T' + hh + ':' + min;
+}
+
+function toYmd(date) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+}
+
+function selectModifyServiceTypeCard(serviceType) {
+    const select = document.getElementById('modifyServiceType');
+    if (!select) return;
+    select.value = serviceType;
+    syncModifyServiceTypeUI(serviceType);
+    updateModifyDestinationMode(serviceType);
+    refreshModifyPreview();
+}
+
+function syncModifyServiceTypeUI(selectedServiceType) {
+    const cards = document.querySelectorAll('#modifyServicePurposeGrid .service-purpose-card');
+    const selected = String(selectedServiceType || '').toLowerCase();
+    cards.forEach(card => {
+        const service = String(card.getAttribute('data-service') || '').toLowerCase();
+        card.classList.toggle('active', service === selected);
+    });
+}
+
+function selectModifySeatCapacity(seatValue) {
+    const select = document.getElementById('modifySeats');
+    if (!select) return;
+    const normalized = normalizeModifySeatsValue(seatValue);
+    select.value = String(normalized);
+    syncModifySeatCapacityUI(normalized);
+    updateModifyTierAvailabilityUI();
+    updateModifySeatsAvailabilityUI();
+    refreshModifyPreview();
+}
+
+function syncModifySeatCapacityUI(selectedSeatValue) {
+    const cards = document.querySelectorAll('#modifySeatCapacityGrid .seat-capacity-option');
+    const selected = String(normalizeModifySeatsValue(selectedSeatValue));
+    cards.forEach(card => {
+        const seat = String(card.getAttribute('data-seat') || '');
+        card.classList.toggle('active', seat === selected);
+    });
+}
+
 function closeModifyBookingModal() {
     modifyBookingId = null;
+    modifyOriginalOrder = null;
     closeModifyMapPicker('pickup');
     closeModifyMapPicker('return');
     const overlay = document.getElementById('modifyBookingModalOverlay');
     if (overlay) overlay.style.display = 'none';
+}
+
+function toRad(value) {
+    return (value * Math.PI) / 180;
+}
+
+function haversineDistanceKm(lat1, lon1, lat2, lon2) {
+    const earthKm = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+        + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+        * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthKm * c;
 }
 
 async function submitModifyBooking() {
@@ -966,6 +1299,8 @@ async function submitModifyBooking() {
 
     const pickupLocation = document.getElementById('modifyPickupLocation').value.trim();
     const destination = document.getElementById('modifyDestination').value.trim();
+    const serviceType = document.getElementById('modifyServiceType').value;
+    const pickupDateTime = document.getElementById('modifyPickupDateTime').value;
     const rideTier = document.getElementById('modifyRideTier').value;
     const seats = parseInt(document.getElementById('modifySeats').value, 10);
 
@@ -977,8 +1312,40 @@ async function submitModifyBooking() {
         showToast('Please choose a valid service tier.', 'warning');
         return;
     }
+    if (!['local', 'long-distance', 'airport-transfer', 'hotel-transfer'].includes(serviceType)) {
+        showToast('Please choose a valid service type.', 'warning');
+        return;
+    }
+    if (!pickupDateTime) {
+        showToast('Please choose pickup date and time.', 'warning');
+        return;
+    }
+    const pickupAt = new Date(pickupDateTime);
+    if (Number.isNaN(pickupAt.getTime()) || pickupAt.getTime() < Date.now()) {
+        showToast('Pickup date and time must be in the future.', 'warning');
+        return;
+    }
     if (![4, 7].includes(seats)) {
         showToast('Seats must be 4 or 7.', 'warning');
+        return;
+    }
+
+    const pickupDate = pickupDateTime.substring(0, 10);
+    const pickupTime = pickupDateTime.substring(11, 16);
+
+    let distanceKm = null;
+    const pickupCoords = modifySelectedAddresses.pickup;
+    const returnCoords = modifySelectedAddresses.return;
+    if (pickupCoords && returnCoords) {
+        distanceKm = haversineDistanceKm(
+            Number(pickupCoords.lat),
+            Number(pickupCoords.lon),
+            Number(returnCoords.lat),
+            Number(returnCoords.lon)
+        );
+        distanceKm = Number.isFinite(distanceKm) ? Number(distanceKm.toFixed(2)) : null;
+    } else if (modifyOriginalOrder && (pickupLocation !== (modifyOriginalOrder.pickup_location || '') || destination !== (modifyOriginalOrder.return_location || ''))) {
+        showToast('Please confirm locations on map to recalculate distance and fare.', 'warning');
         return;
     }
 
@@ -995,8 +1362,12 @@ async function submitModifyBooking() {
                 booking_id: modifyBookingId,
                 pickup_location: pickupLocation,
                 return_location: destination,
+                service_type: serviceType,
+                pickup_date: pickupDate,
+                pickup_time: pickupTime,
                 ride_tier: rideTier,
-                number_of_passengers: seats
+                number_of_passengers: seats,
+                distance_km: distanceKm
             })
         });
 
@@ -1024,6 +1395,10 @@ function truncate(str, max) {
 window.openModifyMapPicker = openModifyMapPicker;
 window.toggleModifyMapExpand = toggleModifyMapExpand;
 window.confirmModifyMapLocation = confirmModifyMapLocation;
+window.selectModifyServiceTypeCard = selectModifyServiceTypeCard;
+window.selectModifySeatCapacity = selectModifySeatCapacity;
+window.onModifyAirportSelect = onModifyAirportSelect;
+window.onModifyHotelSelect = onModifyHotelSelect;
 
 // ===== REVIEW MODAL MANAGEMENT =====
 function openReviewModal(bookingId, carName) {

@@ -5,6 +5,11 @@
     const MIN_PICKUP_LEAD_MINUTES = 1;
     const TIER_ORDER = ['eco', 'standard', 'premium'];
     const SEAT_ORDER = [4, 7];
+    const PHONE_BOOKING_FEE = 2.0;
+    const PHONE_TIER_RATES = {
+        4: { eco: 2.5, standard: 3.0, premium: 4.0 },
+        7: { eco: 3.0, standard: 3.5, premium: 5.0 }
+    };
 
     let searchTimer = null;
     let autocompleteTimers = {};
@@ -14,6 +19,7 @@
     let returnMapObj = null;
     let pickupMarker = null;
     let returnMarker = null;
+    let selectedCustomerBalance = 0;
 
     const el = {
         form: document.getElementById('ccBookingForm'),
@@ -25,10 +31,20 @@
         customerEmail: document.getElementById('ccCustomerEmail'),
         rideTier: document.getElementById('ccRideTier'),
         seatCapacity: document.getElementById('ccSeatCapacity'),
+        serviceType: document.getElementById('ccServiceType'),
         pickupDate: document.getElementById('ccPickupDate'),
         pickupLocation: document.getElementById('ccPickupLocation'),
         returnLocation: document.getElementById('ccReturnLocation'),
+        returnInputWrapper: document.getElementById('ccReturnInputWrapper'),
+        returnMapBtn: document.getElementById('ccReturnMapBtn'),
+        airportSelectWrapper: document.getElementById('ccAirportSelectWrapper'),
+        hotelSelectWrapper: document.getElementById('ccHotelSelectWrapper'),
+        airportSelect: document.getElementById('ccAirportSelect'),
+        hotelSelect: document.getElementById('ccHotelSelect'),
         paymentMethod: document.getElementById('ccPaymentMethod'),
+        paymentMethodHint: document.getElementById('ccPaymentMethodHint'),
+        estimateDistance: document.getElementById('ccEstimateDistance'),
+        estimateTotal: document.getElementById('ccEstimateTotal'),
         specialRequests: document.getElementById('ccSpecialRequests'),
         formStatus: document.getElementById('ccFormStatus'),
         requestsTable: document.getElementById('ccRequestsTable'),
@@ -108,10 +124,14 @@
         el.customerId.value = '';
         el.form.reset();
         if (el.rideTier) el.rideTier.value = '';
+        selectedCustomerBalance = 0;
         setFormStatus('');
         hideCustomerResults();
         selectedAddresses = { pickup: null, return: null };
+        updateDestinationMode();
         applyAvailabilityToOptions();
+        updatePaymentMethodAvailability();
+        refreshBookingEstimatePreview();
         validatePickupDateTimeRealtime();
     }
 
@@ -225,6 +245,124 @@
         return 4;
     }
 
+    function isPresetDestinationService() {
+        const service = String(el.serviceType && el.serviceType.value ? el.serviceType.value : 'local').toLowerCase();
+        return service === 'airport-transfer' || service === 'hotel-transfer';
+    }
+
+    function estimateSubtotalAmount() {
+        const tier = normalizeTier(el.rideTier && el.rideTier.value ? el.rideTier.value : '');
+        const seats = normalizeSeat(el.seatCapacity && el.seatCapacity.value ? el.seatCapacity.value : 4);
+        const distanceKm = estimateDistanceKm();
+        const rate = PHONE_TIER_RATES[seats] && PHONE_TIER_RATES[seats][tier] ? PHONE_TIER_RATES[seats][tier] : null;
+        if (rate === null) {
+            return PHONE_BOOKING_FEE;
+        }
+        if (distanceKm && distanceKm > 0) {
+            return Math.round(((distanceKm * 0.621371 * rate) + PHONE_BOOKING_FEE) * 100) / 100;
+        }
+        return PHONE_BOOKING_FEE;
+    }
+
+    function refreshBookingEstimatePreview() {
+        if (el.estimateDistance) {
+            const d = estimateDistanceKm();
+            el.estimateDistance.textContent = (d && d > 0) ? (d.toFixed(1) + ' km') : 'Select locations';
+        }
+
+        if (el.estimateTotal) {
+            const total = estimateSubtotalAmount();
+            el.estimateTotal.textContent = '£' + Number(total || 0).toFixed(2);
+        }
+    }
+
+    function updatePaymentMethodAvailability() {
+        if (!el.paymentMethod) return;
+        const accountOpt = Array.from(el.paymentMethod.options).find((opt) => opt.value === 'account_balance');
+        if (!accountOpt) return;
+
+        const hasExistingCustomer = !!(el.customerId && el.customerId.value);
+        const estimatedTotal = estimateSubtotalAmount();
+        const canUseBalance = hasExistingCustomer && selectedCustomerBalance >= estimatedTotal;
+
+        accountOpt.disabled = !canUseBalance;
+        accountOpt.textContent = 'Account Balance' + (canUseBalance ? '' : ' (Unavailable)');
+
+        if (el.paymentMethodHint) {
+            if (!hasExistingCustomer) {
+                el.paymentMethodHint.textContent = 'Account balance is disabled until you select an existing customer account.';
+                el.paymentMethodHint.className = 'cc-help cc-help-error';
+            } else if (!canUseBalance) {
+                el.paymentMethodHint.textContent = 'Insufficient account balance for estimated total £' + estimatedTotal.toFixed(2) + '.';
+                el.paymentMethodHint.className = 'cc-help cc-help-error';
+            } else {
+                el.paymentMethodHint.textContent = 'Account balance available. Current balance: £' + selectedCustomerBalance.toFixed(2);
+                el.paymentMethodHint.className = 'cc-help cc-help-ok';
+            }
+        }
+
+        if (!canUseBalance && el.paymentMethod.value === 'account_balance') {
+            el.paymentMethod.value = 'cash';
+        }
+
+        refreshBookingEstimatePreview();
+    }
+
+    function applyPresetDestination(selectEl) {
+        if (!selectEl) return;
+        const selected = selectEl.options[selectEl.selectedIndex];
+        if (!selected || !selected.value) return;
+
+        const name = String(selected.value || '').trim();
+        const lat = parseFloat(selected.getAttribute('data-lat') || '0');
+        const lon = parseFloat(selected.getAttribute('data-lon') || '0');
+
+        if (el.returnLocation) {
+            el.returnLocation.value = name;
+        }
+
+        if (Number.isFinite(lat) && Number.isFinite(lon) && (lat !== 0 || lon !== 0)) {
+            selectedAddresses.return = { lat: lat, lon: lon, name: name };
+            updateMapCoords('return', lat, lon, name);
+        } else {
+            selectedAddresses.return = null;
+        }
+
+        updatePaymentMethodAvailability();
+    }
+
+    function updateDestinationMode() {
+        const service = String(el.serviceType && el.serviceType.value ? el.serviceType.value : 'local').toLowerCase();
+        const isAirport = service === 'airport-transfer';
+        const isHotel = service === 'hotel-transfer';
+        const isPreset = isAirport || isHotel;
+
+        if (el.returnInputWrapper) {
+            el.returnInputWrapper.style.display = isPreset ? 'none' : 'flex';
+        }
+        if (el.returnMapBtn) {
+            el.returnMapBtn.style.display = isPreset ? 'none' : 'inline-flex';
+        }
+        if (el.airportSelectWrapper) {
+            el.airportSelectWrapper.style.display = isAirport ? 'block' : 'none';
+        }
+        if (el.hotelSelectWrapper) {
+            el.hotelSelectWrapper.style.display = isHotel ? 'block' : 'none';
+        }
+
+        const returnMapContainer = document.getElementById('returnMapContainer');
+        if (isPreset && returnMapContainer) {
+            returnMapContainer.style.display = 'none';
+            returnMapContainer.classList.remove('expanded');
+        }
+
+        if (isAirport) {
+            applyPresetDestination(el.airportSelect);
+        } else if (isHotel) {
+            applyPresetDestination(el.hotelSelect);
+        }
+    }
+
     function inferTier(vehicle) {
         const explicitTier = normalizeTier(
             vehicle.ride_tier || vehicle.vehicle_tier || vehicle.tier || vehicle.service_tier || ''
@@ -303,6 +441,8 @@
                 el.seatCapacityHint.className = 'cc-help';
             }
 
+            updatePaymentMethodAvailability();
+
             return;
         }
 
@@ -342,6 +482,8 @@
                 el.seatCapacityHint.className = 'cc-help cc-help-error';
             }
         }
+
+        updatePaymentMethodAvailability();
     }
 
     async function loadAvailabilityOptions() {
@@ -366,11 +508,15 @@
         el.customerName.value = customer.full_name || '';
         el.customerPhone.value = customer.phone || '';
         el.customerEmail.value = customer.email || '';
+        selectedCustomerBalance = Number(customer.account_balance || 0);
         hideCustomerResults();
+        updatePaymentMethodAvailability();
+        refreshBookingEstimatePreview();
     }
 
     function renderCustomerResults(customers) {
         if (!customers || customers.length === 0) {
+        refreshBookingEstimatePreview();
             hideCustomerResults();
             return;
         }
@@ -379,8 +525,9 @@
             const name = escapeHtml(c.full_name || 'Unknown');
             const email = escapeHtml(c.email || '');
             const phone = escapeHtml(c.phone || '');
-            return '<div class="cc-customer-item" data-id="' + escapeHtml(c.id) + '" data-name="' + name + '" data-email="' + email + '" data-phone="' + phone + '">' +
-                '<strong>' + name + '</strong><br><small>' + email + ' | ' + phone + '</small></div>';
+            const balance = Number(c.account_balance || 0);
+            return '<div class="cc-customer-item" data-id="' + escapeHtml(c.id) + '" data-name="' + name + '" data-email="' + email + '" data-phone="' + phone + '" data-balance="' + escapeHtml(String(balance)) + '">' +
+                '<strong>' + name + '</strong><br><small>' + email + ' | ' + phone + ' | Balance: £' + balance.toFixed(2) + '</small></div>';
         }).join('');
 
         el.results.style.display = 'block';
@@ -391,7 +538,8 @@
                     id: item.getAttribute('data-id') || '',
                     full_name: item.getAttribute('data-name') || '',
                     email: item.getAttribute('data-email') || '',
-                    phone: item.getAttribute('data-phone') || ''
+                    phone: item.getAttribute('data-phone') || '',
+                    account_balance: parseFloat(item.getAttribute('data-balance') || '0') || 0
                 });
             });
         });
@@ -665,6 +813,7 @@
             customer_email: el.customerEmail.value,
             ride_tier: selectedTier,
             seat_capacity: selectedSeat,
+            service_type: el.serviceType && el.serviceType.value ? el.serviceType.value : 'local',
             pickup_date: el.pickupDate.value,
             pickup_location: el.pickupLocation.value,
             return_location: el.returnLocation.value,
@@ -672,6 +821,18 @@
             special_requests: el.specialRequests.value,
             distance_km: estimateDistanceKm()
         };
+
+        if (payload.payment_method === 'account_balance') {
+            const estimatedTotal = estimateSubtotalAmount();
+            if (!el.customerId.value) {
+                setFormStatus('Account balance payment requires an existing customer account.', true);
+                return;
+            }
+            if (selectedCustomerBalance < estimatedTotal) {
+                setFormStatus('Insufficient account balance for estimated total £' + estimatedTotal.toFixed(2) + '.', true);
+                return;
+            }
+        }
 
         const data = await apiPost(payload);
         if (!data.success) {
@@ -737,6 +898,8 @@
                     selectedAddresses[type] = { lat: lat, lon: lon, name: name };
                     moveMapToLocation(type, lat, lon);
                     updateMapCoords(type, lat, lon, name);
+                    updatePaymentMethodAvailability();
+                    refreshBookingEstimatePreview();
                 });
             });
         } catch (err) {
@@ -786,6 +949,11 @@
     }
 
     function openMapPicker(type) {
+        if (type === 'return' && isPresetDestinationService()) {
+            setFormStatus('For airport/hotel transfer, please select destination from dropdown list.', true);
+            return;
+        }
+
         const container = document.getElementById(type + 'MapContainer');
         if (!container) return;
 
@@ -856,6 +1024,8 @@
             document.getElementById(type === 'pickup' ? 'ccPickupLocation' : 'ccReturnLocation').value = saved.name;
             document.getElementById(type + 'MapContainer').style.display = 'none';
             document.getElementById(type + 'MapContainer').classList.remove('expanded');
+            updatePaymentMethodAvailability();
+            refreshBookingEstimatePreview();
             return;
         }
 
@@ -878,6 +1048,8 @@
 
         document.getElementById(type + 'MapContainer').style.display = 'none';
         document.getElementById(type + 'MapContainer').classList.remove('expanded');
+        updatePaymentMethodAvailability();
+        refreshBookingEstimatePreview();
     }
 
     function bindEvents() {
@@ -899,7 +1071,53 @@
         }
 
         if (el.seatCapacity) {
-            el.seatCapacity.addEventListener('change', applyAvailabilityToOptions);
+            el.seatCapacity.addEventListener('change', function () {
+                applyAvailabilityToOptions();
+                updatePaymentMethodAvailability();
+                refreshBookingEstimatePreview();
+            });
+        }
+
+        if (el.serviceType) {
+            el.serviceType.addEventListener('change', function () {
+                updateDestinationMode();
+                updatePaymentMethodAvailability();
+                refreshBookingEstimatePreview();
+            });
+        }
+
+        if (el.airportSelect) {
+            el.airportSelect.addEventListener('change', function () {
+                applyPresetDestination(el.airportSelect);
+            });
+        }
+
+        if (el.hotelSelect) {
+            el.hotelSelect.addEventListener('change', function () {
+                applyPresetDestination(el.hotelSelect);
+            });
+        }
+
+        if (el.pickupLocation) {
+            el.pickupLocation.addEventListener('input', function () {
+                updatePaymentMethodAvailability();
+                refreshBookingEstimatePreview();
+            });
+        }
+
+        if (el.returnLocation) {
+            el.returnLocation.addEventListener('input', function () {
+                updatePaymentMethodAvailability();
+                refreshBookingEstimatePreview();
+            });
+        }
+
+        if (el.rideTier) {
+            el.rideTier.addEventListener('change', updatePaymentMethodAvailability);
+        }
+
+        if (el.paymentMethod) {
+            el.paymentMethod.addEventListener('change', updatePaymentMethodAvailability);
         }
 
         if (el.pickupDate) {
@@ -977,6 +1195,9 @@
         initLeafletAutocomplete();
         initPickupMinDateTime();
         validatePickupDateTimeRealtime();
+        updateDestinationMode();
+        updatePaymentMethodAvailability();
+        refreshBookingEstimatePreview();
         await loadAvailabilityOptions();
         await loadRequests();
         await loadEnquiries();

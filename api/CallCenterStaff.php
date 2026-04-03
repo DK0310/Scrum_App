@@ -17,6 +17,7 @@ require_once __DIR__ . '/../sql/VehicleRepository.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
 require_once __DIR__ . '/../sql/StaffBookingRepository.php';
 require_once __DIR__ . '/../sql/AuthRepository.php';
+require_once __DIR__ . '/../lib/payments/PayPalGateway.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -27,6 +28,7 @@ $vehicleRepo = new VehicleRepository($pdo);
 $bookingRepo = new BookingRepository($pdo);
 $staffBookingRepo = new StaffBookingRepository($pdo);
 $authRepo = new AuthRepository($pdo);
+$paypalGateway = new PayPalGateway();
 
 function cc_decode_payment_details($raw): array
 {
@@ -72,6 +74,73 @@ function cc_refund_account_balance(UserRepository $userRepo, BookingRepository $
 
     $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
     return true;
+}
+
+function cc_refund_paypal(BookingRepository $bookingRepo, PayPalGateway $paypalGateway, string $bookingId, array $payment): bool
+{
+    $amount = isset($payment['amount']) ? (float)$payment['amount'] : 0.0;
+    if ($amount <= 0) {
+        return false;
+    }
+
+    $details = cc_decode_payment_details($payment['payment_details'] ?? []);
+    $captureId = trim((string)($details['capture_id'] ?? ''));
+    if ($captureId === '') {
+        return false;
+    }
+
+    $refund = $paypalGateway->refundCapture($captureId, $amount, 'GBP');
+    if (empty($refund['success'])) {
+        return false;
+    }
+
+    $details['provider'] = 'paypal';
+    $details['stage'] = 'refund';
+    $details['refunded_amount'] = round($amount, 2);
+    $details['refunded_at'] = gmdate('c');
+    $details['refund_id'] = $refund['refund_id'] ?? null;
+    $details['refund_status'] = $refund['status'] ?? 'PENDING';
+    $details['refund_response'] = $refund['raw'] ?? [];
+
+    $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
+    return true;
+}
+
+function cc_process_staff_refund(UserRepository $userRepo, BookingRepository $bookingRepo, PayPalGateway $paypalGateway, string $bookingId, array $booking): void
+{
+    $payment = $bookingRepo->getPaymentByBookingId($bookingId);
+    if (!$payment) {
+        return;
+    }
+
+    $paymentStatus = strtolower(trim((string)($payment['status'] ?? '')));
+    if ($paymentStatus !== 'paid') {
+        return;
+    }
+
+    $paymentMethod = cc_effective_payment_method($payment);
+    if ($paymentMethod === 'paypal') {
+        $okPaypal = cc_refund_paypal($bookingRepo, $paypalGateway, $bookingId, $payment);
+        if (!$okPaypal) {
+            throw new Exception('Unable to refund PayPal payment for this request');
+        }
+        return;
+    }
+
+    $targetUserId = (string)($payment['user_id'] ?? $booking['renter_id'] ?? '');
+    if ($targetUserId === '') {
+        throw new Exception('Unable to identify customer account for refund.');
+    }
+
+    $targetUser = $userRepo->findById($targetUserId);
+    if (!$targetUser) {
+        throw new Exception('Customer account not found for account balance refund.');
+    }
+
+    $okBalance = cc_refund_account_balance($userRepo, $bookingRepo, $bookingId, $booking, $payment);
+    if (!$okBalance) {
+        throw new Exception('Unable to refund account balance for this request');
+    }
 }
 
 function cc_normalize_role(string $role): string
@@ -272,17 +341,32 @@ try {
     if ($action === 'booking_by_request') {
         $payload = is_array($bodyJson) ? $bodyJson : $_POST;
 
-        $selectedCustomerId = $payload['customer_id'] ?? null;
-
-        if (empty($selectedCustomerId)) {
-            throw new Exception('Please select an existing customer account.');
-        }
+        $selectedCustomerId = trim((string)($payload['customer_id'] ?? ''));
+        $hasSelectedAccount = ($selectedCustomerId !== '');
 
         $customerName = trim((string)($payload['customer_name'] ?? ''));
         $customerPhone = trim((string)($payload['customer_phone'] ?? ''));
         $customerEmail = trim((string)($payload['customer_email'] ?? ''));
 
-        if ($selectedCustomerId) {
+        if ($customerName === '' || $customerPhone === '' || $customerEmail === '') {
+            throw new Exception('Missing customer information');
+        }
+
+        if ($selectedCustomerId === '') {
+            // Guest phone booking flow: keep booking available even when no account is selected.
+            $existingByPhone = $userRepo->findByPhone($customerPhone);
+            if ($existingByPhone && !empty($existingByPhone['id'])) {
+                $selectedCustomerId = (string)$existingByPhone['id'];
+            } else {
+                $createdPhoneUser = $userRepo->createPhoneUser($customerPhone);
+                if (!$createdPhoneUser || empty($createdPhoneUser['id'])) {
+                    throw new Exception('Unable to create temporary customer profile for this booking.');
+                }
+                $selectedCustomerId = (string)$createdPhoneUser['id'];
+            }
+        }
+
+        if ($hasSelectedAccount && $selectedCustomerId) {
             $customer = $userRepo->findById((string)$selectedCustomerId);
             if (!$customer) {
                 throw new Exception('Customer not found');
@@ -290,10 +374,6 @@ try {
             $customerName = trim((string)($customer['full_name'] ?? ''));
             $customerEmail = trim((string)($customer['email'] ?? ''));
             $customerPhone = trim((string)($customer['phone'] ?? ''));
-        }
-
-        if ($customerName === '' || $customerPhone === '' || $customerEmail === '') {
-            throw new Exception('Missing customer information');
         }
 
         $rideTier = strtolower(trim((string)($payload['ride_tier'] ?? '')));
@@ -312,12 +392,21 @@ try {
         $pickupDate = trim((string)($payload['pickup_date'] ?? ''));
         $pickupLocation = trim((string)($payload['pickup_location'] ?? ''));
         $returnLocation = trim((string)($payload['return_location'] ?? ''));
+        $serviceType = strtolower(trim((string)($payload['service_type'] ?? 'local')));
         $specialRequests = trim((string)($payload['special_requests'] ?? ''));
         $paymentMethod = trim((string)($payload['payment_method'] ?? 'cash'));
         $distanceKm = isset($payload['distance_km']) ? (float)$payload['distance_km'] : null;
 
         if ($pickupDate === '' || $pickupLocation === '' || $returnLocation === '') {
             throw new Exception('Missing required booking fields');
+        }
+
+        if (!in_array($serviceType, ['local', 'long-distance', 'airport-transfer', 'hotel-transfer'], true)) {
+            throw new Exception('Invalid service type.');
+        }
+
+        if (!in_array($paymentMethod, ['cash', 'paypal', 'account_balance'], true)) {
+            throw new Exception('Invalid payment method.');
         }
 
         $start = strtotime($pickupDate);
@@ -353,6 +442,17 @@ try {
             $subtotal = $bookingFee;
         }
 
+        if ($paymentMethod === 'account_balance') {
+            $selectedCustomer = $userRepo->findById((string)$selectedCustomerId);
+            if (!$selectedCustomer) {
+                throw new Exception('Account balance payment requires an existing customer account.');
+            }
+            $balance = (float)($selectedCustomer['account_balance'] ?? 0);
+            if ($balance < $subtotal) {
+                throw new Exception('Insufficient account balance for this booking.');
+            }
+        }
+
         // Call Center always creates minicab requests in pending status for Control Staff approval.
         $booking = $staffBookingRepo->createPhoneBooking(
             (string)$selectedCustomerId,
@@ -366,11 +466,14 @@ try {
             'return_date' => null,
                 'pickup_location' => $pickupLocation,
                 'return_location' => $returnLocation,
+                'service_type' => $serviceType,
                 'special_requests' => $specialRequests,
                 'initial_status' => 'pending',
                 'payment_method' => $paymentMethod,
                 'days' => $days,
                 'number_of_passengers' => $seatCapacity,
+                'ride_tier' => $rideTier,
+                'distance_km' => $distanceKm,
                 'subtotal' => $subtotal,
                 'discount_amount' => 0,
                 'total_amount' => $subtotal,
@@ -414,17 +517,7 @@ try {
             throw new Exception('Only pending or in-progress requests can be cancelled');
         }
 
-        $payment = $bookingRepo->getPaymentByBookingId($bookingId);
-        if ($payment) {
-            $paymentMethod = cc_effective_payment_method($payment);
-            $paymentStatus = strtolower(trim((string)($payment['status'] ?? '')));
-            if ($paymentMethod === 'account_balance' && $paymentStatus === 'paid') {
-                $okRefund = cc_refund_account_balance($userRepo, $bookingRepo, $bookingId, $booking, $payment);
-                if (!$okRefund) {
-                    throw new Exception('Unable to refund account balance for this request');
-                }
-            }
-        }
+        cc_process_staff_refund($userRepo, $bookingRepo, $paypalGateway, $bookingId, $booking);
 
         $ok = $bookingRepo->updateStatus($bookingId, 'cancelled');
         if (!$ok) {
@@ -458,6 +551,8 @@ try {
         if (!in_array($currentStatus, ['pending', 'cancelled'], true)) {
             throw new Exception('Only pending/cancelled requests can be deleted');
         }
+
+        cc_process_staff_refund($userRepo, $bookingRepo, $paypalGateway, $bookingId, $booking);
 
         if (!empty($booking['vehicle_id'])) {
             $bookingRepo->markVehicleAvailable((string)$booking['vehicle_id']);

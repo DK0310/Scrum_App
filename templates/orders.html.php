@@ -369,9 +369,39 @@
                 </div>
                 <div class="form-group" style="margin-bottom:12px;">
                     <label class="order-detail-label" for="modifyDestination" style="display:block;margin-bottom:6px;">Destination</label>
-                    <div class="location-input-wrapper">
+                    <div class="location-input-wrapper" id="modifyDestinationInputWrapper">
                         <input id="modifyDestination" class="form-input" type="text" placeholder="Enter destination" autocomplete="off">
-                        <button type="button" class="location-map-btn" onclick="openModifyMapPicker('return')" title="Choose on map">📍</button>
+                        <button type="button" class="location-map-btn" id="modifyDestinationMapBtn" onclick="openModifyMapPicker('return')" title="Choose on map">📍</button>
+                    </div>
+                    <div id="modifyAirportSelectWrapper" style="display:none;">
+                        <select class="form-input" id="modifyAirportSelect" onchange="onModifyAirportSelect()">
+                            <option value="">-- Select Airport --</option>
+                            <option value="Heathrow Airport, London, United Kingdom" data-lat="51.4700" data-lon="-0.4543">Heathrow (LHR) - London</option>
+                            <option value="Gatwick Airport, London, United Kingdom" data-lat="51.1537" data-lon="-0.1821">Gatwick (LGW) - London</option>
+                            <option value="Stansted Airport, London, United Kingdom" data-lat="51.8850" data-lon="0.2350">Stansted (STN) - London</option>
+                            <option value="Luton Airport, London, United Kingdom" data-lat="51.8747" data-lon="-0.3683">Luton (LTN) - London</option>
+                            <option value="London City Airport, London, United Kingdom" data-lat="51.5053" data-lon="0.0553">London City (LCY) - London</option>
+                            <option value="Manchester Airport, Manchester, United Kingdom" data-lat="53.3650" data-lon="-2.2728">Manchester (MAN) - Manchester</option>
+                            <option value="Birmingham Airport, Birmingham, United Kingdom" data-lat="52.4539" data-lon="-1.7480">Birmingham (BHX) - Birmingham</option>
+                            <option value="Edinburgh Airport, Edinburgh, United Kingdom" data-lat="55.9500" data-lon="-3.3725">Edinburgh (EDI) - Edinburgh</option>
+                            <option value="Glasgow Airport, Glasgow, United Kingdom" data-lat="55.8719" data-lon="-4.4331">Glasgow (GLA) - Glasgow</option>
+                            <option value="Bristol Airport, Bristol, United Kingdom" data-lat="51.3827" data-lon="-2.7191">Bristol (BRS) - Bristol</option>
+                        </select>
+                    </div>
+                    <div id="modifyHotelSelectWrapper" style="display:none;">
+                        <select class="form-input" id="modifyHotelSelect" onchange="onModifyHotelSelect()">
+                            <option value="">-- Select Hotel --</option>
+                            <option value="The Savoy, Strand, London, United Kingdom" data-lat="51.5100" data-lon="-0.1206">The Savoy - Strand</option>
+                            <option value="The Ritz London, Piccadilly, London, United Kingdom" data-lat="51.5070" data-lon="-0.1416">The Ritz London - Piccadilly</option>
+                            <option value="Shangri-La The Shard, London, United Kingdom" data-lat="51.5045" data-lon="-0.0865">Shangri-La The Shard - Southwark</option>
+                            <option value="The Langham, 1C Portland Place, London, United Kingdom" data-lat="51.5178" data-lon="-0.1440">The Langham - Marylebone</option>
+                            <option value="Corinthia London, Whitehall Place, London, United Kingdom" data-lat="51.5067" data-lon="-0.1246">Corinthia London - Westminster</option>
+                            <option value="Park Plaza Westminster Bridge London, London, United Kingdom" data-lat="51.5008" data-lon="-0.1167">Park Plaza Westminster Bridge</option>
+                            <option value="The Dorchester, Park Lane, London, United Kingdom" data-lat="51.5078" data-lon="-0.1527">The Dorchester - Mayfair</option>
+                            <option value="The Ned London, Poultry, London, United Kingdom" data-lat="51.5134" data-lon="-0.0892">The Ned London - City of London</option>
+                            <option value="Sea Containers London, South Bank, London, United Kingdom" data-lat="51.5077" data-lon="-0.1072">Sea Containers London - South Bank</option>
+                            <option value="InterContinental London - The O2, London, United Kingdom" data-lat="51.5033" data-lon="0.0032">InterContinental The O2 - Greenwich</option>
+                        </select>
                     </div>
                     <div id="modifyReturnMapContainer" class="map-picker-container" style="display:none;">
                         <div class="map-picker-wrapper">
@@ -386,7 +416,50 @@
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                     <div class="form-group">
-                        <label class="order-detail-label" for="modifyRideTier" style="display:block;margin-bottom:6px;">Service Tier</label>
+                        <label class="order-detail-label" for="modifyServiceType" style="display:block;margin-bottom:6px;">Service Type</label>
+                        <div class="service-purpose-grid" id="modifyServicePurposeGrid" style="grid-template-columns:repeat(2, minmax(0, 1fr));">
+                            <button type="button" class="service-purpose-card" data-service="local" onclick="selectModifyServiceTypeCard('local')" aria-label="Local Journey">
+                                <span class="service-purpose-overlay"></span>
+                                <span class="service-purpose-content">
+                                    <strong>Local Journey</strong>
+                                    <small>Within city</small>
+                                </span>
+                            </button>
+                            <button type="button" class="service-purpose-card" data-service="long-distance" onclick="selectModifyServiceTypeCard('long-distance')" aria-label="Long Journey">
+                                <span class="service-purpose-overlay"></span>
+                                <span class="service-purpose-content">
+                                    <strong>Long Journey</strong>
+                                    <small>Intercity travel</small>
+                                </span>
+                            </button>
+                            <button type="button" class="service-purpose-card" data-service="airport-transfer" onclick="selectModifyServiceTypeCard('airport-transfer')" aria-label="Airport Transfer">
+                                <span class="service-purpose-overlay"></span>
+                                <span class="service-purpose-content">
+                                    <strong>Airport Transfer</strong>
+                                    <small>Reliable pickups</small>
+                                </span>
+                            </button>
+                            <button type="button" class="service-purpose-card" data-service="hotel-transfer" onclick="selectModifyServiceTypeCard('hotel-transfer')" aria-label="Hotel Transfer">
+                                <span class="service-purpose-overlay"></span>
+                                <span class="service-purpose-content">
+                                    <strong>Hotel Transfer</strong>
+                                    <small>Executive comfort</small>
+                                </span>
+                            </button>
+                        </div>
+                        <select id="modifyServiceType" class="form-input" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
+                            <option value="local">Local Journey</option>
+                            <option value="long-distance">Long Distance Journey</option>
+                            <option value="airport-transfer">Airport Transfer</option>
+                            <option value="hotel-transfer">Hotel Transfer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="order-detail-label" for="modifyPickupDateTime" style="display:block;margin-bottom:6px;">Pick-up Date & Time</label>
+                        <input id="modifyPickupDateTime" class="form-input" type="datetime-local">
+                    </div>
+                    <div class="form-group">
+                        <label class="order-detail-label" for="modifyRideTier" style="display:block;margin-bottom:6px;">Ride Tier</label>
                         <select id="modifyRideTier" class="form-input">
                             <option value="eco">Eco</option>
                             <option value="standard">Standard</option>
@@ -396,11 +469,42 @@
                     </div>
                     <div class="form-group">
                         <label class="order-detail-label" for="modifySeats" style="display:block;margin-bottom:6px;">Seats</label>
-                        <select id="modifySeats" class="form-input">
+                        <div class="seat-capacity-grid" id="modifySeatCapacityGrid">
+                            <button type="button" class="seat-capacity-option" data-seat="4" onclick="selectModifySeatCapacity(4)">
+                                <span class="seat-capacity-title">4 Seats</span>
+                                <span class="seat-capacity-sub">Compact fare class</span>
+                            </button>
+                            <button type="button" class="seat-capacity-option" data-seat="7" onclick="selectModifySeatCapacity(7)">
+                                <span class="seat-capacity-title">7 Seats</span>
+                                <span class="seat-capacity-sub">Group fare class</span>
+                            </button>
+                        </div>
+                        <select id="modifySeats" class="form-input" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
                             <option value="4">4</option>
                             <option value="7">7</option>
                         </select>
                         <small id="modifySeatsAvailabilityHint" style="display:block;margin-top:6px;color:var(--gray-500);font-size:0.75rem;">Loading availability...</small>
+                    </div>
+                </div>
+
+                <div id="modifyPreviewPanel" style="margin-top:14px;border:1px solid #d5dfdc;border-radius:12px;background:linear-gradient(180deg,#f8fffd 0%,#f2f9f7 100%);padding:12px 14px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+                        <strong style="font-size:0.85rem;color:#0f172a;">After Modify (Estimated)</strong>
+                        <small style="font-size:0.74rem;color:#64748b;">Final values are confirmed after save</small>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+                        <div style="padding:8px 10px;border-radius:10px;background:#fff;border:1px solid #e2e8f0;">
+                            <div style="font-size:0.7rem;color:#64748b;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Distance</div>
+                            <div id="modifyPreviewDistance" style="font-size:0.9rem;color:#0f172a;font-weight:800;">-</div>
+                        </div>
+                        <div style="padding:8px 10px;border-radius:10px;background:#fff;border:1px solid #e2e8f0;">
+                            <div style="font-size:0.7rem;color:#64748b;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Fare</div>
+                            <div id="modifyPreviewFare" style="font-size:0.9rem;color:#0f172a;font-weight:800;">-</div>
+                        </div>
+                        <div style="padding:8px 10px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0;">
+                            <div style="font-size:0.7rem;color:#065f46;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Total</div>
+                            <div id="modifyPreviewTotal" style="font-size:1rem;color:#065f46;font-weight:900;">-</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -578,6 +682,20 @@
             display: flex;
             flex-direction: column;
         }
+        #modifyBookingModalOverlay .review-modal {
+            width: min(96vw, 980px);
+            max-width: 980px;
+            max-height: calc(100vh - 24px);
+            display: flex;
+            flex-direction: column;
+        }
+        #modifyBookingModalOverlay .review-modal-body {
+            overflow-y: auto;
+            max-height: calc(100vh - 220px);
+        }
+        #modifyBookingModalOverlay .review-modal-footer {
+            flex-wrap: wrap;
+        }
         #tripDetailModalOverlay .review-modal-body {
             overflow-y: auto;
             max-height: calc(100vh - 220px);
@@ -613,6 +731,102 @@
             .trip-detail-grid {
                 grid-template-columns: 1fr;
                 gap: 12px;
+            }
+        }
+    </style>
+
+    <style>
+        #modifyBookingModalOverlay .service-purpose-grid {
+            display: grid;
+            gap: 8px;
+        }
+        #modifyBookingModalOverlay .service-purpose-card {
+            position: relative;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 10px 10px;
+            min-height: 68px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            overflow: hidden;
+        }
+        #modifyBookingModalOverlay .service-purpose-card .service-purpose-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(0, 105, 92, 0.12), rgba(15, 118, 110, 0.04));
+            opacity: 0;
+            transition: opacity 0.18s ease;
+            pointer-events: none;
+        }
+        #modifyBookingModalOverlay .service-purpose-card .service-purpose-content {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            z-index: 1;
+        }
+        #modifyBookingModalOverlay .service-purpose-card strong {
+            color: #0f172a;
+            font-size: 0.82rem;
+            line-height: 1.2;
+        }
+        #modifyBookingModalOverlay .service-purpose-card small {
+            color: #64748b;
+            font-size: 0.74rem;
+            line-height: 1.2;
+        }
+        #modifyBookingModalOverlay .service-purpose-card.active {
+            border-color: #0f766e;
+            box-shadow: 0 8px 20px rgba(15, 118, 110, 0.16);
+            transform: translateY(-1px);
+        }
+        #modifyBookingModalOverlay .service-purpose-card.active .service-purpose-overlay {
+            opacity: 1;
+        }
+        #modifyBookingModalOverlay .seat-capacity-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        #modifyBookingModalOverlay .seat-capacity-option {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            background: #fff;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.18s ease;
+        }
+        #modifyBookingModalOverlay .seat-capacity-option .seat-capacity-title {
+            color: #0f172a;
+            font-size: 0.82rem;
+            font-weight: 800;
+        }
+        #modifyBookingModalOverlay .seat-capacity-option .seat-capacity-sub {
+            color: #64748b;
+            font-size: 0.74rem;
+        }
+        #modifyBookingModalOverlay .seat-capacity-option.active {
+            border-color: #0f766e;
+            background: linear-gradient(180deg, #ecfdf5 0%, #f0fdfa 100%);
+            box-shadow: 0 8px 20px rgba(15, 118, 110, 0.15);
+            transform: translateY(-1px);
+        }
+        @media (max-width: 760px) {
+            #modifyBookingModalOverlay .service-purpose-grid {
+                grid-template-columns: 1fr;
+            }
+            #modifyBookingModalOverlay .seat-capacity-grid {
+                grid-template-columns: 1fr;
+            }
+            #modifyBookingModalOverlay .review-modal {
+                width: 96vw;
+                max-width: 96vw;
             }
         }
     </style>

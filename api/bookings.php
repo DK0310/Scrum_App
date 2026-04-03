@@ -336,6 +336,7 @@ if ($action === 'create') {
             'service_type' => ($bookingType === 'minicab') ? $serviceType : null,
             'number_of_passengers' => $numberOfPassengers,
             'ride_tier' => ($bookingType === 'minicab') ? $rideTier : null,
+            'payment_method' => $paymentMethod,
         ]);
 
         // For minicab bookings, create an active_trip record for real-time tracking

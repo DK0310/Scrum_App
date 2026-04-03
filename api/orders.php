@@ -15,13 +15,11 @@ require_once __DIR__ . '/../sql/UserRepository.php';
 require_once __DIR__ . '/../sql/VehicleRepository.php';
 require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 require_once __DIR__ . '/notification-helpers.php';
-require_once __DIR__ . '/../lib/payments/PayPalGateway.php';
 
 $bookingRepo = new BookingRepository($pdo);
 $userRepo = new UserRepository($pdo);
 $vehicleRepo = new VehicleRepository($pdo);
 $vehicleImageRepo = new VehicleImageRepository($pdo);
-$paypalGateway = new PayPalGateway();
 
 function decodePaymentDetailsOrders($raw): array {
     if (is_array($raw)) {
@@ -68,6 +66,28 @@ function refundAccountBalanceOrders(UserRepository $userRepo, BookingRepository 
 
     $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
     return true;
+}
+
+function isOnlinePaymentMethodOrders(string $method): bool {
+    return in_array(strtolower(trim($method)), ['paypal', 'account_balance'], true);
+}
+
+function computeMinicabFareOrders(string $rideTier, int $seatCapacity, float $distanceKm): ?float {
+    $tier = strtolower(trim($rideTier));
+    $ratesPerMile = [
+        4 => ['eco' => 2.00, 'standard' => 2.50, 'luxury' => 3.50],
+        7 => ['eco' => 3.00, 'standard' => 3.50, 'luxury' => 4.50],
+    ];
+    if (!isset($ratesPerMile[$seatCapacity][$tier])) {
+        return null;
+    }
+
+    if ($distanceKm <= 0) {
+        return null;
+    }
+
+    $distanceMiles = $distanceKm * 0.621371;
+    return round($distanceMiles * $ratesPerMile[$seatCapacity][$tier], 2);
 }
 
 function parseOrderPickupDateTime(array $booking): ?DateTimeImmutable {
@@ -212,7 +232,16 @@ if ($action === 'modify-booking') {
         exit;
     }
 
-    $allowedKeys = ['pickup_location', 'return_location', 'ride_tier', 'number_of_passengers'];
+    $allowedKeys = [
+        'pickup_location',
+        'return_location',
+        'service_type',
+        'pickup_date',
+        'pickup_time',
+        'ride_tier',
+        'number_of_passengers',
+        'distance_km'
+    ];
     $updates = [];
     foreach ($allowedKeys as $key) {
         if (array_key_exists($key, $input)) {
@@ -230,7 +259,7 @@ if ($action === 'modify-booking') {
             continue;
         }
         if (!in_array($key, $allowedKeys, true)) {
-            echo json_encode(['success' => false, 'message' => 'Only pickup location, destination, service tier, and seats can be modified.']);
+            echo json_encode(['success' => false, 'message' => 'Only pickup, destination, service type, pickup date/time, ride tier, and seats can be modified.']);
             exit;
         }
     }
@@ -258,6 +287,27 @@ if ($action === 'modify-booking') {
             exit;
         }
 
+        $payment = $bookingRepo->getPaymentByBookingId($bookingId);
+        $effectivePaymentMethod = '';
+        if ($payment) {
+            $effectivePaymentMethod = effectivePaymentMethodOrders($payment);
+        } elseif (!empty($booking['payment_method'])) {
+            $effectivePaymentMethod = strtolower(trim((string)$booking['payment_method']));
+        }
+
+        if ($effectivePaymentMethod === '' || $effectivePaymentMethod !== 'cash') {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Only cash bookings can be modified. For online payments, you can only cancel when pickup is more than 24 hours away.'
+            ]);
+            exit;
+        }
+
+        if (strtolower(trim((string)($booking['booking_type'] ?? ''))) !== 'minicab') {
+            echo json_encode(['success' => false, 'message' => 'Only minicab bookings can be modified from My Orders.']);
+            exit;
+        }
+
         if (array_key_exists('pickup_location', $updates)) {
             $updates['pickup_location'] = trim((string)$updates['pickup_location']);
             if ($updates['pickup_location'] === '') {
@@ -282,6 +332,55 @@ if ($action === 'modify-booking') {
             }
         }
 
+        if (array_key_exists('service_type', $updates)) {
+            $updates['service_type'] = strtolower(trim((string)$updates['service_type']));
+            if (!in_array($updates['service_type'], ['local', 'long-distance', 'airport-transfer', 'hotel-transfer'], true)) {
+                echo json_encode(['success' => false, 'message' => 'Invalid service type.']);
+                exit;
+            }
+        }
+
+        $pickupDateProvided = array_key_exists('pickup_date', $updates);
+        $pickupTimeProvided = array_key_exists('pickup_time', $updates);
+        if ($pickupDateProvided || $pickupTimeProvided) {
+            $newPickupDate = trim((string)($updates['pickup_date'] ?? $booking['pickup_date'] ?? ''));
+            $newPickupTime = trim((string)($updates['pickup_time'] ?? $booking['pickup_time'] ?? ''));
+
+            if ($newPickupDate === '') {
+                echo json_encode(['success' => false, 'message' => 'Pickup date is required.']);
+                exit;
+            }
+
+            if ($newPickupTime === '') {
+                $newPickupTime = '00:00';
+            }
+
+            $originalPickupDate = parseOrderPickupDateTime($booking);
+            $newPickupAt = parseOrderPickupDateTime([
+                'pickup_date' => $newPickupDate,
+                'pickup_time' => $newPickupTime,
+            ]);
+            if (!$originalPickupDate || !$newPickupAt) {
+                echo json_encode(['success' => false, 'message' => 'Invalid pickup date or time.']);
+                exit;
+            }
+
+            $now = new DateTimeImmutable('now');
+            if ($newPickupAt < $now) {
+                echo json_encode(['success' => false, 'message' => 'Pickup date and time must be in the future.']);
+                exit;
+            }
+
+            $maxPickupDate = $originalPickupDate->modify('+7 days');
+            if ($newPickupAt > $maxPickupDate) {
+                echo json_encode(['success' => false, 'message' => 'Pickup date can only be moved within 7 days from the original date.']);
+                exit;
+            }
+
+            $updates['pickup_date'] = $newPickupAt->format('Y-m-d');
+            $updates['pickup_time'] = $newPickupAt->format('H:i');
+        }
+
         if (array_key_exists('number_of_passengers', $updates)) {
             $updates['number_of_passengers'] = (int)$updates['number_of_passengers'];
             if (!in_array($updates['number_of_passengers'], [4, 7], true)) {
@@ -303,6 +402,36 @@ if ($action === 'modify-booking') {
             }
         }
 
+        $distanceChanged = array_key_exists('distance_km', $updates);
+        $pickupChanged = array_key_exists('pickup_location', $updates);
+        $destinationChanged = array_key_exists('return_location', $updates);
+        if (($pickupChanged || $destinationChanged) && !$distanceChanged) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Distance is required when changing pick-up or destination to recalculate fare.'
+            ]);
+            exit;
+        }
+
+        $effectiveDistanceKm = (float)($updates['distance_km'] ?? $booking['distance_km'] ?? 0);
+        if ($effectiveDistanceKm > 0) {
+            $newSubtotal = computeMinicabFareOrders($effectiveTier, $effectiveSeats, $effectiveDistanceKm);
+            if ($newSubtotal === null) {
+                echo json_encode(['success' => false, 'message' => 'Unable to recalculate fare for selected options.']);
+                exit;
+            }
+
+            $oldSubtotal = (float)($booking['subtotal'] ?? 0);
+            $oldTotal = (float)($booking['total_amount'] ?? $oldSubtotal);
+            $fixedDiscount = max(0, $oldSubtotal - $oldTotal);
+            $newTotal = max(0, $newSubtotal - $fixedDiscount);
+
+            $updates['distance_km'] = round($effectiveDistanceKm, 2);
+            $updates['subtotal'] = $newSubtotal;
+            $updates['total_amount'] = $newTotal;
+            $updates['transfer_cost'] = $newSubtotal;
+        }
+
         $updated = $bookingRepo->updateCustomerEditableFields($bookingId, $updates);
         if (!$updated) {
             echo json_encode(['success' => false, 'message' => 'No changes were saved.']);
@@ -317,8 +446,14 @@ if ($action === 'modify-booking') {
                 'id' => $latest['id'] ?? $bookingId,
                 'pickup_location' => $latest['pickup_location'] ?? ($updates['pickup_location'] ?? null),
                 'return_location' => $latest['return_location'] ?? ($updates['return_location'] ?? null),
+                'service_type' => $latest['service_type'] ?? ($updates['service_type'] ?? null),
+                'pickup_date' => $latest['pickup_date'] ?? ($updates['pickup_date'] ?? null),
+                'pickup_time' => $latest['pickup_time'] ?? ($updates['pickup_time'] ?? null),
                 'ride_tier' => $latest['ride_tier'] ?? ($updates['ride_tier'] ?? null),
                 'number_of_passengers' => $latest['number_of_passengers'] ?? ($updates['number_of_passengers'] ?? null),
+                'distance_km' => $latest['distance_km'] ?? ($updates['distance_km'] ?? null),
+                'subtotal' => $latest['subtotal'] ?? ($updates['subtotal'] ?? null),
+                'total_amount' => $latest['total_amount'] ?? ($updates['total_amount'] ?? null),
             ]
         ]);
     } catch (PDOException $e) {
@@ -390,55 +525,12 @@ if ($action === 'update-status') {
                 $paymentMethod = effectivePaymentMethodOrders($payment);
                 $paymentStatus = strtolower(trim((string)($payment['status'] ?? '')));
 
-                if ($paymentMethod === 'paypal' && $paymentStatus === 'paid') {
-                    $paymentDetails = $payment['payment_details'] ?? [];
-                    if (is_string($paymentDetails)) {
-                        $decoded = json_decode($paymentDetails, true);
-                        $paymentDetails = is_array($decoded) ? $decoded : [];
-                    }
-                    if (!is_array($paymentDetails)) {
-                        $paymentDetails = [];
-                    }
-
-                    $captureId = trim((string)($paymentDetails['capture_id'] ?? ''));
-                    if ($captureId === '') {
-                        echo json_encode([
-                            'success' => false,
-                            'message' => 'Unable to auto-refund PayPal payment because capture ID is missing. Please contact support.',
-                        ]);
-                        exit;
-                    }
-
-                    $refund = $paypalGateway->refundCapture(
-                        $captureId,
-                        isset($payment['amount']) ? (float)$payment['amount'] : null,
-                        'GBP'
-                    );
-
-                    if (empty($refund['success'])) {
-                        echo json_encode([
-                            'success' => false,
-                            'message' => $refund['message'] ?? 'PayPal refund failed. Cancellation was not completed.',
-                        ]);
-                        exit;
-                    }
-
-                    $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', [
-                        'provider' => 'paypal',
-                        'stage' => 'refund',
-                        'capture_id' => $captureId,
-                        'refund_id' => $refund['refund_id'] ?? null,
-                        'refund_status' => $refund['status'] ?? null,
-                        'response' => $refund['raw'] ?? [],
-                        'mock' => !empty($refund['mock']),
-                        'refunded_at' => gmdate('c'),
-                    ]);
-                } elseif ($paymentMethod === 'account_balance' && $paymentStatus === 'paid') {
+                if (isOnlinePaymentMethodOrders($paymentMethod) && $paymentStatus === 'paid') {
                     $refunded = refundAccountBalanceOrders($userRepo, $bookingRepo, $bookingId, $booking, $payment);
                     if (!$refunded) {
                         echo json_encode([
                             'success' => false,
-                            'message' => 'Unable to refund account balance. Cancellation was not completed.',
+                            'message' => 'Unable to refund to account balance. Cancellation was not completed.',
                         ]);
                         exit;
                     }
