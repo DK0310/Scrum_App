@@ -22,6 +22,6 @@ if (!$isLoggedIn) {
 
 $carId = $_GET['car_id'] ?? '';
 $promoCode = $_GET['promo'] ?? '';
-$bookingMode = $_GET['mode'] ?? '';
+$bookingMode = $_GET['mode'] ?? 'minicab';
 
 require __DIR__ . '/../templates/booking.html.php';

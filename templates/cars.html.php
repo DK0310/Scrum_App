@@ -43,7 +43,7 @@
                                 <button class="filter-chip" data-value="7">7 Seats</button>
                             </div>
                         </div>
-                        <div class="filter-group">
+                        <!--<div class="filter-group">
                             <div class="filter-group-title">Daily Rate (GBP) <span id="priceLabel" style="color:var(--primary);font-weight:800;">£0 – £500+</span></div>
                             <div class="filter-range">
                                 <div class="range-slider-wrapper">
@@ -55,7 +55,7 @@
                                     <span>£500+</span>
                                 </div>
                             </div>
-                        </div>
+                        </div>-->
                     </div>
 
                     <div class="filter-actions">

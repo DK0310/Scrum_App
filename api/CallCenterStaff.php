@@ -170,6 +170,34 @@ function cc_is_callcenterstaff_only(string $role): bool
     return cc_normalize_role($role) === 'callcenterstaff';
 }
 
+function cc_has_available_vehicle_for_request(PDO $pdo, string $rideTier, int $seatCapacity, string $excludeOwnerId = ''): bool
+{
+    $tier = strtolower(trim($rideTier));
+    $tierSql = "LOWER(COALESCE(v.service_tier, '')) = :tier";
+    if ($tier === 'premium') {
+        $tierSql = "LOWER(COALESCE(v.service_tier, '')) IN ('premium', 'luxury')";
+    }
+
+    $ownerScope = '';
+    if ($excludeOwnerId !== '') {
+        $ownerScope = ' AND v.owner_id <> :exclude_owner_id';
+    }
+
+    $sql = "\n        SELECT 1\n        FROM vehicles v\n        WHERE v.status = 'available'\n          AND v.seats >= :seat_capacity\n          AND {$tierSql}{$ownerScope}\n        LIMIT 1\n    ";
+
+    $stmt = $pdo->prepare($sql);
+    $params = [
+        ':seat_capacity' => $seatCapacity,
+        ':tier' => $tier,
+    ];
+    if ($excludeOwnerId !== '') {
+        $params[':exclude_owner_id'] = $excludeOwnerId;
+    }
+
+    $stmt->execute($params);
+    return (bool)$stmt->fetchColumn();
+}
+
 if (!isset($_SESSION['user_id'])) {
     header('Location: /index.php');
     exit;
@@ -224,6 +252,25 @@ try {
 
         $requests = $staffBookingRepo->getStaffBookings($userId, $limit, 0);
         echo json_encode(['success' => true, 'requests' => $requests]);
+        exit;
+    }
+
+    if ($action === 'get_request_detail') {
+        $bookingId = trim((string)($_GET['booking_id'] ?? $bodyJson['booking_id'] ?? ''));
+        if ($bookingId === '') {
+            throw new Exception('Missing booking_id');
+        }
+
+        $detail = $staffBookingRepo->getOrderDetails($bookingId);
+        if (!$detail) {
+            throw new Exception('Request not found');
+        }
+
+        if ((string)($detail['created_by_staff_id'] ?? '') !== $userId) {
+            throw new Exception('You can only view your own requests');
+        }
+
+        echo json_encode(['success' => true, 'request' => $detail]);
         exit;
     }
 
@@ -389,7 +436,9 @@ try {
             throw new Exception('Invalid seat capacity. Use 4 or 7 seats.');
         }
 
-        $pickupDate = trim((string)($payload['pickup_date'] ?? ''));
+        $pickupInput = trim((string)($payload['pickup_date'] ?? ''));
+        $pickupDate = $pickupInput;
+        $pickupTime = strtoupper(str_replace(' ', '', trim((string)($payload['pickup_time'] ?? ''))));
         $pickupLocation = trim((string)($payload['pickup_location'] ?? ''));
         $returnLocation = trim((string)($payload['return_location'] ?? ''));
         $serviceType = strtolower(trim((string)($payload['service_type'] ?? 'local')));
@@ -397,7 +446,7 @@ try {
         $paymentMethod = trim((string)($payload['payment_method'] ?? 'cash'));
         $distanceKm = isset($payload['distance_km']) ? (float)$payload['distance_km'] : null;
 
-        if ($pickupDate === '' || $pickupLocation === '' || $returnLocation === '') {
+        if ($pickupInput === '' || $pickupLocation === '' || $returnLocation === '') {
             throw new Exception('Missing required booking fields');
         }
 
@@ -409,19 +458,31 @@ try {
             throw new Exception('Invalid payment method.');
         }
 
-        $start = strtotime($pickupDate);
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}):(\d{2})/', $pickupInput, $m) === 1) {
+            $pickupDate = $m[1];
+            if ($pickupTime === '') {
+                $hour = (int)$m[2];
+                $minute = (int)$m[3];
+                $suffix = $hour >= 12 ? 'PM' : 'AM';
+                $hour12 = $hour % 12;
+                if ($hour12 === 0) {
+                    $hour12 = 12;
+                }
+                $pickupTime = sprintf('%02d:%02d%s', $hour12, $minute, $suffix);
+            }
+        }
+
+        $start = strtotime(str_replace('T', ' ', $pickupInput));
         if (!$start || $start <= time()) {
             throw new Exception('Pickup date/time must be in the future');
         }
 
         $days = 1;
 
-        $vehicle = $bookingRepo->findVehicleForTier($rideTier, (string)$selectedCustomerId);
-        if (!$vehicle) {
-            throw new Exception('No available vehicle found for selected tier');
+        $hasAvailableVehicle = cc_has_available_vehicle_for_request($pdo, $rideTier, $seatCapacity, (string)$selectedCustomerId);
+        if (!$hasAvailableVehicle) {
+            throw new Exception('No available vehicle found for selected tier and seat capacity');
         }
-
-        $vehicleId = (string)$vehicle['id'];
 
         // Phone booking rates in £/mile by seat capacity + £2.00 booking fee
         $tierRates = [
@@ -456,13 +517,14 @@ try {
         // Call Center always creates minicab requests in pending status for Control Staff approval.
         $booking = $staffBookingRepo->createPhoneBooking(
             (string)$selectedCustomerId,
-            $vehicleId,
+            null,
             [
             'booking_type' => 'minicab',
                 'customer_name' => $customerName,
                 'customer_phone' => $customerPhone,
                 'customer_email' => $customerEmail,
                 'pickup_date' => $pickupDate,
+                'pickup_time' => $pickupTime,
             'return_date' => null,
                 'pickup_location' => $pickupLocation,
                 'return_location' => $returnLocation,
@@ -491,7 +553,7 @@ try {
                 'total_amount' => $subtotal,
                 'ride_tier' => $rideTier,
                 'seat_capacity' => $seatCapacity,
-                'assigned_vehicle' => trim(((string)($vehicle['brand'] ?? '')) . ' ' . ((string)($vehicle['model'] ?? ''))),
+                'assigned_vehicle' => null,
             ],
         ]);
         exit;

@@ -325,7 +325,6 @@
                     <div class="order-detail-item"><div class="order-detail-label">Ride Tier</div><div class="order-detail-value" id="tripDetailRideTier">-</div></div>
                     <div class="order-detail-item"><div class="order-detail-label">Seat Capacity</div><div class="order-detail-value" id="tripDetailSeatCapacity">-</div></div>
                     <div class="order-detail-item"><div class="order-detail-label">Pick-up Date</div><div class="order-detail-value" id="tripDetailPickupDate">-</div></div>
-                    <div class="order-detail-item"><div class="order-detail-label">Return Date</div><div class="order-detail-value" id="tripDetailReturnDate">-</div></div>
                     <div class="order-detail-item" style="grid-column:1 / -1;"><div class="order-detail-label">Pick-up Location</div><div class="order-detail-value" id="tripDetailPickupLocation">-</div></div>
                     <div class="order-detail-item" style="grid-column:1 / -1;"><div class="order-detail-label">Destination</div><div class="order-detail-value" id="tripDetailDestination">-</div></div>
                     <div class="order-detail-item"><div class="order-detail-label">Distance</div><div class="order-detail-value" id="tripDetailDistance">-</div></div>

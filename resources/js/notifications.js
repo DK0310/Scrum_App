@@ -165,9 +165,10 @@ async function pollUnreadCount() {
         const data = await res.json();
         if (data.success) {
             const oldCount = parseInt(document.getElementById('notifCount')?.textContent || 0);
-            updateNotifBadge(data.unread_count);
+            const newCount = Number(data.unread_count ?? data.count ?? 0);
+            updateNotifBadge(newCount);
             // If new notifications arrived while panel is open, reload
-            if (data.unread_count > oldCount && document.getElementById('notificationPanel')?.classList.contains('open')) {
+            if (newCount > oldCount && document.getElementById('notificationPanel')?.classList.contains('open')) {
                 loadNotifications();
             }
         }

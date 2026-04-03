@@ -69,6 +69,9 @@
         createAccountSubmitBtn: document.getElementById('ccCreateAccountSubmitBtn'),
         createAccountResetBtn: document.getElementById('ccCreateAccountResetBtn'),
         createAccountSummary: document.getElementById('ccCreateAccountSummary')
+        ,
+        requestDetailModal: document.getElementById('ccRequestDetailModal'),
+        requestDetailBody: document.getElementById('ccRequestDetailBody')
     };
 
     function setFormStatus(text, isError) {
@@ -118,6 +121,14 @@
         if (status === 'done' || status === 'completed') return 'cc-badge cc-done';
         if (status === 'cancelled') return 'cc-badge cc-cancelled';
         return 'cc-badge cc-pending';
+    }
+
+    function normalizeDisplayTier(value) {
+        const tier = normalizeTier(value);
+        if (tier === 'premium') return 'Premium';
+        if (tier === 'standard') return 'Standard';
+        if (tier === 'eco') return 'Eco';
+        return '-';
     }
 
     function resetForm() {
@@ -578,15 +589,16 @@
             const bookingId = escapeHtml(r.id || '');
             const ref = escapeHtml(r.booking_ref || bookingId);
             const customer = escapeHtml(r.customer_name || '-');
-            const date = escapeHtml(formatDateTime(r.pickup_date || '-'));
+            const date = escapeHtml(formatPickupDisplay(r.pickup_date, r.pickup_time));
             const status = escapeHtml(r.status || 'pending');
+            const tierLabel = normalizeDisplayTier(r.ride_tier || r.service_tier || r.tier || '');
 
             let actionHtml = '<button class="cc-btn cc-btn-danger" data-action="delete" data-id="' + bookingId + '">Delete</button>';
             if (status === 'pending' || status === 'in_progress') {
                 actionHtml = '<button class="cc-btn cc-btn-secondary" data-action="cancel" data-id="' + bookingId + '">Cancel</button> ' + actionHtml;
             }
 
-            return '<article class="cc-request-card">'
+            return '<article class="cc-request-card" data-role="open-request" data-id="' + bookingId + '">'
                 + '<div class="cc-request-head">'
                 +   '<div>'
                 +     '<h4 class="cc-request-title">' + customer + '</h4>'
@@ -596,11 +608,23 @@
                 + '</div>'
                 + '<div class="cc-request-row">'
                 +   '<div>Pickup: ' + date + '</div>'
-                +   '<div>Tier: ' + escapeHtml(String(r.ride_tier || '-')) + '</div>'
+                +   '<div>Tier: ' + escapeHtml(tierLabel) + '</div>'
                 + '</div>'
                 + '<div class="cc-request-actions">' + actionHtml + '</div>'
                 + '</article>';
         }).join('');
+
+        Array.from(el.requestsTable.querySelectorAll('article[data-role="open-request"]')).forEach((card) => {
+            card.addEventListener('click', async (evt) => {
+                const target = evt.target;
+                if (target instanceof Element && target.closest('button[data-action]')) {
+                    return;
+                }
+                const bookingId = card.getAttribute('data-id') || '';
+                if (!bookingId) return;
+                await openRequestDetailModal(bookingId);
+            });
+        });
 
         Array.from(el.requestsTable.querySelectorAll('button[data-action]')).forEach((btn) => {
             btn.addEventListener('click', async () => {
@@ -629,6 +653,107 @@
             hour: '2-digit',
             minute: '2-digit'
         });
+    }
+
+    function formatPickupDisplay(dateValue, timeValue) {
+        const datePart = dateValue ? String(dateValue).slice(0, 10) : '';
+        let timePart = String(timeValue || '').trim();
+
+        if (!timePart) {
+            const rawDate = String(dateValue || '');
+            const dtMatch = rawDate.match(/[T\s](\d{2}):(\d{2})/);
+            if (dtMatch) {
+                const hour = Number(dtMatch[1]);
+                const minute = Number(dtMatch[2]);
+                if (Number.isFinite(hour) && Number.isFinite(minute)) {
+                    const suffix = hour >= 12 ? 'PM' : 'AM';
+                    const hour12 = (hour % 12) === 0 ? 12 : (hour % 12);
+                    timePart = String(hour12).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + suffix;
+                }
+            }
+        } else {
+            const parsed = timePart.match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])?$/);
+            if (parsed) {
+                let hour = Number(parsed[1]);
+                const minute = Number(parsed[2]);
+                const meridiem = parsed[3] ? parsed[3].toUpperCase() : '';
+
+                if (!meridiem) {
+                    const suffix = hour >= 12 ? 'PM' : 'AM';
+                    const hour12 = (hour % 12) === 0 ? 12 : (hour % 12);
+                    timePart = String(hour12).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + suffix;
+                } else {
+                    hour = hour === 0 ? 12 : hour;
+                    timePart = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + meridiem;
+                }
+            }
+        }
+
+        if (datePart && timePart) {
+            return datePart + ' ' + timePart;
+        }
+        if (datePart) {
+            return datePart;
+        }
+        if (timePart) {
+            return timePart;
+        }
+        return '-';
+    }
+
+    function extractPickupTimeFromInput(datetimeLocalValue) {
+        const raw = String(datetimeLocalValue || '').trim();
+        const m = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}):(\d{2})/);
+        if (!m) {
+            return '';
+        }
+
+        const hour24 = Number(m[2]);
+        const minute = Number(m[3]);
+        if (!Number.isFinite(hour24) || !Number.isFinite(minute)) {
+            return '';
+        }
+
+        const suffix = hour24 >= 12 ? 'PM' : 'AM';
+        const hour12 = (hour24 % 12) === 0 ? 12 : (hour24 % 12);
+        return String(hour12).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + suffix;
+    }
+
+    async function openRequestDetailModal(bookingId) {
+        if (!el.requestDetailModal || !el.requestDetailBody) return;
+
+        el.requestDetailBody.innerHTML = 'Loading details...';
+        el.requestDetailModal.classList.add('open');
+
+        try {
+            const data = await apiGet({ action: 'get_request_detail', booking_id: bookingId });
+            if (!data.success || !data.request) {
+                el.requestDetailBody.innerHTML = '<div style="color:#b91c1c;">' + escapeHtml(data.message || 'Cannot load request detail') + '</div>';
+                return;
+            }
+
+            const r = data.request;
+            const tier = normalizeDisplayTier(r.ride_tier || r.service_tier || r.tier || '');
+            const seats = escapeHtml(String(r.number_of_passengers || r.seat_capacity || '-'));
+            const amount = '£' + Number(r.total_amount || 0).toFixed(2);
+            const vehicle = escapeHtml([r.brand, r.model, r.license_plate].filter(Boolean).join(' ') || '-');
+
+            el.requestDetailBody.innerHTML = ''
+                + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+                +   '<div><strong>Request ID:</strong><br>' + escapeHtml(String(r.booking_ref || r.id || '-')) + '</div>'
+                +   '<div><strong>Status:</strong><br>' + escapeHtml(String(r.status || '-')) + '</div>'
+                +   '<div><strong>Customer:</strong><br>' + escapeHtml(String(r.customer_name || '-')) + '</div>'
+                +   '<div><strong>Pickup Time:</strong><br>' + escapeHtml(formatPickupDisplay(r.pickup_date, r.pickup_time)) + '</div>'
+                +   '<div><strong>Pickup:</strong><br>' + escapeHtml(String(r.pickup_location || '-')) + '</div>'
+                +   '<div><strong>Destination:</strong><br>' + escapeHtml(String(r.return_location || '-')) + '</div>'
+                +   '<div><strong>Tier:</strong><br>' + escapeHtml(tier) + '</div>'
+                +   '<div><strong>Seats:</strong><br>' + seats + '</div>'
+                +   '<div><strong>Vehicle:</strong><br>' + vehicle + '</div>'
+                +   '<div><strong>Total:</strong><br>' + amount + '</div>'
+                + '</div>';
+        } catch (err) {
+            el.requestDetailBody.innerHTML = '<div style="color:#b91c1c;">Network error while loading request detail.</div>';
+        }
     }
 
     async function loadEnquiries() {
@@ -815,6 +940,7 @@
             seat_capacity: selectedSeat,
             service_type: el.serviceType && el.serviceType.value ? el.serviceType.value : 'local',
             pickup_date: el.pickupDate.value,
+            pickup_time: extractPickupTimeFromInput(el.pickupDate.value),
             pickup_location: el.pickupLocation.value,
             return_location: el.returnLocation.value,
             payment_method: el.paymentMethod.value,

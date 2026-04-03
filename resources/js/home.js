@@ -65,6 +65,7 @@ async function loadAvailableVehicles() {
     try {
         const url = new URL(VEHICLES_API, window.location.origin);
         url.searchParams.set('action', 'public-list');
+        url.searchParams.set('limit', '5');
 
         const res = await fetch(url.toString());
         const data = await res.json();

@@ -564,7 +564,6 @@
                             <label>Payment Method</label>
                             <select class="cc-select" id="ccPaymentMethod">
                                 <option value="cash">Cash</option>
-                                <option value="paypal">PayPal</option>
                                 <option value="account_balance">Account Balance</option>
                             </select>
                             <small id="ccPaymentMethodHint" class="cc-help">Account balance is available only for existing customers with enough balance.</small>
@@ -711,6 +710,21 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeModal('ccReplyModal')">Cancel</button>
             <button class="btn btn-primary" id="ccReplySubmitBtn" onclick="submitEnquiryReply()">Send Reply</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="ccRequestDetailModal">
+    <div class="modal" style="max-width:700px;">
+        <div class="modal-header">
+            <h3 class="modal-title">Request Details</h3>
+            <button class="modal-close" onclick="closeModal('ccRequestDetailModal')">✕</button>
+        </div>
+        <div class="modal-body" id="ccRequestDetailBody" style="font-size:0.92rem;color:#334155;">
+            Loading details...
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('ccRequestDetailModal')">Close</button>
         </div>
     </div>
 </div>

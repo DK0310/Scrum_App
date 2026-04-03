@@ -5,11 +5,11 @@
                     <?php if ($isMinicabPage): ?>
                     <div class="booking-car-card minicab-summary-card">
                         <div class="minicab-summary-hero">
-                            <div class="minicab-summary-badge">MINICAB MODE</div>
+                            <div class="minicab-summary-badge">MINICAB</div>
                             <h3 class="minicab-summary-title">Smart Ride Summary</h3>
                             <p class="minicab-summary-sub">Live estimate updates as you choose destination, service type, and ride tier.</p>
                         </div>
-                        <div class="minicab-summary-body">
+                        <div class="minicab-summary-body"> 
                             <div class="minicab-summary-row">
                                 <span>Service Type</span>
                                 <strong id="miniSummaryService">Local Journey</strong>
@@ -17,7 +17,7 @@
                             <div class="minicab-summary-row">
                                 <span>Ride Tier</span>
                                 <strong id="miniSummaryTier">Select tier</strong>
-                            </div>
+                            </div>  
                             <div class="minicab-summary-row">
                                 <span>Estimated Distance</span>
                                 <strong id="miniSummaryDistance">Set locations first</strong>

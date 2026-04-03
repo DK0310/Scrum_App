@@ -167,24 +167,27 @@ img { max-width: 100%; height: auto; }
 }
 .navbar-profile-link:hover { background: var(--primary-50); color: var(--primary); }
 .navbar-action-link { font-weight: 600; }
-.navbar-my-orders {
-    color: var(--primary);
-    border-color: var(--primary);
-}
-.navbar-my-orders:hover {
-    background: var(--primary);
+.btn-outline.navbar-my-orders {
     color: #ffffff;
+    background: var(--primary-dark);
     border-color: var(--primary-dark);
 }
-.navbar-my-orders.active {
+.btn-outline.navbar-my-orders:hover,
+.btn-outline.navbar-my-orders:focus-visible {
     background: var(--primary);
     color: #ffffff;
     border-color: var(--primary);
 }
-.navbar-my-orders.active:hover {
+.btn-outline.navbar-my-orders.active {
     background: var(--primary-dark);
     color: #ffffff;
     border-color: var(--primary-dark);
+}
+.btn-outline.navbar-my-orders.active:hover,
+.btn-outline.navbar-my-orders.active:focus-visible {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
 }
 .navbar-actions { display: flex; align-items: center; gap: 12px; }
 

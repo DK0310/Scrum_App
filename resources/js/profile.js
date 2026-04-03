@@ -18,6 +18,7 @@ let originalEmail = '';
 let ecCountdownInterval = null;
 let currentBalance = 0;
 let currentLoyaltyPoints = 0;
+let profileRealtimeValidationBound = false;
 
 // Face ID state
 let faceApiLoaded = false;
@@ -319,9 +320,143 @@ function clearPaypalQueryParams() {
     window.history.replaceState({}, '', newUrl);
 }
 
+function ensureFieldErrorEl(inputEl) {
+    if (!inputEl) return null;
+    let errorEl = inputEl.parentElement ? inputEl.parentElement.querySelector('.profile-field-error') : null;
+    if (!errorEl) {
+        errorEl = document.createElement('small');
+        errorEl.className = 'profile-field-error';
+        errorEl.style.display = 'none';
+        errorEl.style.marginTop = '6px';
+        errorEl.style.color = '#b91c1c';
+        errorEl.style.fontSize = '0.74rem';
+        errorEl.style.fontWeight = '600';
+        if (inputEl.parentElement) {
+            inputEl.parentElement.appendChild(errorEl);
+        }
+    }
+    return errorEl;
+}
+
+function setFieldValidationState(inputEl, isValid, message) {
+    if (!inputEl) return true;
+    const errorEl = ensureFieldErrorEl(inputEl);
+
+    if (isValid) {
+        inputEl.style.borderColor = '';
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+        }
+    } else {
+        inputEl.style.borderColor = '#dc2626';
+        if (errorEl) {
+            errorEl.textContent = message || 'Invalid value';
+            errorEl.style.display = 'block';
+        }
+    }
+
+    return isValid;
+}
+
+function validateProfileField(fieldId) {
+    const el = document.getElementById(fieldId);
+    if (!el) return true;
+
+    const value = String(el.value || '').trim();
+
+    if (fieldId === 'pFullName') {
+        if (!value) return setFieldValidationState(el, false, 'Full name is required.');
+        if (value.length < 3) return setFieldValidationState(el, false, 'Full name must be at least 3 characters.');
+        return setFieldValidationState(el, true, '');
+    }
+
+    if (fieldId === 'pEmail') {
+        if (!value) return setFieldValidationState(el, false, 'Email is required.');
+        const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+        return setFieldValidationState(el, ok, ok ? '' : 'Email format is invalid.');
+    }
+
+    if (fieldId === 'pPhone') {
+        if (!value) return setFieldValidationState(el, false, 'Phone number is required.');
+        const ok = /^\d{10}$/.test(value);
+        return setFieldValidationState(el, ok, ok ? '' : 'Phone number must be exactly 10 digits.');
+    }
+
+    if (fieldId === 'pDob') {
+        if (!value) return setFieldValidationState(el, false, 'Date of birth is required.');
+        const selected = new Date(value + 'T00:00:00');
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const minDob = new Date(now);
+        minDob.setFullYear(minDob.getFullYear() - 18);
+        const ok = !Number.isNaN(selected.getTime()) && selected <= minDob;
+        return setFieldValidationState(el, ok, ok ? '' : 'You must be at least 18 years old.');
+    }
+
+    if (fieldId === 'pBio') {
+        if (!value) return setFieldValidationState(el, true, '');
+        const ok = value.length <= 500;
+        return setFieldValidationState(el, ok, ok ? '' : 'Bio must be 500 characters or fewer.');
+    }
+
+    return true;
+}
+
+function validateProfileFormRealtime() {
+    const fields = ['pFullName', 'pEmail', 'pPhone', 'pDob', 'pBio'];
+    let allValid = true;
+    fields.forEach(function(fieldId) {
+        if (!validateProfileField(fieldId)) {
+            allValid = false;
+        }
+    });
+
+    const btn = document.getElementById('saveProfileBtn');
+    if (btn) {
+        btn.disabled = !allValid;
+    }
+
+    return allValid;
+}
+
+function bindProfileRealtimeValidation() {
+    if (profileRealtimeValidationBound) return;
+
+    const eventMap = {
+        pFullName: 'input',
+        pEmail: 'input',
+        pPhone: 'input',
+        pDob: 'change',
+        pBio: 'input'
+    };
+
+    Object.keys(eventMap).forEach(function(fieldId) {
+        const el = document.getElementById(fieldId);
+        if (!el) return;
+
+        el.addEventListener(eventMap[fieldId], function() {
+            validateProfileField(fieldId);
+            validateProfileFormRealtime();
+        });
+
+        el.addEventListener('blur', function() {
+            validateProfileField(fieldId);
+            validateProfileFormRealtime();
+        });
+    });
+
+    profileRealtimeValidationBound = true;
+}
+
 // ===== SAVE PROFILE =====
 async function saveProfile(e) {
     e.preventDefault();
+
+    if (!validateProfileFormRealtime()) {
+        showToast('Please fix highlighted fields before saving.', 'error');
+        return false;
+    }
 
     const newEmail = document.getElementById('pEmail').value.trim();
 
@@ -831,6 +966,8 @@ function stopFaceIdCamera() {
 document.addEventListener('DOMContentLoaded', async () => {
     const handledPaypal = await processBalancePaypalCallback();
     await loadProfile();
+    bindProfileRealtimeValidation();
+    validateProfileFormRealtime();
 
     const params = new URLSearchParams(window.location.search);
     const requestedTab = params.get('tab');

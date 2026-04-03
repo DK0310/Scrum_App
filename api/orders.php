@@ -43,6 +43,8 @@ function effectivePaymentMethodOrders(array $payment): string {
 }
 
 function refundAccountBalanceOrders(UserRepository $userRepo, BookingRepository $bookingRepo, string $bookingId, array $booking, array $payment): bool {
+    global $pdo;
+
     $amount = isset($payment['amount']) ? (float)$payment['amount'] : 0.0;
     if ($amount <= 0) {
         return false;
@@ -65,6 +67,15 @@ function refundAccountBalanceOrders(UserRepository $userRepo, BookingRepository 
     $details['refunded_at'] = gmdate('c');
 
     $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
+
+    createNotification(
+        $pdo,
+        $targetUserId,
+        'payment',
+        '💷 Refund Processed',
+        'A refund of £' . number_format($amount, 2) . ' has been credited to your account balance for booking #' . $bookingId . '.'
+    );
+
     return true;
 }
 

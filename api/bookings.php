@@ -396,8 +396,8 @@ if ($action === 'create') {
         $paypalMeta = null;
         if ($paymentMethod === 'paypal') {
             $baseUrl = getAppBaseUrl();
-            $returnUrl = $baseUrl . '/booking.php?paypal=return&booking_id=' . urlencode((string)$booking['id']);
-            $cancelUrl = $baseUrl . '/booking.php?paypal=cancel&booking_id=' . urlencode((string)$booking['id']);
+            $returnUrl = $baseUrl . '/booking.php?mode=minicab&paypal=return&booking_id=' . urlencode((string)$booking['id']);
+            $cancelUrl = $baseUrl . '/booking.php?mode=minicab&paypal=cancel&booking_id=' . urlencode((string)$booking['id']);
 
             $paypalOrder = $paypalGateway->createOrder((float)$totalAmount, 'GBP', (string)$booking['id'], $returnUrl, $cancelUrl);
             if (empty($paypalOrder['success'])) {
@@ -653,8 +653,8 @@ if ($action === 'confirm-payment') {
 
         // Send invoice (best-effort)
         try {
-            require_once __DIR__ . '/../lib/invoice_mpdf.php';
-            require_once __DIR__ . '/../lib/mailer.php';
+            require_once __DIR__ . '/../Invoice/invoice_mpdf.php';
+            require_once __DIR__ . '/../Invoice/mailer.php';
 
             // Customer info
             $customerEmail = $booking['email'] ?? '';
@@ -694,6 +694,7 @@ if ($action === 'confirm-payment') {
                     'pickup_location' => $bRow['pickup_location'] ?? '',
                     'return_location' => $bRow['return_location'] ?? '',
                     'pickup_date' => $bRow['pickup_date'] ?? '',
+                    'pickup_time' => $bRow['pickup_time'] ?? '',
                     'customer_name' => $customerName,
                     'customer_email' => $customerEmail,
                     'customer_phone' => $customerPhone,

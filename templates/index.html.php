@@ -148,13 +148,15 @@
     <!-- ===== FEATURED CARS (loaded from DB) ===== -->
     <section class="section featured-section" id="cars">
         <div class="section-container">
-            <div class="section-header section-header-vehicles section-header-centered">
+            <div class="section-header section-header-vehicles section-header-space">
                 <div>
                     <span class="section-eyebrow">Premium Fleet</span>
                     <h2 class="section-title">Available Vehicles</h2>
                     <p class="section-subtitle">Instant booking available for our premium fleet across your city.</p>
                 </div>
+                <a href="/cars.php" class="section-link">All Cars →</a>
             </div>
+            
 
             <div class="car-grid car-grid-redesign" id="availableVehiclesGrid">
                 <div class="vehicles-loading">

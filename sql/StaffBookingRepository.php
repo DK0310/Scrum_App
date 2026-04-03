@@ -14,11 +14,11 @@ final class StaffBookingRepository
     /**
      * Create a phone booking by staff (for customers without account)
      * @param string $renterId The renter/customer ID
-     * @param string $vehicleId The vehicle ID
+    * @param ?string $vehicleId The vehicle ID (nullable for pending unassigned requests)
      * @param array<string,mixed> $data Booking data (customer_name, customer_phone, customer_email, pickup_date, return_date, etc.)
      * @return array<string,mixed> Returns booking with id, status, created_at, total_amount, booking_ref
      */
-    public function createPhoneBooking(string $renterId, string $vehicleId, array $data): array
+    public function createPhoneBooking(string $renterId, ?string $vehicleId, array $data): array
     {
         // Ensure schema columns exist
         try {
@@ -28,6 +28,7 @@ final class StaffBookingRepository
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS created_by_staff_id UUID");
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS booking_ref VARCHAR(50)");
             $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'");
+            $this->pdo->exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pickup_time VARCHAR(20) DEFAULT NULL");
             // Call-center minicab requests should allow null daily price.
             $this->pdo->exec("ALTER TABLE bookings ALTER COLUMN price_per_day DROP NOT NULL");
         } catch (PDOException $e) {
@@ -41,41 +42,48 @@ final class StaffBookingRepository
         $this->pdo->beginTransaction();
 
         try {
-            // Verify vehicle exists and is available
-            $vehicleStmt = $this->pdo->prepare("SELECT owner_id, status FROM vehicles WHERE id = ? FOR UPDATE");
-            $vehicleStmt->execute([$vehicleId]);
-            $vehicle = $vehicleStmt->fetch(PDO::FETCH_ASSOC);
-            if (!$vehicle) {
-                throw new PDOException('Vehicle not found');
-            }
-            if (($vehicle['status'] ?? '') !== 'available') {
-                throw new PDOException('Vehicle is not available');
-            }
-
-            // Check for overlapping bookings
             $pickupDate = $data['pickup_date'] ?? null;
             $returnDate = $data['return_date'] ?? null;
-            $newEndDate = $returnDate ?: $pickupDate;
-            
-            $conflictStmt = $this->pdo->prepare("
-                SELECT COUNT(*)
-                FROM bookings
-                WHERE vehicle_id = ?
-                  AND status IN ('pending', 'confirmed', 'in_progress')
-                  AND pickup_date <= ?
-                  AND (return_date IS NULL OR return_date >= ?)
-            ");
-            $conflictStmt->execute([$vehicleId, $newEndDate, $pickupDate]);
-            $conflicts = (int)$conflictStmt->fetchColumn();
-            if ($conflicts > 0) {
-                throw new PDOException('Vehicle already has an overlapping booking for selected dates');
+            $ownerId = null;
+
+            if ($vehicleId !== null && trim($vehicleId) !== '') {
+                // Verify vehicle exists and is available only when flow pre-assigns vehicle.
+                $vehicleStmt = $this->pdo->prepare("SELECT owner_id, status FROM vehicles WHERE id = ? FOR UPDATE");
+                $vehicleStmt->execute([$vehicleId]);
+                $vehicle = $vehicleStmt->fetch(PDO::FETCH_ASSOC);
+                if (!$vehicle) {
+                    throw new PDOException('Vehicle not found');
+                }
+                if (($vehicle['status'] ?? '') !== 'available') {
+                    throw new PDOException('Vehicle is not available');
+                }
+
+                // Check overlaps only for assigned-vehicle flows.
+                $newEndDate = $returnDate ?: $pickupDate;
+                $conflictStmt = $this->pdo->prepare("
+                    SELECT COUNT(*)
+                    FROM bookings
+                    WHERE vehicle_id = ?
+                      AND status IN ('pending', 'confirmed', 'in_progress')
+                      AND pickup_date <= ?
+                      AND (return_date IS NULL OR return_date >= ?)
+                ");
+                $conflictStmt->execute([$vehicleId, $newEndDate, $pickupDate]);
+                $conflicts = (int)$conflictStmt->fetchColumn();
+                if ($conflicts > 0) {
+                    throw new PDOException('Vehicle already has an overlapping booking for selected dates');
+                }
+
+                $ownerId = $vehicle['owner_id'] ?? null;
+            } else {
+                $vehicleId = null;
             }
 
             // Insert booking
             $stmt = $this->pdo->prepare("
                 INSERT INTO bookings (
                     renter_id, owner_id, vehicle_id, booking_type, status,
-                    pickup_date, return_date, pickup_location, return_location,
+                    pickup_date, pickup_time, return_date, pickup_location, return_location,
                     total_days, subtotal, discount_amount, total_amount,
                     special_requests, driver_requested, phone_customer_name,
                     phone_customer_phone, phone_customer_email, created_by_staff_id,
@@ -86,7 +94,7 @@ final class StaffBookingRepository
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
+                    ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
                 )
                 RETURNING id, status, created_at, total_amount
             ");
@@ -99,11 +107,12 @@ final class StaffBookingRepository
             }
             $stmt->execute([
                 $renterId,
-                $vehicle['owner_id'],
+                $ownerId,
                 $vehicleId,
                 $bookingType,
                 $initialStatus,
                 $pickupDate,
+                $data['pickup_time'] ?? null,
                 $returnDate,
                 $data['pickup_location'],
                 $data['return_location'] ?? null,
@@ -177,12 +186,17 @@ final class StaffBookingRepository
         $stmt = $this->pdo->prepare("
             SELECT 
                 b.id, b.booking_type, b.pickup_date, b.return_date,
+                b.pickup_time,
                 b.pickup_location, b.return_location, b.total_amount,
                 b.status, b.created_at,
                 COALESCE(u.full_name, b.phone_customer_name) as customer_name,
                 COALESCE(u.email, b.phone_customer_email) as customer_email,
                 COALESCE(u.phone, b.phone_customer_phone) as customer_phone,
-                v.brand, v.model, v.license_plate, v.thumbnail_url,
+                    v.brand, v.model, v.license_plate,
+                    CASE
+                        WHEN v.thumbnail_id IS NOT NULL THEN '/api/vehicles.php?action=get-image&id=' || v.thumbnail_id::text
+                        ELSE NULL
+                    END AS thumbnail_url,
                 staff.full_name as staff_name
             FROM bookings b
             LEFT JOIN users u ON b.renter_id = u.id
@@ -204,12 +218,18 @@ final class StaffBookingRepository
         $stmt = $this->pdo->prepare("
             SELECT 
                 b.id, b.booking_type, b.pickup_date, b.return_date,
+                b.pickup_time,
                 b.pickup_location, b.return_location, b.total_amount,
-                b.status, b.created_at,
+                b.status, b.created_at, b.booking_ref,
+                b.ride_tier, b.service_type, b.number_of_passengers,
                 COALESCE(u.full_name, b.phone_customer_name) as customer_name,
                 COALESCE(u.email, b.phone_customer_email) as customer_email,
                 COALESCE(u.phone, b.phone_customer_phone) as customer_phone,
-                v.brand, v.model, v.license_plate
+                    v.brand, v.model, v.license_plate,
+                    CASE
+                        WHEN v.thumbnail_id IS NOT NULL THEN '/api/vehicles.php?action=get-image&id=' || v.thumbnail_id::text
+                        ELSE NULL
+                    END AS thumbnail_url
             FROM bookings b
             LEFT JOIN users u ON b.renter_id = u.id
             LEFT JOIN vehicles v ON b.vehicle_id = v.id
@@ -233,8 +253,12 @@ final class StaffBookingRepository
                 COALESCE(u.full_name, b.phone_customer_name) as customer_name,
                 COALESCE(u.email, b.phone_customer_email) as customer_email,
                 COALESCE(u.phone, b.phone_customer_phone) as customer_phone,
-                v.brand, v.model, v.license_plate, v.year, v.thumbnail_url,
-                staff.full_name as staff_name
+                v.brand, v.model, v.license_plate, v.year,
+                staff.full_name as staff_name,
+                CASE
+                    WHEN v.thumbnail_id IS NOT NULL THEN '/api/vehicles.php?action=get-image&id=' || v.thumbnail_id::text
+                    ELSE NULL
+                END AS thumbnail_url
             FROM bookings b
             LEFT JOIN users u ON b.renter_id = u.id
             LEFT JOIN vehicles v ON b.vehicle_id = v.id
@@ -308,7 +332,11 @@ final class StaffBookingRepository
     {
         $stmt = $this->pdo->prepare("
             SELECT id, brand, model, license_plate, status, seats, 
-                   thumbnail_url, category
+                   CASE
+                       WHEN thumbnail_id IS NOT NULL THEN '/api/vehicles.php?action=get-image&id=' || thumbnail_id::text
+                       ELSE NULL
+                   END AS thumbnail_url,
+                   category
             FROM vehicles
             ORDER BY brand ASC, model ASC
             LIMIT ?

@@ -14,6 +14,7 @@
 
         orderFilter: document.getElementById('ctrlOrderStatusFilter'),
         reloadOrdersBtn: document.getElementById('ctrlReloadOrders'),
+        orderSearch: document.getElementById('ctrlOrderSearch'),
         ordersTable: document.getElementById('ctrlOrdersTable'),
         orderMsg: document.getElementById('ctrlOrderStatusMsg'),
         orderModal: document.getElementById('ctrlOrderModal'),
@@ -33,11 +34,15 @@
         vehicleImage: document.getElementById('ctrlVehicleImage'),
         saveVehicleBtn: document.getElementById('ctrlSaveVehicle'),
         resetVehicleBtn: document.getElementById('ctrlResetVehicle'),
+        vehicleSearch: document.getElementById('ctrlVehicleSearch'),
+        vehicleTierFilter: document.getElementById('ctrlVehicleTierFilter'),
+        vehicleSeatsFilter: document.getElementById('ctrlVehicleSeatsFilter'),
         vehiclesTable: document.getElementById('ctrlVehiclesTable'),
         vehicleMsg: document.getElementById('ctrlVehicleStatusMsg'),
 
         driverFilter: document.getElementById('ctrlDriverStatusFilter'),
         reloadDriversBtn: document.getElementById('ctrlReloadDrivers'),
+        driverSearch: document.getElementById('ctrlDriverSearch'),
         driversTable: document.getElementById('ctrlDriversTable'),
         driverMsg: document.getElementById('ctrlDriverStatusMsg'),
 
@@ -88,6 +93,30 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    function normalizedQuery(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function bestMatchScore(query, candidates) {
+        if (!query) return 0;
+        let best = Number.POSITIVE_INFINITY;
+
+        for (const c of candidates) {
+            const text = normalizedQuery(c);
+            if (!text) continue;
+            if (text.startsWith(query)) {
+                best = Math.min(best, 0);
+                continue;
+            }
+            const idx = text.indexOf(query);
+            if (idx >= 0) {
+                best = Math.min(best, 10 + idx);
+            }
+        }
+
+        return Number.isFinite(best) ? best : -1;
     }
 
     async function apiGet(params) {
@@ -179,12 +208,13 @@
     }
 
     function renderOrdersTable() {
-        if (!ordersCache.length) {
-            el.ordersTable.innerHTML = '<tr><td colspan="6">No orders found</td></tr>';
+        const rows = getFilteredOrders();
+        if (!rows.length) {
+            el.ordersTable.innerHTML = '<tr><td colspan="6">No matching orders found</td></tr>';
             return;
         }
 
-        el.ordersTable.innerHTML = ordersCache.map((o) => {
+        el.ordersTable.innerHTML = rows.map((o) => {
             const id = escapeHtml(o.id || '');
             const customer = escapeHtml(o.customer_name || o.user_name || o.renter_name || 'Customer');
             const pickupDate = escapeHtml(o.pickup_date || '-');
@@ -217,6 +247,29 @@
         }).join('');
 
         bindOrderRowActions();
+    }
+
+    function getFilteredOrders() {
+        const q = normalizedQuery(el.orderSearch ? el.orderSearch.value : '');
+        if (!q) {
+            return ordersCache.slice();
+        }
+
+        return ordersCache
+            .map((o) => {
+                const score = bestMatchScore(q, [
+                    o.id,
+                    o.customer_name,
+                    o.user_name,
+                    o.renter_name,
+                    o.pickup_date,
+                    o.status
+                ]);
+                return { o, score };
+            })
+            .filter((x) => x.score >= 0)
+            .sort((a, b) => a.score - b.score)
+            .map((x) => x.o);
     }
 
     function bindOrderRowActions() {
@@ -458,11 +511,11 @@
     }
 
     async function loadVehicles() {
-        el.vehiclesTable.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+        el.vehiclesTable.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
 
         const data = await apiGet({ action: 'get_vehicles' });
         if (!data.success) {
-            el.vehiclesTable.innerHTML = '<tr><td colspan="6">Cannot load vehicles</td></tr>';
+            el.vehiclesTable.innerHTML = '<tr><td colspan="7">Cannot load vehicles</td></tr>';
             setVehicleMsg(data.message || 'Cannot load vehicles', true);
             return;
         }
@@ -473,15 +526,17 @@
     }
 
     function renderVehiclesTable() {
-        if (!vehiclesCache.length) {
-            el.vehiclesTable.innerHTML = '<tr><td colspan="6">No vehicles</td></tr>';
+        const rows = getFilteredVehicles();
+        if (!rows.length) {
+            el.vehiclesTable.innerHTML = '<tr><td colspan="7">No matching vehicles</td></tr>';
             return;
         }
 
-        el.vehiclesTable.innerHTML = vehiclesCache.map((v) => {
+        el.vehiclesTable.innerHTML = rows.map((v) => {
             const id = escapeHtml(v.id || '');
             const vm = escapeHtml((v.brand || '') + ' ' + (v.model || ''));
             const plate = escapeHtml(v.license_plate || '-');
+            const seat = escapeHtml(formatCustomerSeats(v.seats));
             const cat = escapeHtml(v.category || '-');
             const tier = renderTierChip(v.service_tier || 'standard');
             const status = renderVehicleStatusBadge(v.status || 'unavailable');
@@ -497,6 +552,7 @@
             return '<tr>' +
                 '<td>' + vm + '</td>' +
                 '<td>' + plate + '</td>' +
+                '<td>' + seat + '</td>' +
                 '<td>' + cat + '</td>' +
                 '<td>' + tier + '</td>' +
                 '<td>' + status + '</td>' +
@@ -543,9 +599,65 @@
         });
     }
 
+    function getFilteredVehicles() {
+        const q = normalizedQuery(el.vehicleSearch ? el.vehicleSearch.value : '');
+        const tierFilter = normalizedQuery(el.vehicleTierFilter ? el.vehicleTierFilter.value : 'all');
+        const seatsFilter = normalizedQuery(el.vehicleSeatsFilter ? el.vehicleSeatsFilter.value : 'all');
+
+        let rows = vehiclesCache.slice();
+
+        if (tierFilter && tierFilter !== 'all') {
+            rows = rows.filter((v) => normalizeTier(v.service_tier || 'standard') === tierFilter);
+        }
+
+        if (seatsFilter && seatsFilter !== 'all') {
+            rows = rows.filter((v) => formatCustomerSeats(v.seats) === seatsFilter);
+        }
+
+        if (!q) {
+            return rows;
+        }
+
+        return rows
+            .map((v) => {
+                const score = bestMatchScore(q, [
+                    v.id,
+                    v.brand,
+                    v.model,
+                    v.license_plate,
+                    v.category,
+                    v.service_tier,
+                    formatCustomerSeats(v.seats)
+                ]);
+                return { v, score };
+            })
+            .filter((x) => x.score >= 0)
+            .sort((a, b) => a.score - b.score)
+            .map((x) => x.v);
+    }
+
+    function formatCustomerSeats(rawSeats) {
+        const totalSeats = parseInt(rawSeats, 10);
+        if (!Number.isFinite(totalSeats) || totalSeats <= 0) {
+            return '-';
+        }
+        if (totalSeats === 5) {
+            return '4';
+        }
+        if (totalSeats === 7) {
+            return '7';
+        }
+        return String(totalSeats);
+    }
+
     function driverStatusBadgeClass(status) {
         if (status === 'dispatched') return 'ctrl-badge ctrl-in-progress';
         return 'ctrl-badge ctrl-pending';
+    }
+
+    function driverServiceStateBadgeClass(state) {
+        if (state === 'on_service') return 'ctrl-badge ctrl-service-on';
+        return 'ctrl-badge ctrl-service-free';
     }
 
     function toTitleCase(value) {
@@ -632,17 +744,19 @@
     function renderDriversTable() {
         if (!el.driversTable) return;
 
-        if (!driversCache.length) {
-            el.driversTable.innerHTML = '<tr><td colspan="5">No drivers found</td></tr>';
+        const rows = getFilteredDrivers();
+        if (!rows.length) {
+            el.driversTable.innerHTML = '<tr><td colspan="6">No matching drivers found</td></tr>';
             return;
         }
 
-        el.driversTable.innerHTML = driversCache.map((d) => {
+        el.driversTable.innerHTML = rows.map((d) => {
             const id = escapeHtml(d.id || '');
             const name = escapeHtml(d.full_name || 'Driver');
             const email = escapeHtml(d.email || '-');
             const phone = escapeHtml(d.phone || '-');
             const status = (d.status === 'dispatched') ? 'dispatched' : 'pending';
+            const serviceState = (d.service_state === 'on_service') ? 'on_service' : 'free';
             const assignedVehicle = d.assigned_vehicle_id
                 ? escapeHtml([d.brand, d.model, d.license_plate].filter(Boolean).join(' - '))
                 : '-';
@@ -666,11 +780,36 @@
                 '<td>' + email + '<br><small>' + phone + '</small></td>' +
                 '<td>' + assignedVehicle + '</td>' +
                 '<td><span class="' + driverStatusBadgeClass(status) + '">' + escapeHtml(status) + '</span></td>' +
+                '<td><span class="' + driverServiceStateBadgeClass(serviceState) + '">' + escapeHtml(serviceState.replace('_', ' ')) + '</span></td>' +
                 '<td>' + actionHtml + '</td>' +
                 '</tr>';
         }).join('');
 
         bindDriverRowActions();
+    }
+
+    function getFilteredDrivers() {
+        const q = normalizedQuery(el.driverSearch ? el.driverSearch.value : '');
+        if (!q) {
+            return driversCache.slice();
+        }
+
+        return driversCache
+            .map((d) => {
+                const assignedVehicle = [d.brand, d.model, d.license_plate].filter(Boolean).join(' ');
+                const score = bestMatchScore(q, [
+                    d.id,
+                    d.full_name,
+                    d.email,
+                    d.phone,
+                    assignedVehicle,
+                    d.status
+                ]);
+                return { d, score };
+            })
+            .filter((x) => x.score >= 0)
+            .sort((a, b) => a.score - b.score)
+            .map((x) => x.d);
     }
 
     function bindDriverRowActions() {
@@ -753,6 +892,8 @@
             el.saveVehicleBtn.disabled = true;
         }
 
+        const seatValue = Number(el.seats.value || 5);
+
         const payload = {
             brand: el.brand.value.trim(),
             model: el.model.value.trim(),
@@ -760,7 +901,7 @@
             license_plate: el.license.value.trim(),
             category: el.category.value.trim() || 'sedan',
             service_tier: (el.serviceTier.value || 'standard').trim(),
-            seats: Number(el.seats.value || 5),
+            seats: seatValue,
             color: el.color.value.trim()
         };
 
@@ -774,6 +915,14 @@
 
         if (!['eco', 'standard', 'luxury'].includes(payload.service_tier)) {
             setVehicleMsg('Vehicle tier must be eco, standard, or luxury.', true);
+            if (el.saveVehicleBtn) {
+                el.saveVehicleBtn.disabled = false;
+            }
+            return;
+        }
+
+        if (![5, 7].includes(payload.seats)) {
+            setVehicleMsg('Seats must be 5 or 7.', true);
             if (el.saveVehicleBtn) {
                 el.saveVehicleBtn.disabled = false;
             }
@@ -849,12 +998,32 @@
             el.orderFilter.addEventListener('change', loadOrders);
         }
 
+        if (el.orderSearch) {
+            el.orderSearch.addEventListener('input', renderOrdersTable);
+        }
+
         if (el.reloadDriversBtn) {
             el.reloadDriversBtn.addEventListener('click', loadDrivers);
         }
 
         if (el.driverFilter) {
             el.driverFilter.addEventListener('change', loadDrivers);
+        }
+
+        if (el.driverSearch) {
+            el.driverSearch.addEventListener('input', renderDriversTable);
+        }
+
+        if (el.vehicleSearch) {
+            el.vehicleSearch.addEventListener('input', renderVehiclesTable);
+        }
+
+        if (el.vehicleTierFilter) {
+            el.vehicleTierFilter.addEventListener('change', renderVehiclesTable);
+        }
+
+        if (el.vehicleSeatsFilter) {
+            el.vehicleSeatsFilter.addEventListener('change', renderVehiclesTable);
         }
 
         if (el.saveVehicleBtn) {

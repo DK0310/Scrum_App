@@ -852,7 +852,7 @@ final class BookingRepository
      */
     public function getBookingFullInfo(string $bookingId): ?array
     {
-        $stmt = $this->pdo->prepare("SELECT subtotal, discount_amount, total_amount, pickup_location, return_location, vehicle_id FROM bookings WHERE id = ? LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT subtotal, discount_amount, total_amount, pickup_location, return_location, pickup_date, pickup_time, vehicle_id FROM bookings WHERE id = ? LIMIT 1");
         $stmt->execute([$bookingId]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }

@@ -23,7 +23,7 @@ use Mpdf\Output\Destination;
  * @return array<string, string>
  */
 function privatehire_build_invoice_replacements(array $booking): array {
-    $currency = \EnvLoader::get('INVOICE_CURRENCY', 'USD');
+  $currency = strtoupper((string)\EnvLoader::get('INVOICE_CURRENCY', 'GBP'));
     $tz = \EnvLoader::get('INVOICE_TIMEZONE', 'Asia/Ho_Chi_Minh');
 
     try {
@@ -39,28 +39,61 @@ function privatehire_build_invoice_replacements(array $booking): array {
         $year  = trim((string)($booking['year'] ?? ''));
         $vehicleName = trim($brand . ' ' . $model . (empty($year) ? '' : (' ' . $year)));
     }
+
+    // Legacy key compatibility used by some APIs
+    if ($vehicleName === '') {
+      $brand = trim((string)($booking['vehicle_brand'] ?? ''));
+      $model = trim((string)($booking['vehicle_model'] ?? ''));
+      $year  = trim((string)($booking['vehicle_year'] ?? $booking['year'] ?? ''));
+      $vehicleName = trim($brand . ' ' . $model . (empty($year) ? '' : (' ' . $year)));
+    }
     
     // Fallback if still empty - search using alternative keys
     if ($vehicleName === '') {
         $vehicleName = trim((string)($booking['vehicle'] ?? '')) ?: 'Vehicle';
     }
 
-    $fmtMoney = function ($n) use ($currency): string {
-        if ($n === null || $n === '') return '';
-        $val = (float)$n;
-        return ($currency === 'USD' ? '$' : '') . number_format($val, 2);
+    $currencySymbol = match ($currency) {
+      'GBP' => '£',
+      'USD' => '$',
+      'EUR' => '€',
+      default => $currency . ' ',
     };
 
-    $fmtPickupTime = function ($dateStr) use ($tz): string {
-        if (!$dateStr || $dateStr === '') return '';
-        try {
-            // Parse as UTC first (backend stores as UTC), then convert to target timezone
-            $dt = new DateTime($dateStr, new DateTimeZone('UTC'));
-            $dt->setTimeZone(new DateTimeZone($tz));
-            return $dt->format('M d, Y \a\t h:i A');
-        } catch (Exception $e) {
-            return (string)$dateStr;
+    $fmtMoney = function ($n) use ($currencySymbol): string {
+        if ($n === null || $n === '') return '';
+        $val = (float)$n;
+      return $currencySymbol . number_format($val, 2);
+    };
+
+    $fmtPickupTime = function ($dateStr, $timeStr = null): string {
+      $dateRaw = trim((string)$dateStr);
+      if ($dateRaw === '') {
+        return '';
+      }
+
+      $timeRaw = trim((string)($timeStr ?? ''));
+      if ($timeRaw !== '') {
+        $normalizedTime = strtoupper(str_replace(' ', '', $timeRaw));
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) === 1) {
+          return $dateRaw . ' ' . $normalizedTime;
         }
+
+        try {
+          $dt = new DateTime($dateRaw);
+          return $dt->format('Y-m-d') . ' ' . $normalizedTime;
+        } catch (Exception $e) {
+          return $dateRaw . ' ' . $normalizedTime;
+        }
+      }
+
+      try {
+        $dt = new DateTime($dateRaw);
+        $hasTime = str_contains($dateRaw, ':') || str_contains($dateRaw, 'T');
+        return $hasTime ? $dt->format('Y-m-d h:iA') : $dt->format('Y-m-d');
+      } catch (Exception $e) {
+        return $dateRaw;
+      }
     };
 
     $discountRaw = $booking['discount_amount'] ?? $booking['discount'] ?? $booking['discount_value'] ?? 0;
@@ -84,10 +117,10 @@ function privatehire_build_invoice_replacements(array $booking): array {
         'payment_status' => (string)($booking['payment_status'] ?? ''),
 
         'vehicle_name' => $vehicleName,
-        'license_plate' => (string)($booking['license_plate'] ?? ''),
+        'license_plate' => (string)($booking['license_plate'] ?? $booking['vehicle_license_plate'] ?? ''),
         'pickup_location' => (string)($booking['pickup_location'] ?? ''),
         'destination' => (string)($booking['return_location'] ?? $booking['destination'] ?? ''),
-        'pickup_time' => $fmtPickupTime((string)($booking['pickup_date'] ?? '')),
+        'pickup_time' => $fmtPickupTime((string)($booking['pickup_date'] ?? ''), (string)($booking['pickup_time'] ?? '')),
 
         'company_name' => (string)\EnvLoader::get('INVOICE_COMPANY_NAME', 'PrivateHire'),
         'support_email' => (string)\EnvLoader::get('INVOICE_SUPPORT_EMAIL', ''),

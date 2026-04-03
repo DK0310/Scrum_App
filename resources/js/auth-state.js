@@ -58,15 +58,10 @@
         if (role !== 'admin' && role !== 'controlstaff' && role !== 'callcenterstaff' && role !== 'driver') {
             const ordersLink = document.createElement('a');
             ordersLink.href = '/orders.php';
-            ordersLink.className = 'btn btn-outline btn-sm navbar-action-link';
+            ordersLink.className = 'btn btn-outline btn-sm navbar-action-link navbar-my-orders';
             ordersLink.textContent = '📋 My Orders';
             if (currentPage === 'orders') {
-                ordersLink.style.background = 'var(--primary)';
-                ordersLink.style.color = 'white';
-                ordersLink.style.borderColor = 'var(--primary)';
-            } else {
-                ordersLink.style.color = 'var(--primary)';
-                ordersLink.style.borderColor = 'var(--primary)';
+                ordersLink.classList.add('active');
             }
             insertBeforeMenu(actions, ordersLink);
         }

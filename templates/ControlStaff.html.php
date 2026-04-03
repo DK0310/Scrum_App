@@ -322,6 +322,8 @@
     .ctrl-pending { background: var(--ctrl-warn-bg); color: var(--ctrl-warn-tx); }
     .ctrl-in-progress { background: #deecff; color: #184ea8; }
     .ctrl-done { background: var(--ctrl-ok-bg); color: var(--ctrl-ok-tx); }
+    .ctrl-service-free { background: #dbf8e8; color: #00695c; }
+    .ctrl-service-on { background: #ffe3e3; color: #a22424; }
     .ctrl-status { color: #355176; font-size: 0.9rem; margin-top: 8px; }
     .ctrl-order-status-cell { min-width: 140px; }
     .ctrl-order-actions-cell { min-width: 210px; }
@@ -475,7 +477,7 @@
             <div class="ctrl-toolbar" style="padding:12px 12px 0;">
                 <div class="ctrl-search-wrap">
                     <span class="ctrl-search-icon">&#128269;</span>
-                    <input class="ctrl-search" type="text" placeholder="Filter orders...">
+                    <input class="ctrl-search" id="ctrlOrderSearch" type="text" placeholder="Filter orders...">
                 </div>
             </div>
             <table>
@@ -516,7 +518,7 @@
             <div class="ctrl-toolbar" style="padding:12px 12px 0;">
                 <div class="ctrl-search-wrap">
                     <span class="ctrl-search-icon">&#128269;</span>
-                    <input class="ctrl-search" type="text" placeholder="Search driver or assigned plate...">
+                    <input class="ctrl-search" id="ctrlDriverSearch" type="text" placeholder="Search driver or assigned plate...">
                 </div>
             </div>
             <table>
@@ -525,12 +527,13 @@
                         <th>Driver</th>
                         <th>Contact</th>
                         <th>Assigned Vehicle</th>
-                        <th>Status</th>
+                        <th>Dispatch</th>
+                        <th>Service State</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="ctrlDriversTable">
-                    <tr><td colspan="5">Loading...</td></tr>
+                    <tr><td colspan="6">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -550,18 +553,18 @@
                 <select class="ctrl-select" id="ctrlCategory">
                     <option value="sedan" selected>Sedan</option>
                     <option value="suv">SUV</option>
-                    <option value="hatchback">Hatchback</option>
-                    <option value="pickup">Pickup</option>
-                    <option value="van">Van</option>
                     <option value="electric">Electric</option>
-                    <option value="luxury">Luxury</option>
+                    <option value="hybrid">Hybrid</option>
                 </select>
                 <select class="ctrl-select" id="ctrlServiceTier">
                     <option value="eco">Eco</option>
                     <option value="standard" selected>Standard</option>
                     <option value="luxury">Luxury</option>
                 </select>
-                <input class="ctrl-input" id="ctrlSeats" type="number" placeholder="Seats" value="5">
+                <select class="ctrl-select" id="ctrlSeats">
+                    <option value="5" selected>4 seats</option>
+                    <option value="7">7 seats</option>
+                </select>
                 <input class="ctrl-input" id="ctrlColor" placeholder="Color">
                 <input class="ctrl-input" id="ctrlVehicleImage" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
             </div>
@@ -577,14 +580,26 @@
             <div class="ctrl-toolbar" style="padding:12px 12px 0;">
                 <div class="ctrl-search-wrap">
                     <span class="ctrl-search-icon">&#128269;</span>
-                    <input class="ctrl-search" type="text" placeholder="Filter fleet...">
+                    <input class="ctrl-search" id="ctrlVehicleSearch" type="text" placeholder="Filter fleet...">
                 </div>
+                <select class="ctrl-select" id="ctrlVehicleTierFilter" style="max-width:170px;">
+                    <option value="all">All Tiers</option>
+                    <option value="eco">Eco</option>
+                    <option value="standard">Standard</option>
+                    <option value="luxury">Luxury</option>
+                </select>
+                <select class="ctrl-select" id="ctrlVehicleSeatsFilter" style="max-width:160px;">
+                    <option value="all">All Seats</option>
+                    <option value="4">4 seats</option>
+                    <option value="7">7 seats</option>
+                </select>
             </div>
             <table>
                 <thead>
                     <tr>
                         <th>Vehicle</th>
                         <th>Plate</th>
+                        <th>Seat</th>
                         <th>Category</th>
                         <th>Tier</th>
                         <th>Status</th>
@@ -592,7 +607,7 @@
                     </tr>
                 </thead>
                 <tbody id="ctrlVehiclesTable">
-                    <tr><td colspan="6">Loading...</td></tr>
+                    <tr><td colspan="7">Loading...</td></tr>
                 </tbody>
             </table>
         </div>

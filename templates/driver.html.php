@@ -89,6 +89,18 @@
     </div>
 </section>
 
+<div id="passengerOrdersModal" class="driver-modal-overlay" style="display:none;">
+    <div class="driver-modal" role="dialog" aria-modal="true" aria-labelledby="passengerOrdersTitle">
+        <div class="driver-modal-header">
+            <h3 id="passengerOrdersTitle">Passenger Orders</h3>
+            <button type="button" class="driver-modal-close" onclick="closePassengerOrdersModal()">✕</button>
+        </div>
+        <div class="driver-modal-body" id="passengerOrdersBody">
+            Loading passenger orders...
+        </div>
+    </div>
+</div>
+
 <style>
 .driver-shell {
     max-width: 1280px;
@@ -350,15 +362,139 @@
 .status-chip {
     display: inline-flex;
     align-items: center;
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: 999px;
-    font-size: 0.74rem;
+    font-size: 0.66rem;
+    line-height: 1;
+    white-space: nowrap;
     font-weight: 700;
     text-transform: uppercase;
 }
 .status-on_route { background: #e0f2fe; color: #075985; }
 .status-on_trip { background: #dbf8e8; color: #00695c; }
 .status-completed { background: #dcfce7; color: #166534; }
+.driver-passenger-link {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+}
+.driver-passenger-link .driver-route-main {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.driver-passenger-link:hover .driver-route-main {
+    color: #0b4f46;
+}
+.driver-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1050;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.driver-modal {
+    width: min(920px, 96vw);
+    max-height: 88vh;
+    overflow: hidden;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid #dce6e2;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+}
+.driver-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.driver-modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: #111827;
+}
+.driver-modal-close {
+    border: none;
+    background: #f3f4f6;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.driver-modal-body {
+    padding: 14px 16px 18px;
+    overflow: auto;
+    max-height: calc(88vh - 62px);
+}
+.driver-modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+.driver-modal-section {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.driver-modal-section h4 {
+    margin: 0;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 12px;
+    background: #f8fafc;
+    color: #334155;
+}
+.driver-modal-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.driver-modal-list li {
+    padding: 10px 12px;
+    border-top: 1px solid #f1f5f9;
+    font-size: 0.85rem;
+    color: #1f2937;
+}
+.driver-modal-list li:first-child {
+    border-top: none;
+}
+.driver-modal-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+.driver-modal-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    line-height: 1;
+    white-space: nowrap;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.driver-modal-sub {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+.driver-modal-label {
+    color: #334155;
+    font-weight: 700;
+}
 .order-action-btn {
     border: 0;
     border-radius: 8px;
@@ -380,6 +516,7 @@
     .assigned-vehicle-card { min-width: 0; }
     .driver-table-wrap { overflow-x: auto; }
     .driver-table-wrap table { min-width: 980px; }
+    .driver-modal-grid { grid-template-columns: 1fr; }
 }
 </style>
 

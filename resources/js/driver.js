@@ -63,6 +63,73 @@ function escapeHtml(v) {
     });
 }
 
+function closePassengerOrdersModal() {
+    const modal = document.getElementById('passengerOrdersModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+function renderPassengerOrdersList(orders) {
+    if (!orders || !orders.length) {
+        return '<li>No orders.</li>';
+    }
+
+    return orders.map(function(order) {
+        const statusRaw = String(order.status || '-');
+        const statusText = statusRaw.replace(/_/g, ' ');
+        return '<li>' +
+            '<div class="driver-modal-item-head">' +
+                '<strong>Booking #' + escapeHtml(order.booking_id) + '</strong>' +
+                '<span class="driver-modal-status status-' + escapeHtml(statusRaw) + '">' + escapeHtml(statusText) + '</span>' +
+            '</div>' +
+            '<div class="driver-modal-sub"><span class="driver-modal-label">Pickup:</span> ' + escapeHtml(order.pickup_location || '-') + '</div>' +
+            '<div class="driver-modal-sub"><span class="driver-modal-label">Destination:</span> ' + escapeHtml(order.destination || '-') + '</div>' +
+            '<div class="driver-modal-sub"><span class="driver-modal-label">Time:</span> ' + escapeHtml(formatDateTime(order.pickup_date, order.pickup_time)) + '</div>' +
+            '<div class="driver-modal-sub"><span class="driver-modal-label">Price:</span> ' + escapeHtml(formatMoney(order.price)) + '</div>' +
+        '</li>';
+    }).join('');
+}
+
+async function openPassengerOrdersModal(passengerId, passengerName, viewType) {
+    const modal = document.getElementById('passengerOrdersModal');
+    const body = document.getElementById('passengerOrdersBody');
+    const title = document.getElementById('passengerOrdersTitle');
+    if (!modal || !body || !title) return;
+
+    const type = viewType === 'history' ? 'history' : 'current';
+    title.textContent = 'Passenger ' + (type === 'history' ? 'History' : 'Current') + ' Orders - ' + (passengerName || 'Passenger');
+    body.innerHTML = 'Loading passenger orders...';
+    modal.style.display = 'flex';
+
+    try {
+        const data = await driverRequest('get_passenger_orders', { passenger_id: passengerId });
+        if (!data.success) {
+            body.innerHTML = '<div style="color:#991b1b;">' + escapeHtml(data.message || 'Unable to load passenger orders') + '</div>';
+            return;
+        }
+
+        const current = Array.isArray(data.current_orders) ? data.current_orders : [];
+        const history = Array.isArray(data.history_orders) ? data.history_orders : [];
+
+        if (type === 'history') {
+            body.innerHTML =
+                '<section class="driver-modal-section">' +
+                    '<h4>Order History</h4>' +
+                    '<ul class="driver-modal-list">' + renderPassengerOrdersList(history) + '</ul>' +
+                '</section>';
+            return;
+        }
+
+        body.innerHTML =
+            '<section class="driver-modal-section">' +
+                '<h4>Current Orders</h4>' +
+                '<ul class="driver-modal-list">' + renderPassengerOrdersList(current) + '</ul>' +
+            '</section>';
+    } catch (err) {
+        body.innerHTML = '<div style="color:#991b1b;">Network error while loading passenger orders.</div>';
+    }
+}
+
 function initialsFromName(name) {
     const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
     if (!parts.length) return 'CU';
@@ -179,7 +246,7 @@ function renderCurrentOrders() {
                         ? '<img class="driver-passenger-avatar" src="' + escapeHtml(order.passenger_avatar) + '" alt="Passenger avatar">'
                         : '<div class="driver-passenger-fallback">' + escapeHtml(initialsFromName(order.passenger_name)) + '</div>') +
                     '<div>' +
-                        '<div class="driver-route-main">' + escapeHtml(order.passenger_name) + '</div>' +
+                        '<button type="button" class="driver-passenger-link" data-passenger-id="' + escapeHtml(order.passenger_id || '') + '" data-passenger-name="' + escapeHtml(order.passenger_name || 'Passenger') + '"><div class="driver-route-main">' + escapeHtml(order.passenger_name) + '</div></button>' +
                         '<div class="driver-route-sub">Current</div>' +
                     '</div>' +
                 '</div>' +
@@ -228,6 +295,16 @@ function renderCurrentOrders() {
             }
         });
     });
+
+    document.querySelectorAll('.driver-passenger-link').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const passengerId = btn.getAttribute('data-passenger-id') || '';
+            const passengerName = btn.getAttribute('data-passenger-name') || 'Passenger';
+            const viewType = btn.getAttribute('data-view-type') || 'current';
+            if (!passengerId) return;
+            openPassengerOrdersModal(passengerId, passengerName, viewType);
+        });
+    });
 }
 
 function renderHistoryOrders() {
@@ -254,7 +331,7 @@ function renderHistoryOrders() {
                         ? '<img class="driver-passenger-avatar" src="' + escapeHtml(order.passenger_avatar) + '" alt="Passenger avatar">'
                         : '<div class="driver-passenger-fallback">' + escapeHtml(initialsFromName(order.passenger_name)) + '</div>') +
                     '<div>' +
-                        '<div class="driver-route-main">' + escapeHtml(order.passenger_name) + '</div>' +
+                        '<button type="button" class="driver-passenger-link" data-passenger-id="' + escapeHtml(order.passenger_id || '') + '" data-passenger-name="' + escapeHtml(order.passenger_name || 'Passenger') + '" data-view-type="history"><div class="driver-route-main">' + escapeHtml(order.passenger_name) + '</div></button>' +
                         '<div class="driver-route-sub">History</div>' +
                     '</div>' +
                 '</div>' +
@@ -274,6 +351,16 @@ function renderHistoryOrders() {
             '<td><span class="status-chip status-completed">completed</span></td>' +
         '</tr>';
     }).join('');
+
+    document.querySelectorAll('.driver-passenger-link').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const passengerId = btn.getAttribute('data-passenger-id') || '';
+            const passengerName = btn.getAttribute('data-passenger-name') || 'Passenger';
+            const viewType = btn.getAttribute('data-view-type') || 'history';
+            if (!passengerId) return;
+            openPassengerOrdersModal(passengerId, passengerName, viewType);
+        });
+    });
 }
 
 async function loadCurrentOrders() {
@@ -315,4 +402,13 @@ async function loadHistoryOrders() {
 document.addEventListener('DOMContentLoaded', async function() {
     await loadAssignedVehicle();
     await Promise.all([loadCurrentOrders(), loadHistoryOrders()]);
+
+    const modal = document.getElementById('passengerOrdersModal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closePassengerOrdersModal();
+            }
+        });
+    }
 });

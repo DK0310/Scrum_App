@@ -16,6 +16,7 @@ require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
 require_once __DIR__ . '/../sql/TripRepository.php';
 require_once __DIR__ . '/../sql/NotificationRepository.php';
+require_once __DIR__ . '/notification-helpers.php';
 require_once __DIR__ . '/../Invoice/mailer.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -261,6 +262,7 @@ try {
         $sql = "
             SELECT
                 b.id AS booking_id,
+                b.renter_id,
                 b.status AS booking_status,
                 b.pickup_location,
                 b.return_location,
@@ -306,6 +308,7 @@ try {
 
             $orders[] = [
                 'booking_id' => $row['booking_id'],
+                'passenger_id' => $row['renter_id'] ?? null,
                 'trip_id' => $row['trip_id'] ?? null,
                 'passenger_name' => $row['passenger_name'] ?? 'Passenger',
                 'passenger_avatar' => $row['passenger_avatar'] ?? '',
@@ -320,6 +323,57 @@ try {
         }
 
         driver_json(['success' => true, 'orders' => $orders]);
+    }
+
+    if ($action === 'get_passenger_orders') {
+        $passengerId = trim((string)($_GET['passenger_id'] ?? $body['passenger_id'] ?? $_POST['passenger_id'] ?? ''));
+        if ($passengerId === '') {
+            driver_json(['success' => false, 'message' => 'Missing passenger_id'], 400);
+        }
+
+        $pickupTimeExpr = driver_booking_has_column($pdo, 'pickup_time')
+            ? 'b.pickup_time'
+            : 'NULL::text AS pickup_time';
+
+        $stmt = $pdo->prepare("\n            SELECT\n                b.id AS booking_id,\n                b.renter_id,\n                b.status AS booking_status,\n                b.pickup_location,\n                b.return_location,\n                b.pickup_date,\n                {$pickupTimeExpr},\n                b.total_amount,\n                b.ride_started_at,\n                b.ride_completed_at,\n                u.full_name AS passenger_name,\n                u.avatar_url AS passenger_avatar,\n                at.id AS trip_id,\n                at.status AS trip_status\n            FROM bookings b\n            JOIN users u ON u.id = b.renter_id\n            LEFT JOIN active_trips at ON at.booking_id = b.id\n            WHERE b.renter_id = :passenger_id\n              AND b.driver_id = :driver_id\n            ORDER BY COALESCE(b.ride_completed_at, b.pickup_date) DESC, b.created_at DESC\n            LIMIT 50\n        ");
+        $stmt->execute([
+            ':passenger_id' => $passengerId,
+            ':driver_id' => $userId,
+        ]);
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $current = [];
+        $history = [];
+
+        foreach ($rows as $row) {
+            $canonicalStatus = driver_canonical_status($row);
+            $entry = [
+                'booking_id' => $row['booking_id'],
+                'passenger_id' => $row['renter_id'] ?? null,
+                'trip_id' => $row['trip_id'] ?? null,
+                'passenger_name' => $row['passenger_name'] ?? 'Passenger',
+                'passenger_avatar' => $row['passenger_avatar'] ?? '',
+                'pickup_location' => $row['pickup_location'] ?? '',
+                'destination' => $row['return_location'] ?? '',
+                'pickup_date' => $row['pickup_date'] ?? null,
+                'pickup_time' => $row['pickup_time'] ?? null,
+                'price' => (float)($row['total_amount'] ?? 0),
+                'status' => $canonicalStatus,
+                'next_status' => driver_next_status($canonicalStatus),
+            ];
+
+            if ($canonicalStatus === 'completed') {
+                $history[] = $entry;
+            } else {
+                $current[] = $entry;
+            }
+        }
+
+        driver_json([
+            'success' => true,
+            'current_orders' => $current,
+            'history_orders' => $history,
+        ]);
     }
 
     if ($action === 'advance_order_status') {
@@ -464,6 +518,17 @@ try {
                             'license_plate' => $bookingDetails['license_plate'] ?? '',
                         ],
                     ]);
+
+                    $renterId = (string)($bookingDetails['renter_id'] ?? '');
+                    if ($renterId !== '') {
+                        createNotification(
+                            $pdo,
+                            $renterId,
+                            'booking',
+                            '🚗 Trip Started',
+                            'Your driver has started the trip and is heading to your pickup point.'
+                        );
+                    }
                 }
             } catch (Throwable $mailError) {
                 error_log('US17 dispatch email error [booking_id=' . $bookingId . ']: ' . $mailError->getMessage());

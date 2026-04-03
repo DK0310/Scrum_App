@@ -15,6 +15,7 @@ require_once __DIR__ . '/../config/env.php';
 require_once __DIR__ . '/../sql/UserRepository.php';
 require_once __DIR__ . '/../sql/BookingRepository.php';
 require_once __DIR__ . '/../sql/VehicleRepository.php';
+require_once __DIR__ . '/notification-helpers.php';
 
 $userRepo = new UserRepository($pdo);
 $bookingRepo = new BookingRepository($pdo);
@@ -42,6 +43,8 @@ function control_effective_payment_method(array $payment): string
 
 function control_refund_account_balance(UserRepository $userRepo, BookingRepository $bookingRepo, string $bookingId, array $booking, array $payment): bool
 {
+    global $pdo;
+
     $amount = isset($payment['amount']) ? (float)$payment['amount'] : 0.0;
     if ($amount <= 0) {
         return false;
@@ -63,6 +66,15 @@ function control_refund_account_balance(UserRepository $userRepo, BookingReposit
     $details['refunded_at'] = gmdate('c');
 
     $bookingRepo->updatePaymentByBookingId($bookingId, 'refunded', $details);
+
+    createNotification(
+        $pdo,
+        $targetUserId,
+        'payment',
+        '💷 Refund Processed',
+        'A refund of £' . number_format($amount, 2) . ' has been returned to your account balance for booking #' . $bookingId . '.'
+    );
+
     return true;
 }
 
@@ -435,6 +447,17 @@ try {
             throw new Exception('Unable to update status');
         }
 
+        if ($effectiveDriverId !== '' && !($requestedStatus === 'in_progress' && $currentStatus === 'pending')) {
+            $statusLabel = str_replace('_', ' ', $requestedStatus);
+            $bookingRepo->createDriverNotification(
+                $effectiveDriverId,
+                $bookingId,
+                'Order Status Updated',
+                'Order #' . $bookingId . ' has been updated to ' . $statusLabel . ' by Control Staff.',
+                'order_status_update'
+            );
+        }
+
         $vehicleId = $effectiveVehicleId;
         if ($vehicleId !== '') {
             if ($requestedStatus === 'in_progress') {
@@ -444,8 +467,8 @@ try {
 
         if ($requestedStatus === 'in_progress' && $currentStatus === 'pending') {
             try {
-                require_once __DIR__ . '/../invoice/invoice_mpdf.php';
-                require_once __DIR__ . '/../invoice/mailer.php';
+                require_once __DIR__ . '/../Invoice/invoice_mpdf.php';
+                require_once __DIR__ . '/../Invoice/mailer.php';
 
                 $invoiceData = $bookingRepo->getInvoiceData($bookingId);
                 if ($invoiceData && !empty($invoiceData['renter_email'])) {
@@ -456,6 +479,7 @@ try {
                         'pickup_location' => $invoiceData['pickup_location'] ?? '',
                         'return_location' => $invoiceData['return_location'] ?? '',
                         'pickup_date' => $invoiceData['pickup_date'] ?? '',
+                        'pickup_time' => $invoiceData['pickup_time'] ?? '',
                         'return_date' => $invoiceData['return_date'] ?? null,
                         'total_days' => $invoiceData['total_days'] ?? 1,
                         'price_per_day' => $invoiceData['price_per_day'] ?? 0,
@@ -465,9 +489,8 @@ try {
                         'payment_method' => $invoiceData['payment_method'] ?? 'cash',
                         'renter_name' => $invoiceData['renter_name'] ?? '',
                         'renter_email' => $invoiceData['renter_email'] ?? '',
-                        'vehicle_brand' => $invoiceData['brand'] ?? '',
-                        'vehicle_model' => $invoiceData['model'] ?? '',
-                        'vehicle_license_plate' => $invoiceData['license_plate'] ?? '',
+                        'vehicle_name' => trim(((string)($invoiceData['brand'] ?? '')) . ' ' . ((string)($invoiceData['model'] ?? ''))),
+                        'license_plate' => $invoiceData['license_plate'] ?? '',
                     ];
 
                     $pdf = privatehire_generate_invoice_pdf_local($invoiceBooking);
@@ -487,6 +510,17 @@ try {
                 }
             } catch (Exception $mailErr) {
                 error_log('ControlStaff in_progress invoice send failed: ' . $mailErr->getMessage());
+            }
+
+            $renterId = (string)($booking['renter_id'] ?? '');
+            if ($renterId !== '') {
+                createNotification(
+                    $pdo,
+                    $renterId,
+                    'booking',
+                    '🚗 Trip Confirmed By Staff',
+                    'Your order has been confirmed by staff and your trip is now in progress.'
+                );
             }
         }
 
@@ -535,6 +569,17 @@ try {
             $bookingRepo->markVehicleAvailable($vehicleId);
         }
 
+        $renterId = (string)($booking['renter_id'] ?? '');
+        if ($renterId !== '') {
+            createNotification(
+                $pdo,
+                $renterId,
+                'alert',
+                '❌ Booking Rejected',
+                'Your booking request was rejected by staff.'
+            );
+        }
+
         echo json_encode(['success' => true, 'message' => 'Order rejected']);
         exit;
     }
@@ -573,6 +618,7 @@ try {
             $driver['unassign_lock_reason'] = $isLocked
                 ? 'Cannot unassign driver while the assigned vehicle is serving an in-progress order.'
                 : '';
+            $driver['service_state'] = $isLocked ? 'on_service' : 'free';
             return $driver;
         }, $drivers);
 
@@ -677,6 +723,11 @@ try {
             throw new Exception('Missing required fields for vehicle');
         }
 
+        $seats = (int)($payload['seats'] ?? 5);
+        if (!in_array($seats, [5, 7], true)) {
+            throw new Exception('Seats must be 5 or 7.');
+        }
+
         $vehicleId = $vehicleRepo->create([
             'added_by_staff_id' => $userId,
             'brand' => $brand,
@@ -684,7 +735,7 @@ try {
             'year' => $year,
             'license_plate' => $licensePlate,
             'category' => trim((string)($payload['category'] ?? 'sedan')),
-            'seats' => (int)($payload['seats'] ?? 5),
+            'seats' => $seats,
             'color' => trim((string)($payload['color'] ?? '')),
             'price_per_day' => $pricePerDay,
             'service_tier' => $serviceTier,
@@ -735,6 +786,14 @@ try {
             if (array_key_exists($f, $payload)) {
                 $fields[$f] = $payload[$f];
             }
+        }
+
+        if (array_key_exists('seats', $fields)) {
+            $seats = (int)$fields['seats'];
+            if (!in_array($seats, [5, 7], true)) {
+                throw new Exception('Seats must be 5 or 7.');
+            }
+            $fields['seats'] = $seats;
         }
 
         if (empty($fields)) {
