@@ -609,82 +609,6 @@
         </div>
     </section>
 
-    <!-- ===== CAR DETAIL MODAL ===== -->
-    <div class="modal-overlay" id="carDetailModal">
-        <div class="modal" style="max-width:800px;max-height:92vh;overflow-y:auto;padding:0;">
-            <!-- Image Gallery -->
-            <div class="detail-gallery" id="detailGallery">
-                <div class="detail-gallery-main" id="detailMainImage">
-                    <span style="color:var(--gray-400);">No Photo</span>
-                </div>
-                <div class="detail-gallery-thumbs" id="detailThumbs"></div>
-                <button class="modal-close" onclick="closeModal('carDetailModal')" style="position:absolute;top:12px;right:12px;z-index:5;background:rgba(0,0,0,0.5);color:white;border:none;width:36px;height:36px;border-radius:50%;font-size:1.1rem;cursor:pointer;">✕</button>
-            </div>
-            <!-- Details Body -->
-            <div style="padding:28px 32px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-                    <div>
-                        <h2 class="detail-car-title" id="detailTitle" style="font-size:1.5rem;font-weight:800;color:var(--gray-900);margin-bottom:4px;"></h2>
-                        <p class="detail-car-sub" id="detailSub" style="font-size:0.875rem;color:var(--gray-500);"></p>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:1.75rem;font-weight:800;color:var(--primary);" id="detailPrice"></div>
-                        <div style="font-size:0.8rem;color:var(--gray-500);">per day</div>
-                    </div>
-                </div>
-
-                <!-- Rating -->
-                <div id="detailRating" style="display:flex;align-items:center;gap:8px;margin-bottom:20px;"></div>
-
-                <!-- Specs Grid -->
-                <div class="detail-specs-grid" id="detailSpecs" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
-
-                <!-- Features -->
-                <div id="detailFeaturesSection" style="margin-bottom:24px;display:none;">
-                    <h4 style="font-size:0.85rem;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Features</h4>
-                    <div id="detailFeatures" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
-                </div>
-
-                <!-- Location -->
-                <div id="detailLocationSection" style="margin-bottom:24px;display:none;">
-                    <h4 style="font-size:0.85rem;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Location</h4>
-                    <div id="detailLocation" style="font-size:0.938rem;color:var(--gray-700);"></div>
-                </div>
-
-                <!-- Owner Info -->
-                <div id="detailOwnerSection" style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--gray-50);border-radius:var(--radius-md);margin-bottom:24px;">
-                    <div id="detailOwnerAvatar" style="width:44px;height:44px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;"></div>
-                    <div>
-                        <div style="font-weight:600;color:var(--gray-800);" id="detailOwnerName"></div>
-                        <div style="font-size:0.8rem;color:var(--gray-500);" id="detailOwnerLabel">Vehicle Owner</div>
-                    </div>
-                </div>
-
-                <!-- Price Breakdown -->
-                <div id="detailPriceSection" style="padding:16px;background:var(--primary-50);border-radius:var(--radius-md);margin-bottom:24px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                        <span style="font-size:0.875rem;color:var(--gray-600);">Daily Rate</span>
-                        <span style="font-weight:700;color:var(--gray-800);" id="detailDailyRate"></span>
-                    </div>
-                    <div id="detailWeeklyRow" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;display:none;">
-                        <span style="font-size:0.875rem;color:var(--gray-600);">Weekly Rate</span>
-                        <span style="font-weight:700;color:var(--gray-800);" id="detailWeeklyRate"></span>
-                    </div>
-                    <div id="detailMonthlyRow" style="display:flex;justify-content:space-between;align-items:center;display:none;">
-                        <span style="font-size:0.875rem;color:var(--gray-600);">Monthly Rate</span>
-                        <span style="font-weight:700;color:var(--gray-800);" id="detailMonthlyRate"></span>
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div style="display:flex;gap:12px;">
-                    <button class="btn btn-outline" style="flex:1;" onclick="closeModal('carDetailModal')">Close</button>
-                    <button class="btn btn-primary" style="flex:2;" id="detailBookBtn" onclick="bookCar('')">📋 Book This Car</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <style>
         /* Car Detail Modal Styles */
         .detail-gallery { position: relative; width: 100%; background: var(--gray-900); }
@@ -776,13 +700,13 @@
         }
     </style>
 
-    <script src="/resources/js/home.js"></script>                                                                   
-    <script>
-        const isLoggedIn = <?= json_encode($isLoggedIn ?? false) ?>;
-    </script>
+    <?php include __DIR__ . '/partials/vehicle-detail-modal.html.php'; ?>
 
-    <!-- ===== AUTH MODALS ===== -->
-    <?php include __DIR__ . '/login.html.php'; ?>
-    <?php include __DIR__ . '/register.html.php'; ?>
+    <script>
+        window.isLoggedIn = <?= json_encode($isLoggedIn ?? false) ?>;
+        window.USER_ROLE = <?= json_encode($userRole ?? 'user') ?>;
+    </script>
+    <script src="/resources/js/cars.js"></script>
+    <script src="/resources/js/home.js"></script>
 
 <?php include __DIR__ . '/layout/footer.html.php'; ?>                                                            

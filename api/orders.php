@@ -389,7 +389,7 @@ if ($action === 'modify-booking') {
             }
 
             $updates['pickup_date'] = $newPickupAt->format('Y-m-d');
-            $updates['pickup_time'] = $newPickupAt->format('H:i');
+            $updates['pickup_time'] = strtoupper($newPickupAt->format('h:iA'));
         }
 
         if (array_key_exists('number_of_passengers', $updates)) {
@@ -557,6 +557,7 @@ if ($action === 'update-status') {
 
         $vehicleId = $booking['vehicle_id'];
         $updatedVehicleStatus = null;
+        $availabilitySubscribersNotified = 0;
 
         if ($newStatus === 'confirmed') {
             $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
@@ -572,12 +573,14 @@ if ($action === 'update-status') {
                 exit;
             }
             $updatedVehicleStatus = 'available';
+            $availabilitySubscribersNotified = notifyVehicleAvailabilitySubscribers($pdo, $vehicleId);
         } elseif ($newStatus === 'cancelled') {
             if (!empty($vehicleId)) {
                 $vehicleStatus = $bookingRepo->getVehicleStatus($vehicleId);
                 if ($vehicleStatus === 'rented') {
                     $bookingRepo->updateVehicleStatus($vehicleId, 'available');
                     $updatedVehicleStatus = 'available';
+                    $availabilitySubscribersNotified = notifyVehicleAvailabilitySubscribers($pdo, $vehicleId);
                 } else {
                     $updatedVehicleStatus = $vehicleStatus;
                 }
@@ -614,6 +617,7 @@ if ($action === 'update-status') {
             'new_status' => $newStatus,
             'vehicle_id' => $vehicleId,
             'vehicle_status' => $updatedVehicleStatus,
+            'availability_subscribers_notified' => $availabilitySubscribersNotified,
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);

@@ -20,10 +20,10 @@
                         <div class="filter-group">
                             <div class="filter-group-title">Service Tier</div>
                             <div class="tier-switch" id="tierFilters">
-                                <button class="filter-chip active" data-value="">All</button>
-                                <button class="filter-chip" data-value="eco">Eco</button>
-                                <button class="filter-chip" data-value="standard">Standard</button>
-                                <button class="filter-chip" data-value="luxury">Luxury</button>
+                                <button type="button" class="filter-chip active" data-value="">All</button>
+                                <button type="button" class="filter-chip" data-value="eco">Eco</button>
+                                <button type="button" class="filter-chip" data-value="standard">Standard</button>
+                                <button type="button" class="filter-chip" data-value="luxury">Luxury</button>
                             </div>
                         </div>
                         <div class="filter-group">
@@ -38,9 +38,9 @@
                         <div class="filter-group">
                             <div class="filter-group-title">Capacity</div>
                             <div class="seat-switch" id="seatFilters">
-                                <button class="filter-chip active" data-value="">All</button>
-                                <button class="filter-chip" data-value="4">4 Seats</button>
-                                <button class="filter-chip" data-value="7">7 Seats</button>
+                                <button type="button" class="filter-chip active" data-value="">All</button>
+                                <button type="button" class="filter-chip" data-value="4">4 Seats</button>
+                                <button type="button" class="filter-chip" data-value="7">7 Seats</button>
                             </div>
                         </div>
                         <!--<div class="filter-group">
@@ -59,8 +59,8 @@
                     </div>
 
                     <div class="filter-actions">
-                        <button class="btn btn-outline filter-reset-btn" onclick="resetFilters()">Reset</button>
-                        <button class="btn btn-primary filter-apply-btn" onclick="applyAllFilters()">Apply Filters</button>
+                        <button type="button" class="btn btn-outline filter-reset-btn" onclick="resetFilters()">Reset</button>
+                        <button type="button" class="btn btn-primary filter-apply-btn" onclick="applyAllFilters()">Apply Filters</button>
                     </div>
                 </div>
             </div>
@@ -483,119 +483,7 @@
         }
     </style>
 
-    <!-- ===== CAR DETAIL MODAL ===== -->
-    <div class="modal-overlay" id="carDetailModal">
-        <div class="modal" style="max-width:800px;max-height:92vh;overflow-y:auto;padding:0;">
-            <!-- Image Gallery -->
-            <div class="detail-gallery" id="detailGallery">
-                <div class="detail-gallery-main" id="detailMainImage">
-                    <span style="color:var(--gray-400);">No Photo</span>
-                </div>
-                <div class="detail-gallery-thumbs" id="detailThumbs"></div>
-                <button class="modal-close" onclick="closeModal('carDetailModal')" style="position:absolute;top:12px;right:12px;z-index:5;background:rgba(0,0,0,0.5);color:white;border:none;width:36px;height:36px;border-radius:50%;font-size:1.1rem;cursor:pointer;">✕</button>
-            </div>
-            <!-- Details Body -->
-            <div style="padding:28px 32px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-                    <div>
-                        <h2 class="detail-car-title" id="detailTitle" style="font-size:1.5rem;font-weight:800;color:var(--gray-900);margin-bottom:4px;"></h2>
-                        <p class="detail-car-sub" id="detailSub" style="font-size:0.875rem;color:var(--gray-500);"></p>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:1.75rem;font-weight:800;color:var(--primary);" id="detailPrice"></div>
-                        <div style="font-size:0.8rem;color:var(--gray-500);">per day</div>
-                    </div>
-                </div>
-
-                <!-- Rating -->
-                <div id="detailRating" style="display:flex;align-items:center;gap:8px;margin-bottom:20px;"></div>
-
-                <!-- Specs Grid -->
-                <div class="detail-specs-grid" id="detailSpecs" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
-
-                <!-- Features -->
-                <div id="detailFeaturesSection" style="margin-bottom:24px;display:none;">
-                    <h4 style="font-size:0.85rem;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Features</h4>
-                    <div id="detailFeatures" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
-                </div>
-
-                <!-- Location -->
-                <div id="detailLocationSection" style="margin-bottom:24px;display:none;">
-                    <h4 style="font-size:0.85rem;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Location</h4>
-                    <div id="detailLocation" style="font-size:0.938rem;color:var(--gray-700);"></div>
-                </div>
-
-                <!-- Owner Info -->
-                <div id="detailOwnerSection" style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--gray-50);border-radius:var(--radius-md);margin-bottom:24px;">
-                    <div id="detailOwnerAvatar" style="width:44px;height:44px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;"></div>
-                    <div>
-                        <div style="font-weight:600;color:var(--gray-800);" id="detailOwnerName"></div>
-                        <div style="font-size:0.8rem;color:var(--gray-500);" id="detailOwnerLabel">Vehicle Owner</div>
-                    </div>
-                </div>
-
-                <!-- Price Breakdown -->
-                <div id="detailPriceSection" style="padding:16px;background:var(--primary-50);border-radius:var(--radius-md);margin-bottom:24px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                        <span style="font-size:0.875rem;color:var(--gray-600);">Daily Rate</span>
-                        <span style="font-weight:700;color:var(--gray-800);" id="detailDailyRate"></span>
-                    </div>
-                    <div id="detailWeeklyRow" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;display:none;">
-                        <span style="font-size:0.875rem;color:var(--gray-600);">Weekly Rate</span>
-                        <span style="font-weight:700;color:var(--gray-800);" id="detailWeeklyRate"></span>
-                    </div>
-                    <div id="detailMonthlyRow" style="display:flex;justify-content:space-between;align-items:center;display:none;">
-                        <span style="font-size:0.875rem;color:var(--gray-600);">Monthly Rate</span>
-                        <span style="font-weight:700;color:var(--gray-800);" id="detailMonthlyRate"></span>
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div style="display:flex;gap:12px;">
-                    <button class="btn btn-outline" style="flex:1;" onclick="closeModal('carDetailModal')">Close</button>
-                    <button class="btn btn-primary" style="flex:2;" id="detailBookBtn" onclick="bookCar('')">📋 Book This Car</button>
-                </div>
-                <div id="detailStatusNotice" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius-md);text-align:center;">
-                    <span style="font-size:0.85rem;color:#991b1b;font-weight:600;">🔒 This vehicle is currently rented</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <style>
-        /* Car Detail Modal Styles */
-        .detail-gallery { position: relative; width: 100%; background: var(--gray-900); }
-        .detail-gallery-main {
-            width: 100%; height: 320px; display: flex; align-items: center; justify-content: center;
-            overflow: hidden;
-        }
-        .detail-gallery-main img { width: 100%; height: 100%; object-fit: cover; }
-        .detail-gallery-thumbs {
-            display: flex; gap: 6px; padding: 8px 12px; background: rgba(0,0,0,0.6);
-            overflow-x: auto; position: absolute; bottom: 0; left: 0; right: 0;
-        }
-        .detail-gallery-thumbs:empty { display: none; }
-        .detail-thumb {
-            width: 56px; height: 40px; border-radius: 6px; overflow: hidden; cursor: pointer;
-            border: 2px solid transparent; flex-shrink: 0; opacity: 0.6; transition: all 0.2s;
-        }
-        .detail-thumb:hover, .detail-thumb.active { opacity: 1; border-color: white; }
-        .detail-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .detail-spec-item {
-            padding: 14px 10px; background: var(--gray-50); border-radius: var(--radius-md); text-align: center;
-        }
-        .detail-spec-icon { font-size: 1.25rem; margin-bottom: 4px; }
-        .detail-spec-label { font-size: 0.7rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
-        .detail-spec-value { font-size: 0.875rem; font-weight: 700; color: var(--gray-800); }
-        .detail-feature-tag {
-            padding: 6px 14px; border-radius: var(--radius-full); font-size: 0.8rem;
-            font-weight: 500; background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200);
-        }
-        @media (max-width: 640px) {
-            .detail-gallery-main { height: 220px; }
-            #detailSpecs { grid-template-columns: repeat(2, 1fr) !important; }
-        }
-    </style>
+    <?php include __DIR__ . '/partials/vehicle-detail-modal.html.php'; ?>
 
     <!-- ===== CARS PAGE JAVASCRIPT ===== -->
     <script>

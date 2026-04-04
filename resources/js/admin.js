@@ -7,6 +7,15 @@ const ADMIN_API = '/api/admin.php';
 let allAdminVehicles = [];
 let allAdminBookings = [];
 let allAdminUsers = [];
+let bookingHistoryState = {
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 1,
+    regions: [],
+};
+let bookingHistoryDebounceTimer = null;
+let bookingHistoryListenersAttached = false;
 
 // ===== ADMIN NOTIFICATION (self-contained) =====
 function adminNotify(message, type = 'success') {
@@ -54,6 +63,10 @@ function switchTab(tab) {
     if (tab === 'users') loadAdminUsers();
     if (tab === 'vehicles') loadAdminVehicles();
     if (tab === 'bookings') loadAdminBookings();
+    if (tab === 'history') {
+        initBookingHistoryFilters();
+        loadAdminBookingHistory(1);
+    }
 }
 
 // ===== HERO SLIDES =====
@@ -491,6 +504,268 @@ async function adminDeleteBooking(id) {
         adminNotify(data.message, data.success ? 'success' : 'error');
         if (data.success) loadAdminBookings();
     } catch (e) { adminNotify('Failed.', 'error'); }
+}
+
+// ===== BOOKING HISTORY =====
+function initBookingHistoryFilters() {
+    if (bookingHistoryListenersAttached) return;
+
+    const ids = ['historySearchInput', 'historyStatusFilter', 'historyRegionFilter', 'historyDateFrom', 'historyDateTo'];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const eventName = id === 'historySearchInput' ? 'input' : 'change';
+        el.addEventListener(eventName, () => scheduleHistoryReload(1));
+    });
+
+    bookingHistoryListenersAttached = true;
+}
+
+function scheduleHistoryReload(page = 1) {
+    if (bookingHistoryDebounceTimer) {
+        clearTimeout(bookingHistoryDebounceTimer);
+    }
+    bookingHistoryDebounceTimer = setTimeout(() => {
+        loadAdminBookingHistory(page);
+    }, 220);
+}
+
+function refreshBookingHistory() {
+    loadAdminBookingHistory(1);
+}
+
+function getBookingHistoryFilters() {
+    return {
+        search: (document.getElementById('historySearchInput')?.value || '').trim(),
+        status: document.getElementById('historyStatusFilter')?.value || '',
+        region_id: document.getElementById('historyRegionFilter')?.value || '',
+        date_from: document.getElementById('historyDateFrom')?.value || '',
+        date_to: document.getElementById('historyDateTo')?.value || '',
+    };
+}
+
+async function loadAdminBookingHistory(page = 1) {
+    bookingHistoryState.page = page;
+    const filters = getBookingHistoryFilters();
+
+    const listPayload = {
+        action: 'admin-booking-history-list',
+        page,
+        limit: bookingHistoryState.limit,
+        ...filters,
+    };
+
+    const summaryPayload = {
+        action: 'admin-booking-history-summary',
+        ...filters,
+    };
+
+    try {
+        const [listRes, summaryRes] = await Promise.all([
+            fetch(ADMIN_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(listPayload),
+            }),
+            fetch(ADMIN_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(summaryPayload),
+            }),
+        ]);
+
+        const listData = await listRes.json();
+        const summaryData = await summaryRes.json();
+
+        if (!listData.success) {
+            document.getElementById('adminHistoryList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Failed to load booking history.</div>';
+            return;
+        }
+
+        const rows = listData.history || [];
+        const pagination = listData.pagination || {};
+        bookingHistoryState.total = pagination.total || 0;
+        bookingHistoryState.totalPages = pagination.total_pages || 1;
+        bookingHistoryState.page = pagination.page || page;
+        bookingHistoryState.regions = listData.regions || [];
+
+        renderHistoryRegionFilter(bookingHistoryState.regions);
+        renderBookingHistoryTable(rows);
+        renderBookingHistoryPagination();
+
+        if (summaryData.success) {
+            renderBookingHistorySummary(summaryData.summary || {});
+            renderHistoryAggregationTable('historyDailyAggregation', summaryData.daily || []);
+            renderHistoryAggregationTable('historyQuarterlyAggregation', summaryData.quarterly || []);
+        }
+    } catch (e) {
+        document.getElementById('adminHistoryList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Error loading booking history.</div>';
+    }
+}
+
+function renderHistoryRegionFilter(regions) {
+    const select = document.getElementById('historyRegionFilter');
+    if (!select) return;
+
+    const current = select.value;
+    const options = ['<option value="">All Regions</option>'];
+    regions.forEach((region) => {
+        options.push(`<option value="${region.id}">${region.name}</option>`);
+    });
+    select.innerHTML = options.join('');
+
+    if (current) {
+        select.value = current;
+    }
+}
+
+function formatHistoryUtc(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    const text = new Intl.DateTimeFormat('en-GB', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'UTC',
+    }).format(date);
+    return text + ' UTC';
+}
+
+function renderBookingHistoryTable(rows) {
+    const el = document.getElementById('adminHistoryList');
+    if (!el) return;
+
+    if (!rows || rows.length === 0) {
+        el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">No archived booking records found.</div>';
+        return;
+    }
+
+    const statusColors = { completed: '#16a34a', cancelled: '#dc2626' };
+    el.innerHTML = `<div style="font-size:0.8rem;color:var(--gray-400);margin-bottom:8px;">Showing ${rows.length} record(s) on this page</div>
+    <div style="overflow-x:auto;"><table class="admin-table">
+        <thead><tr>
+            <th>Booking ID</th><th>Customer</th><th>Region</th><th>Pickup Date</th><th>Archived At (UTC)</th><th>Total</th><th>Status</th><th>Action</th>
+        </tr></thead>
+        <tbody>${rows.map((row) => {
+            const amount = row.total_amount ? '$' + Number(row.total_amount).toFixed(2) : '$0.00';
+            const archivedAt = formatHistoryUtc(row.archived_at);
+            const pickupDate = row.pickup_date ? new Date(row.pickup_date).toLocaleDateString('en-GB') : '—';
+            const color = statusColors[row.status] || '#6b7280';
+            return `<tr>
+                <td><span style="font-family:monospace;font-size:0.75rem;">${row.booking_id || '—'}</span></td>
+                <td>${row.customer_name || 'Unknown'}<br><span style="font-size:0.75rem;color:var(--gray-400);">${row.customer_email || ''}</span></td>
+                <td>${row.region_name || 'Unassigned'}</td>
+                <td>${pickupDate}</td>
+                <td>${archivedAt}</td>
+                <td style="font-weight:700;color:var(--primary);">${amount}</td>
+                <td><span style="color:${color};font-weight:700;text-transform:capitalize;">${(row.status || '').replace('_', ' ')}</span></td>
+                <td><button class="btn-xs danger" onclick="adminDeleteBookingFromHistory('${row.booking_id}')">Delete</button></td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table></div>`;
+}
+
+function renderBookingHistoryPagination() {
+    const el = document.getElementById('historyPagination');
+    if (!el) return;
+
+    const page = bookingHistoryState.page;
+    const totalPages = bookingHistoryState.totalPages;
+    const total = bookingHistoryState.total;
+
+    el.innerHTML = `
+        <span style="font-size:0.82rem;color:var(--gray-500);margin-right:8px;">Total ${total} records</span>
+        <button class="btn-xs edit" ${page <= 1 ? 'disabled' : ''} onclick="loadAdminBookingHistory(${page - 1})">Prev</button>
+        <span style="font-size:0.82rem;color:var(--gray-600);">Page ${page} / ${totalPages}</span>
+        <button class="btn-xs edit" ${page >= totalPages ? 'disabled' : ''} onclick="loadAdminBookingHistory(${page + 1})">Next</button>
+    `;
+}
+
+function renderBookingHistorySummary(summary) {
+    const totalEl = document.getElementById('historyKpiTotal');
+    const completedEl = document.getElementById('historyKpiCompleted');
+    const cancelledEl = document.getElementById('historyKpiCancelled');
+    const revenueEl = document.getElementById('historyKpiRevenue');
+
+    if (totalEl) totalEl.textContent = String(summary.total_bookings || 0);
+    if (completedEl) completedEl.textContent = String(summary.completed_bookings || 0);
+    if (cancelledEl) cancelledEl.textContent = String(summary.cancelled_bookings || 0);
+    if (revenueEl) revenueEl.textContent = '$' + Number(summary.total_revenue || 0).toFixed(2);
+}
+
+function renderHistoryAggregationTable(targetId, rows) {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+
+    if (!rows || rows.length === 0) {
+        el.innerHTML = '<div style="color:var(--gray-400);">No data.</div>';
+        return;
+    }
+
+    const topRows = rows.slice(0, 10);
+    el.innerHTML = `<div style="overflow-x:auto;"><table class="admin-table" style="font-size:0.78rem;">
+        <thead><tr><th>Period</th><th>Total</th><th>Completed</th><th>Cancelled</th><th>Revenue</th></tr></thead>
+        <tbody>${topRows.map((row) => `
+            <tr>
+                <td>${row.period_label || '—'}</td>
+                <td>${row.total_bookings || 0}</td>
+                <td>${row.completed_bookings || 0}</td>
+                <td>${row.cancelled_bookings || 0}</td>
+                <td>$${Number(row.total_revenue || 0).toFixed(2)}</td>
+            </tr>
+        `).join('')}</tbody>
+    </table></div>`;
+}
+
+function buildBookingHistoryExportUrl(action) {
+    const filters = getBookingHistoryFilters();
+    const params = new URLSearchParams({ action });
+
+    Object.keys(filters).forEach((key) => {
+        const value = (filters[key] || '').trim();
+        if (value) params.set(key, value);
+    });
+
+    return ADMIN_API + '?' + params.toString();
+}
+
+function exportBookingHistoryCsv() {
+    const url = buildBookingHistoryExportUrl('admin-booking-history-export-csv');
+    window.open(url, '_blank');
+}
+
+function exportBookingHistoryPdf() {
+    const url = buildBookingHistoryExportUrl('admin-booking-history-export-pdf');
+    window.open(url, '_blank');
+}
+
+async function adminDeleteBookingFromHistory(bookingId) {
+    if (!confirm('Delete this booking permanently? This action cannot be undone.')) return;
+
+    const reason = prompt('Delete reason (optional):', '') || '';
+
+    try {
+        const res = await fetch(ADMIN_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'admin-booking-history-delete',
+                booking_id: bookingId,
+                delete_reason: reason,
+            }),
+        });
+
+        const data = await res.json();
+        adminNotify(data.message || 'Request processed.', data.success ? 'success' : 'error');
+        if (data.success) {
+            loadAdminBookingHistory(bookingHistoryState.page);
+        }
+    } catch (e) {
+        adminNotify('Failed.', 'error');
+    }
 }
 
 // ===== USERS =====

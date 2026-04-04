@@ -3,6 +3,10 @@
 
 const VEHICLES_API = '/api/vehicles.php';
 const ADMIN_API = '/api/admin.php';
+const USER_ROLE = window.USER_ROLE || 'user';
+const NORMALIZED_USER_ROLE = String(USER_ROLE || 'user').toLowerCase().replace(/[-_\s]/g, '');
+const NON_CUSTOMER_ROLES = new Set(['admin', 'controlstaff', 'callcenterstaff', 'driver']);
+const CAN_SELF_SELECT_VEHICLE_BOOKING = NON_CUSTOMER_ROLES.has(NORMALIZED_USER_ROLE);
 
 // ===== UTILITIES =====
 function vehicleName(v) {
@@ -36,14 +40,22 @@ function cardVehicle(v) {
     const plate = (v.license_plate || '-');
     const tier = (v.service_tier || v.tier || v.category || 'Standard').trim();
     const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase();
+    const status = String(v.status || 'available').toLowerCase();
+    const isAvailable = status === 'available';
     const img = v.vehicle_image;
 
     const imgHtml = img
         ? `<img src="${escapeHtmlAttr(img)}" alt="${escapeHtmlAttr(name)}" style="width:100%;height:150px;object-fit:cover;display:block;">`
-        : `<div class="no-image-placeholder" style="height:150px;">No Image</div>`;
+        : `<img src="/resources/images/logo/logo.png" alt="${escapeHtmlAttr(name)}" style="width:100%;height:150px;object-fit:cover;display:block;">`;
+
+    const statusStyle = isAvailable
+        ? 'background:var(--success-light);color:var(--success);'
+        : 'background:#fee2e2;color:#991b1b;';
+
+    const cardAction = v.id ? ` onclick="handleHomeCarClick('${escapeHtmlAttr(v.id)}')" style="padding:0;overflow:hidden;border-radius:14px;cursor:pointer;"` : ' style="padding:0;overflow:hidden;border-radius:14px;"';
 
     return `
-        <div class="card" style="padding:0;overflow:hidden;border-radius:14px;">
+        <div class="card"${cardAction}>
             <div style="background:var(--gray-100);">${imgHtml}</div>
             <div style="padding:14px 14px 12px;">
                 <div style="font-weight:800;color:var(--gray-900);font-size:0.98rem;line-height:1.25;">${escapeHtml(name)}</div>
@@ -52,11 +64,20 @@ function cardVehicle(v) {
                     <div style="font-size:0.82rem;color:var(--gray-600);font-weight:700;">${escapeHtml(plate)}</div>
                 </div>
                 <div style="margin-top:10px;">
-                    <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:var(--success-light);color:var(--success);font-weight:800;font-size:0.75rem;">Available</span>
+                    <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;${statusStyle}font-weight:800;font-size:0.75rem;">${isAvailable ? 'Available' : 'Not Available'}</span>
                 </div>
             </div>
         </div>
     `;
+}
+
+function handleHomeCarClick(carId) {
+    if (!carId) return;
+    if (typeof window.openCarDetail === 'function') {
+        window.openCarDetail(carId);
+        return;
+    }
+    window.location.href = '/cars.php';
 }
 
 // ===== VEHICLE LOADING =====
@@ -77,7 +98,7 @@ async function loadAvailableVehicles() {
         if (vehicles.length === 0) {
             grid.innerHTML = `
                 <div style="grid-column:1/-1;text-align:center;padding:26px 18px;color:var(--gray-500);">
-                    No available vehicles found.
+                    No vehicles found.
                 </div>
             `;
             return;
@@ -255,14 +276,21 @@ function applyPromo(code) {
  * Book a specific car
  * Check login first, then redirect to booking page
  */
-function bookCar(carId) {
+function bookCarFromHome(carId) {
+    if (!CAN_SELF_SELECT_VEHICLE_BOOKING) {
+        if (typeof showToast === 'function') {
+            showToast('Customers cannot self-select a vehicle. Please contact Call Center staff to book.', 'warning');
+        }
+        return;
+    }
+
     const isLoggedIn = window.isLoggedIn || false;
     
     if (!isLoggedIn) {
         if (typeof showToast === 'function') showToast('Please sign in to book a car.', 'warning');
-        setTimeout(() => {
-            window.location.href = '/login.php?redirect=/booking.php&car_id=' + encodeURIComponent(carId);
-        }, 1000);
+        if (typeof showAuthModal === 'function') {
+            showAuthModal('login');
+        }
         return;
     }
     
@@ -280,7 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Export functions to global scope for onclick handlers
     window.filterByCategory = filterByCategory;
     window.applyPromo = applyPromo;
-    window.bookCar = bookCar;
+    if (typeof window.bookCar !== 'function') {
+        window.bookCar = bookCarFromHome;
+    }
+    window.handleHomeCarClick = handleHomeCarClick;
     window.loadHomeVehicles = loadAvailableVehicles;
     window.heroSlideNav = heroSlideNav;
     

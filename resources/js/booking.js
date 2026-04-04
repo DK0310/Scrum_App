@@ -650,12 +650,13 @@
   }
 
   // ===== CHECK AVAILABLE TIERS =====
-  async function checkAvailableTiers(passengers = 1) {
+  async function checkAvailableTiers(seatCapacity = 4) {
+    const normalizedSeatCapacity = Number(seatCapacity) >= 7 ? 7 : 4;
     try {
       const response = await fetch('/api/vehicles.php?action=check-available-tiers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passengers: passengers })
+        body: JSON.stringify({ seat_capacity: normalizedSeatCapacity })
       });
 
       const result = await response.json();
@@ -665,7 +666,7 @@
       }
 
       // Update ride tier UI based on availability and passenger count
-      updateRideTierUI(passengers, availableTiersByPassengers);
+      updateRideTierUI(normalizedSeatCapacity, availableTiersByPassengers);
     } catch (err) {
       console.error('Error checking available tiers:', err);
     }

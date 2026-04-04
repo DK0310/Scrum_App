@@ -57,6 +57,7 @@ require_once __DIR__ . '/bootstrap.php';
 $input = api_init();
 require_once __DIR__ . '/../Database/db.php';
 require_once __DIR__ . '/supabase-storage.php';
+require_once __DIR__ . '/notification-helpers.php';
 require_once __DIR__ . '/../sql/VehicleRepository.php';
 require_once __DIR__ . '/../sql/VehicleImageRepository.php';
 
@@ -121,6 +122,72 @@ function getVehicleImageIds($pdo, $vehicleId) {
     return $repo->listIdsByVehicleId((string)$vehicleId);
 }
 
+function toOptionalCapacityLbs($value): ?int {
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (!is_numeric($value)) {
+        return null;
+    }
+    $capacity = (int)$value;
+    return $capacity > 0 ? $capacity : null;
+}
+
+function appendVehicleCustomerFields(array &$vehicle): void {
+    $vehicle['luggage_capacity_lbs'] = toOptionalCapacityLbs($vehicle['capacity'] ?? null);
+}
+
+// ==========================================================
+// NOTIFY ME WHEN VEHICLE BECOMES AVAILABLE (auth required)
+// ==========================================================
+if ($action === 'notify-me') {
+    requireAuth();
+
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    $vehicleId = (string)($input['vehicle_id'] ?? $_GET['vehicle_id'] ?? '');
+
+    if ($userId === '') {
+        echo json_encode(['success' => false, 'message' => 'Invalid session. Please sign in again.']);
+        exit;
+    }
+
+    if ($vehicleId === '') {
+        echo json_encode(['success' => false, 'message' => 'Vehicle ID is required.']);
+        exit;
+    }
+
+    try {
+        $vehicle = $vehicleRepo->getById($vehicleId);
+        if (!$vehicle) {
+            echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
+            exit;
+        }
+
+        $status = strtolower((string)($vehicle['status'] ?? 'available'));
+        if ($status === 'available') {
+            echo json_encode([
+                'success' => true,
+                'message' => 'This vehicle is already available for booking now.'
+            ]);
+            exit;
+        }
+
+        $ok = subscribeVehicleAvailability($pdo, $userId, $vehicleId);
+        if (!$ok) {
+            echo json_encode(['success' => false, 'message' => 'Could not subscribe for availability notifications.']);
+            exit;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Subscribed successfully. We will notify you when this vehicle becomes available.'
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Failed to subscribe for availability updates.']);
+    }
+    exit;
+}
+
 // ==========================================================
 // FILTER OPTIONS (public - get available brands & categories from DB)
 // ==========================================================
@@ -144,28 +211,45 @@ if ($action === 'filter-options') {
 // CHECK AVAILABLE TIERS (public - check which tiers have available vehicles)
 // ==========================================================
 if ($action === 'check-available-tiers') {
-    $passengers = (int) ($input['passengers'] ?? 1);
-    $passengers = ($passengers >= 7) ? 7 : 4;
+    $seatCapacity = (int)($input['seat_capacity'] ?? $input['passengers'] ?? 4);
+    $seatCapacity = ($seatCapacity >= 7) ? 7 : 4;
     
     try {
-        // Get available vehicles grouped by service_tier
-        $query = "SELECT DISTINCT service_tier FROM vehicles WHERE status = 'available' AND seats >= ? AND service_tier IN ('eco', 'standard', 'luxury', 'premium')";
+        // Match seat class exactly for minicab options:
+        // 4-seat option => vehicles with seats < 7, 7-seat option => vehicles with seats >= 7.
+        $seatClause = $seatCapacity >= 7 ? 'seats >= ?' : 'seats < ?';
+        $seatValue = 7;
+
+        $query = "
+            SELECT service_tier, COUNT(*) AS total
+            FROM vehicles
+            WHERE status = 'available'
+              AND {$seatClause}
+              AND service_tier IN ('eco', 'standard', 'luxury', 'premium')
+            GROUP BY service_tier
+        ";
         $stmt = $pdo->prepare($query);
-        $stmt->execute([$passengers]);
+        $stmt->execute([$seatValue]);
         
-        $availableTiers = [];
+        $availableTiers = [
+            'eco' => false,
+            'standard' => false,
+            'luxury' => false,
+        ];
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $tier = strtolower((string)$row['service_tier']);
             if ($tier === 'premium') {
                 $tier = 'luxury';
             }
-            $availableTiers[$tier] = true;
+            if (array_key_exists($tier, $availableTiers)) {
+                $availableTiers[$tier] = ((int)($row['total'] ?? 0) > 0);
+            }
         }
         
         echo json_encode([
             'success' => true,
             'available_tiers' => $availableTiers,
-            'passenger_count' => $passengers
+            'seat_capacity' => $seatCapacity
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Error checking available tiers']);
@@ -261,7 +345,7 @@ if ($action === 'search-suggestions') {
 
 // ==========================================================
 // LIST VEHICLES (public - minimal listing for homepage)
-// Only show vehicles that staff published (available)
+// Show published fleet vehicles including unavailable states
 // ==========================================================
 if ($action === 'public-list') {
     $brand  = $_GET['brand'] ?? $input['brand'] ?? '';
@@ -274,6 +358,7 @@ if ($action === 'public-list') {
         // Attach first image (thumbnail if present) as vehicle_image
         foreach ($vehicles as &$v) {
             $v['price_per_day'] = isset($v['price_per_day']) ? (float)$v['price_per_day'] : null;
+            appendVehicleCustomerFields($v);
             try {
                 $imgs = getVehicleImageUrls($pdo, $v['id']);
                 $v['vehicle_image'] = $imgs[0] ?? null;
@@ -291,7 +376,7 @@ if ($action === 'public-list') {
 
 // ==========================================================
 // LIST VEHICLES (public - anyone can view)
-// Tightened: only expose available vehicles to customers
+// Includes unavailable states for "Not Available" customer UX
 // ==========================================================
 if ($action === 'list') {
     $filters = [
@@ -321,6 +406,7 @@ if ($action === 'list') {
             $v['features'] = $rawFeatures !== '' ? explode(',', str_replace('"', '', $rawFeatures)) : [];
             $v['price_per_day'] = isset($v['price_per_day']) ? (float)$v['price_per_day'] : 0.0;
             $v['avg_rating'] = isset($v['avg_rating']) ? (float)$v['avg_rating'] : 0.0;
+            appendVehicleCustomerFields($v);
             unset($v['thumbnail_id']);
         }
 
@@ -364,6 +450,7 @@ if ($action === 'get') {
         $vehicle['features'] = $vehicle['features'] ? explode(',', str_replace('"', '', $vehicle['features'])) : [];
         $vehicle['price_per_day'] = (float)$vehicle['price_per_day'];
         $vehicle['avg_rating'] = (float)$vehicle['avg_rating'];
+        appendVehicleCustomerFields($vehicle);
         unset($vehicle['thumbnail_id']);
 
         echo json_encode(['success' => true, 'vehicle' => $vehicle]);
@@ -390,6 +477,7 @@ if ($action === 'my-vehicles') {
             $v['features'] = $v['features'] ? explode(',', str_replace('"', '', $v['features'])) : [];
             $v['price_per_day'] = (float)$v['price_per_day'];
             $v['avg_rating'] = (float)$v['avg_rating'];
+            appendVehicleCustomerFields($v);
             unset($v['thumbnail_id']);
         }
 
@@ -427,6 +515,7 @@ if ($action === 'add') {
     $engineSize   = trim($input['engine_size'] ?? '');
     $consumption  = trim($input['consumption'] ?? '');
     $features     = $input['features'] ?? [];
+    $luggageCapacityLbs = toOptionalCapacityLbs($input['luggage_capacity_lbs'] ?? ($input['capacity'] ?? null));
     $imageIds     = $input['image_ids'] ?? [];       // array of vehicle_images UUIDs
     $pricePerDay  = (float)($input['price_per_day'] ?? 0);
     $pricePerWeek = isset($input['price_per_week']) && $input['price_per_week'] ? (float)$input['price_per_week'] : null;
@@ -469,6 +558,7 @@ if ($action === 'add') {
             'engine_size' => $engineSize,
             'consumption' => $consumption,
             'features' => $features,
+            'capacity' => $luggageCapacityLbs,
             'price_per_day' => $pricePerDay,
             'price_per_week' => $pricePerWeek,
             'price_per_month' => $pricePerMonth,
@@ -506,6 +596,7 @@ if ($action === 'update') {
     requireStaffOrAdmin();
     $ownerId   = $_SESSION['user_id'];
     $vehicleId = $input['vehicle_id'] ?? '';
+    $currentVehicle = null;
 
     if (empty($vehicleId)) {
         echo json_encode(['success' => false, 'message' => 'Vehicle ID is required.']);
@@ -517,6 +608,8 @@ if ($action === 'update') {
         echo json_encode(['success' => false, 'message' => 'Vehicle not found or you do not own this vehicle.']);
         exit;
     }
+
+    $currentVehicle = $vehicleRepo->getById((string)$vehicleId);
 
     // Check for duplicate license plate on update (exclude current vehicle)
     if (!empty($input['license_plate'])) {
@@ -531,7 +624,7 @@ if ($action === 'update') {
 
     $allowedFields = [
         'brand', 'model', 'year', 'license_plate', 'category', 'transmission', 'fuel_type',
-        'seats', 'color', 'engine_size', 'consumption',
+        'seats', 'capacity', 'color', 'engine_size', 'consumption',
         'price_per_day', 'price_per_week', 'price_per_month',
         'location_city', 'location_address', 'status', 'gps_enabled'
     ];
@@ -545,6 +638,10 @@ if ($action === 'update') {
     // Handle arrays specially
     if (isset($input['features'])) {
         $updates['features'] = $input['features'];
+    }
+
+    if (array_key_exists('luggage_capacity_lbs', $input)) {
+        $updates['capacity'] = toOptionalCapacityLbs($input['luggage_capacity_lbs']);
     }
 
     // Handle image_ids: update which images belong to this vehicle
@@ -568,11 +665,21 @@ if ($action === 'update') {
     try {
         // Update vehicle via repository
         $vehicle = $vehicleRepo->updateVehicle($vehicleId, $ownerId, $updates);
+        $availabilitySubscribersNotified = 0;
+
+        if (isset($updates['status'])) {
+            $newStatus = strtolower((string)$updates['status']);
+            $oldStatus = strtolower((string)($currentVehicle['status'] ?? ''));
+            if ($newStatus === 'available' && $oldStatus !== 'available') {
+                $availabilitySubscribersNotified = notifyVehicleAvailabilitySubscribers($pdo, (string)$vehicleId);
+            }
+        }
 
         echo json_encode([
             'success' => true,
             'message' => 'Vehicle updated successfully!',
-            'vehicle' => $vehicle
+            'vehicle' => $vehicle,
+            'availability_subscribers_notified' => $availabilitySubscribersNotified
         ]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);

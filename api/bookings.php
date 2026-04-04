@@ -236,7 +236,7 @@ if ($action === 'create') {
             }
 
             // Find a random available vehicle matching the tier (exclude own vehicles)
-            $vehicle = $bookingRepo->findVehicleForTier($rideTier, $renterId);
+            $vehicle = $bookingRepo->findVehicleForTier($rideTier, $renterId, $seatCapacity);
 
             if (!$vehicle) {
                 echo json_encode(['success' => false, 'message' => 'No available vehicles found for the ' . ucfirst($rideTier) . ' tier. Please try another tier.']);

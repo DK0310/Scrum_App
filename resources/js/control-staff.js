@@ -30,6 +30,7 @@
         category: document.getElementById('ctrlCategory'),
         serviceTier: document.getElementById('ctrlServiceTier'),
         seats: document.getElementById('ctrlSeats'),
+        luggageCapacity: document.getElementById('ctrlLuggageCapacity'),
         color: document.getElementById('ctrlColor'),
         vehicleImage: document.getElementById('ctrlVehicleImage'),
         saveVehicleBtn: document.getElementById('ctrlSaveVehicle'),
@@ -217,7 +218,7 @@
         el.ordersTable.innerHTML = rows.map((o) => {
             const id = escapeHtml(o.id || '');
             const customer = escapeHtml(o.customer_name || o.user_name || o.renter_name || 'Customer');
-            const pickupDate = escapeHtml(o.pickup_date || '-');
+            const pickupDate = escapeHtml(formatPickupDatetime(o.pickup_date, o.pickup_time));
             const total = Number(o.total_amount || 0).toFixed(2);
             const status = normalizeDisplayStatus(o.status);
             let actionHtml = '<div class="ctrl-order-actions">' +
@@ -393,13 +394,33 @@
     function formatPickupDatetime(pickupDate, pickupTime) {
         if (!pickupDate) return '-';
         try {
+            const toAmPm = (timeValue) => {
+                const raw = String(timeValue || '').trim();
+                if (!raw) return '';
+
+                const m = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+                if (!m) return raw;
+
+                let hour = parseInt(m[1], 10);
+                const minute = String(m[2] || '00').padStart(2, '0');
+                const meridiem = (m[3] || '').toUpperCase();
+
+                if (meridiem === 'PM' && hour < 12) hour += 12;
+                if (meridiem === 'AM' && hour === 12) hour = 0;
+
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                let displayHour = hour % 12;
+                if (displayHour === 0) displayHour = 12;
+                return String(displayHour).padStart(2, '0') + ':' + minute + ampm;
+            };
+
             // If pickup_time is available, combine date with the correct time
             if (pickupTime) {
                 // Parse UTC datetime from database to get date only
                 const date = new Date(pickupDate + 'Z'); // Append Z to indicate UTC
                 const options = { year: 'numeric', month: 'short', day: 'numeric' };
                 const dateStr = date.toLocaleString('en-US', options); // e.g., "28 Mar 2026"
-                return dateStr + ', ' + pickupTime; // e.g., "28 Mar 2026, 10:00AM"
+                return dateStr + ', ' + toAmPm(pickupTime); // e.g., "28 Mar 2026, 10:00AM"
             }
             
             // Fallback to original behavior if no pickup_time
@@ -427,9 +448,29 @@
         const pickupText = pickupLocation + ' @ ' + pickupDateTime;
         const destinationText = escapeHtml(order.return_location || '-');
         const amountText = '£' + Number(order.total_amount || 0).toFixed(2);
-        const serviceTier = escapeHtml(order.service_tier || order.ride_tier || '-');
-        const seatsText = escapeHtml(String(order.seats || order.number_of_passengers || '-'));
-        const pickupTimeText = escapeHtml(order.pickup_time || '-');
+        const requestedTier = order.ride_tier || order.service_tier || '';
+        const serviceTier = escapeHtml(requestedTier ? toTitleCase(normalizeTier(requestedTier)) : '-');
+        const bookedSeats = order.number_of_passengers || order.seat_capacity || order.seats || '-';
+        const seatsText = escapeHtml(String(bookedSeats)) + (String(bookedSeats) === '-' ? '' : ' seats');
+        const pickupTimeText = escapeHtml((function(timeValue) {
+            const raw = String(timeValue || '').trim();
+            if (!raw) return '-';
+
+            const m = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+            if (!m) return raw;
+
+            let hour = parseInt(m[1], 10);
+            const minute = String(m[2] || '00').padStart(2, '0');
+            const meridiem = (m[3] || '').toUpperCase();
+
+            if (meridiem === 'PM' && hour < 12) hour += 12;
+            if (meridiem === 'AM' && hour === 12) hour = 0;
+
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            let displayHour = hour % 12;
+            if (displayHour === 0) displayHour = 12;
+            return String(displayHour).padStart(2, '0') + ':' + minute + ampm;
+        })(order.pickup_time));
 
         el.orderModalTitle.textContent = 'Order #' + (order.id || '');
         el.orderModalBody.innerHTML =
@@ -463,6 +504,7 @@
         el.category.value = 'sedan';
         el.serviceTier.value = 'standard';
         el.seats.value = '5';
+        if (el.luggageCapacity) el.luggageCapacity.value = '';
         el.color.value = '';
         if (el.vehicleImage) {
             el.vehicleImage.value = '';
@@ -477,8 +519,12 @@
         el.year.value = vehicle.year || '';
         el.license.value = vehicle.license_plate || '';
         el.category.value = (vehicle.category || 'sedan').toLowerCase();
-        el.serviceTier.value = vehicle.service_tier || 'standard';
+        el.serviceTier.value = normalizeTier(vehicle.service_tier || 'standard');
         el.seats.value = vehicle.seats || 5;
+        if (el.luggageCapacity) {
+            const capacity = Number(vehicle.luggage_capacity_lbs || vehicle.capacity || 0);
+            el.luggageCapacity.value = Number.isFinite(capacity) && capacity > 0 ? String(capacity) : '';
+        }
         el.color.value = vehicle.color || '';
         if (el.vehicleImage) {
             el.vehicleImage.value = '';
@@ -668,6 +714,9 @@
 
     function normalizeTier(value) {
         const tier = String(value || '').trim().toLowerCase();
+        if (tier === 'premium') {
+            return 'luxury';
+        }
         if (tier === 'eco' || tier === 'standard' || tier === 'luxury') {
             return tier;
         }
@@ -892,7 +941,9 @@
             el.saveVehicleBtn.disabled = true;
         }
 
+        const vehicleId = el.vehicleId.value.trim();
         const seatValue = Number(el.seats.value || 5);
+        const rawLuggageValue = el.luggageCapacity ? String(el.luggageCapacity.value || '').trim() : '';
 
         const payload = {
             brand: el.brand.value.trim(),
@@ -902,8 +953,25 @@
             category: el.category.value.trim() || 'sedan',
             service_tier: (el.serviceTier.value || 'standard').trim(),
             seats: seatValue,
+            luggage_capacity_lbs: el.luggageCapacity ? Number(el.luggageCapacity.value || 0) : 0,
             color: el.color.value.trim()
         };
+
+        if (rawLuggageValue === '') {
+            if (vehicleId) {
+                payload.luggage_capacity_lbs = null;
+            } else {
+                delete payload.luggage_capacity_lbs;
+            }
+        } else if (!Number.isFinite(payload.luggage_capacity_lbs) || payload.luggage_capacity_lbs <= 0) {
+            setVehicleMsg('Luggage capacity must be a positive number in lbs.', true);
+            if (el.saveVehicleBtn) {
+                el.saveVehicleBtn.disabled = false;
+            }
+            return;
+        } else {
+            payload.luggage_capacity_lbs = Math.round(payload.luggage_capacity_lbs);
+        }
 
         if (!payload.brand || !payload.model || payload.year < 1990 || !payload.license_plate) {
             setVehicleMsg('Please fill required fields correctly.', true);
@@ -929,7 +997,6 @@
             return;
         }
 
-        const vehicleId = el.vehicleId.value.trim();
         const imageFile = (el.vehicleImage && el.vehicleImage.files && el.vehicleImage.files.length > 0)
             ? el.vehicleImage.files[0]
             : null;

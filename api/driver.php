@@ -485,6 +485,8 @@ try {
                 if ($vehicleId !== '') {
                     $bookingRepo->markVehicleAvailable($vehicleId);
                 }
+
+                $bookingRepo->archiveBookingSnapshotIfEligible($bookingId);
             }
 
             $pdo->commit();

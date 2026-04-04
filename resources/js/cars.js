@@ -10,7 +10,9 @@
 
   const USER_ROLE = window.USER_ROLE || 'user';
   const NORMALIZED_USER_ROLE = String(USER_ROLE || 'user').toLowerCase().replace(/[-_\s]/g, '');
-  const CAN_VIEW_VEHICLE_DETAIL = (NORMALIZED_USER_ROLE === 'staff' || NORMALIZED_USER_ROLE === 'controlstaff' || NORMALIZED_USER_ROLE === 'callcenterstaff' || NORMALIZED_USER_ROLE === 'admin');
+  const CAN_VIEW_VEHICLE_DETAIL = true;
+  const NON_CUSTOMER_ROLES = new Set(['admin', 'controlstaff', 'callcenterstaff', 'driver']);
+  const CAN_SELF_SELECT_VEHICLE_BOOKING = NON_CUSTOMER_ROLES.has(NORMALIZED_USER_ROLE);
 
   // ===== FILTER STATE =====
   let filterState = {
@@ -72,8 +74,10 @@
   // ===== FILTER CHIP CLICK (for static filters: tier, seats) =====
   function bindStaticChips() {
     document.querySelectorAll('#tierFilters .filter-chip, #seatFilters .filter-chip').forEach(chip => {
-      chip.addEventListener('click', function() {
-        const container = this.closest('.filter-options');
+      chip.disabled = false;
+      chip.addEventListener('click', function(e) {
+        e.preventDefault();
+        const container = this.closest('.tier-switch, .seat-switch, .filter-options');
         if (container) {
           container.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
           this.classList.add('active');
@@ -91,6 +95,7 @@
   function bindBrandSelect() {
     const brandSelect = document.getElementById('brandSelect');
     if (!brandSelect) return;
+    brandSelect.disabled = false;
 
     brandSelect.addEventListener('change', function() {
       filterState.brand = this.value || '';
@@ -368,21 +373,21 @@
       const displaySeats = normalizeSeatTier(car.seats);
       const plate = (car.license_plate || '').trim() || 'No plate';
       const imageHTML = hasValidImage
-        ? '<img src="' + images[0] + '" alt="' + escapeHtml(car.brand + ' ' + car.model) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="no-image-placeholder" style="display:none;">No Photo</div>'
-        : '<div class="no-image-placeholder">No Photo</div>';
+        ? '<img src="' + images[0] + '" alt="' + escapeHtml(car.brand + ' ' + car.model) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.onerror=null;this.src=\'/resources/images/logo/logo.png\';"><div class="no-image-placeholder" style="display:none;">No Photo</div>'
+        : '<img src="/resources/images/logo/logo.png" alt="Vehicle" style="width:100%;height:100%;object-fit:cover;">';
 
       const rating = parseFloat(car.avg_rating) || 0;
 
-      // Vehicle status badge
-      const isAvailable = (car.status || 'available') === 'available';
+      // Customer-facing availability status: only "available" is bookable.
+      const isAvailable = isVehicleAvailableForCustomer(car.status);
       const statusBadge = isAvailable
         ? '<span class="car-status-badge available">Available</span>'
-        : '<span class="car-status-badge rented">Rented</span>';
+        : '<span class="car-status-badge not-available">Not Available</span>';
 
       const tierBadge = '<span class="car-tier-badge" style="background:' + getTierBgColor(car.service_tier) + ';color:' + getTierTextColor(car.service_tier) + ';">' +
         escapeHtml((car.service_tier || 'standard').toUpperCase()) + ' TIER</span>';
 
-      return '<div class="car-card' + (isAvailable ? '' : ' car-rented') + '">' +
+      return '<div class="car-card' + (isAvailable ? '' : ' car-rented') + '" onclick="handleCarClick(\'' + car.id + '\')" style="cursor:pointer;">' +
         '<div class="car-card-image">' +
           imageHTML +
           statusBadge +
@@ -442,16 +447,176 @@
     return icons[tier] || '⭐';
   }
 
+  function formatServiceTierLabel(tier) {
+    const key = String(tier || 'standard').toLowerCase();
+    if (key === 'eco') return 'Economy';
+    if (key === 'luxury' || key === 'premium') return 'Luxury';
+    return 'Standard';
+  }
+
+  function getTierQualityInfo(tier) {
+    const key = String(tier || 'standard').toLowerCase();
+    if (key === 'eco') {
+      return {
+        score: '4.1',
+        summary: 'Economy tier focuses on value, clean rides, and reliable essentials for daily trips.',
+        indicators: ['Clean interior', 'Reliable comfort', 'Budget-friendly service']
+      };
+    }
+    if (key === 'luxury' || key === 'premium') {
+      return {
+        score: '4.8',
+        summary: 'Luxury tier provides premium comfort, advanced amenities, and top-rated service quality.',
+        indicators: ['Premium cabin', 'Enhanced amenities', 'Top-rated experience']
+      };
+    }
+    return {
+      score: '4.5',
+      summary: 'Standard tier balances comfort and value with consistent quality for most customers.',
+      indicators: ['Balanced comfort', 'Consistent quality', 'Great value']
+    };
+  }
+
+  function normalizeCategoryKey(category, fuelType, tier) {
+    const c = String(category || '').trim().toLowerCase();
+    const fuel = String(fuelType || '').trim().toLowerCase();
+    const normalizedTier = String(tier || '').trim().toLowerCase();
+
+    if (c === 'hybrid' || fuel === 'hybrid') return 'hybrid';
+    if (c === 'electric' || fuel === 'electric') return 'electric';
+    if (c === 'suv') return 'suv';
+    if (c === 'luxury' || normalizedTier === 'luxury' || normalizedTier === 'premium') return 'luxury';
+    return 'sedan';
+  }
+
+  function getCategoryProfiles() {
+    return {
+      sedan: {
+        label: 'Sedan',
+        seats: '4-5 seats',
+        luggage: '280-420 lbs',
+        defaultAmenityFocus: 'Balanced comfort',
+        coreAmenities: ['A/C', 'Phone charging', 'Comfort seats']
+      },
+      suv: {
+        label: 'SUV',
+        seats: '4-7 seats',
+        luggage: '420-620 lbs',
+        defaultAmenityFocus: 'Family and group flexibility',
+        coreAmenities: ['Large trunk', 'Rear climate vents', 'All-weather support']
+      },
+      luxury: {
+        label: 'Luxury',
+        seats: '4-7 seats',
+        luggage: '320-500 lbs',
+        defaultAmenityFocus: 'Premium comfort and exclusivity',
+        coreAmenities: ['Premium cabin', 'Ambient lighting', 'Advanced infotainment']
+      },
+      electric: {
+        label: 'Electric',
+        seats: '4-7 seats',
+        luggage: '250-450 lbs',
+        defaultAmenityFocus: 'Quiet and eco-friendly travel',
+        coreAmenities: ['Zero-emission ride', 'Smart driver assist', 'Modern digital cockpit']
+      },
+      hybrid: {
+        label: 'Hybrid',
+        seats: '4-7 seats',
+        luggage: '280-460 lbs',
+        defaultAmenityFocus: 'Efficiency with flexibility',
+        coreAmenities: ['Fuel-efficient drivetrain', 'Regenerative braking', 'Smooth city cruising']
+      }
+    };
+  }
+
+  function getVehicleLuggageCapacityLbs(car) {
+    const raw = car && (car.luggage_capacity_lbs ?? car.capacity);
+    if (raw === null || raw === undefined || raw === '') return null;
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  function formatLuggageCapacityLbs(value) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 'N/A';
+    return parsed + ' lbs';
+  }
+
+  function buildAmenityFocusText(features, profile) {
+    const normalized = Array.isArray(features)
+      ? features.map(function(item) { return String(item || '').trim(); }).filter(Boolean)
+      : [];
+    if (normalized.length > 0) {
+      return normalized.slice(0, 2).join(' + ');
+    }
+    return profile.defaultAmenityFocus;
+  }
+
+  function renderCategoryComparisonTable(activeCategoryKey) {
+    const profiles = getCategoryProfiles();
+    const order = ['sedan', 'suv', 'luxury', 'electric', 'hybrid'];
+    const rows = order.map(function(key) {
+      const profile = profiles[key];
+      const isActive = key === activeCategoryKey;
+
+      return '<tr class="' + (isActive ? 'active-row' : '') + '">' +
+        '<td>' + escapeHtml(profile.label) + (isActive ? ' (Current)' : '') + '</td>' +
+        '<td>' + escapeHtml(profile.seats) + '</td>' +
+        '<td>' + escapeHtml(profile.luggage) + '</td>' +
+        '<td>' + escapeHtml(profile.coreAmenities.join(', ')) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    return '<table class="detail-comparison-table">' +
+      '<thead><tr><th>Category</th><th>Typical Seats</th><th>Luggage Capacity</th><th>Amenity Highlights</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>';
+  }
+
+  function isVehicleAvailableForCustomer(status) {
+    return String(status || 'available').toLowerCase() === 'available';
+  }
+
+  function formatVehicleStatusLabel(status) {
+    const key = String(status || 'unavailable').toLowerCase();
+    if (key === 'rented') return 'rented';
+    if (key === 'maintenance') return 'in maintenance';
+    if (key === 'inactive') return 'inactive';
+    return key;
+  }
+
+  async function notifyVehicleAvailability(vehicleId) {
+    if (!isLoggedIn) {
+      if (typeof showToast === 'function') showToast('Please sign in to subscribe for availability alerts.', 'warning');
+      if (typeof showAuthModal === 'function') {
+        showAuthModal('login');
+      }
+      return;
+    }
+
+    try {
+      const res = await fetch(VEHICLES_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'notify-me', vehicle_id: vehicleId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (typeof showToast === 'function') showToast(data.message || 'Subscribed. We will notify you when this vehicle is available.', 'success');
+      } else {
+        if (typeof showToast === 'function') showToast(data.message || 'Unable to subscribe for notification.', 'error');
+      }
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('Network error. Please try again.', 'error');
+    }
+  }
+
   function handleCarClick(carId) {
-    return;
+    openCarDetail(carId);
   }
 
   // ===== CAR DETAIL MODAL =====
   async function openCarDetail(carId) {
-    if (!CAN_VIEW_VEHICLE_DETAIL) {
-      return;
-    }
-
     let car = allLoadedCars.find(c => c.id === carId);
 
     if (!car) {
@@ -477,15 +642,25 @@
     // Title & subtitle
     const detailTitle = document.getElementById('detailTitle');
     const detailSub = document.getElementById('detailSub');
+    const categoryKey = normalizeCategoryKey(car.category, car.fuel_type, car.service_tier);
+    const categoryProfiles = getCategoryProfiles();
+    const activeCategoryProfile = categoryProfiles[categoryKey] || categoryProfiles.sedan;
+    const features = Array.isArray(car.features) ? car.features : [];
     if (detailTitle) detailTitle.textContent = car.brand + ' ' + car.model + ' ' + car.year;
-    if (detailSub) detailSub.textContent = ucfirst(car.category) + ' • ' + ucfirst(car.transmission) + ' • ' + ucfirst(car.fuel_type) + (car.license_plate ? ' • ' + car.license_plate : '');
+    if (detailSub) detailSub.textContent = activeCategoryProfile.label + ' • ' + ucfirst(car.transmission) + ' • ' + ucfirst(car.fuel_type) + (car.license_plate ? ' • ' + car.license_plate : '');
 
-    // Service Tier
+    // Service Tier + availability
     const detailPrice = document.getElementById('detailPrice');
+    const detailAvailabilityLabel = document.getElementById('detailAvailabilityLabel');
+    const tierLabel = formatServiceTierLabel(car.service_tier);
+    const isAvailable = isVehicleAvailableForCustomer(car.status);
     if (detailPrice) {
-      const tierColor = getTierColor(car.service_tier);
+      const tierColor = getTierColor((car.service_tier || '').toLowerCase());
       const tierIcon = getTierIcon(car.service_tier);
-      detailPrice.innerHTML = '<span style="color:' + tierColor + ';font-weight:700;font-size:1.1rem;">' + tierIcon + ' ' + (car.service_tier || 'Standard').toUpperCase() + '</span>';
+      detailPrice.innerHTML = '<span style="color:' + tierColor + ';font-weight:700;font-size:1.1rem;">' + tierIcon + ' ' + tierLabel + '</span>';
+    }
+    if (detailAvailabilityLabel) {
+      detailAvailabilityLabel.textContent = isAvailable ? 'Available for booking' : 'Not Available';
     }
 
     // Rating
@@ -500,6 +675,33 @@
         '<span style="color:var(--gray-500);font-size:0.85rem;">(' + reviews + ' review' + (reviews !== 1 ? 's' : '') + ')</span>';
     }
 
+    const detailQualitySection = document.getElementById('detailQualitySection');
+    if (detailQualitySection) {
+      const quality = getTierQualityInfo(car.service_tier);
+      detailQualitySection.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">' +
+          '<div style="font-size:0.9rem;font-weight:700;color:var(--gray-800);">Service Quality</div>' +
+          '<span class="quality-pill">Quality Score ' + quality.score + '/5</span>' +
+        '</div>' +
+        '<div style="font-size:0.85rem;color:var(--gray-700);margin-bottom:8px;">' + escapeHtml(quality.summary) + '</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+          quality.indicators.map(function(indicator) {
+            return '<span class="detail-feature-tag">' + escapeHtml(indicator) + '</span>';
+          }).join('') +
+        '</div>';
+    }
+
+    const detailCategoryBadge = document.getElementById('detailCategoryBadge');
+    const detailLuggageCapacityLbs = document.getElementById('detailLuggageCapacityLbs');
+    const detailAmenityFocus = document.getElementById('detailAmenityFocus');
+    const detailCategoryComparison = document.getElementById('detailCategoryComparison');
+    if (detailCategoryBadge) detailCategoryBadge.textContent = activeCategoryProfile.label;
+    if (detailLuggageCapacityLbs) detailLuggageCapacityLbs.textContent = activeCategoryProfile.luggage;
+    if (detailAmenityFocus) detailAmenityFocus.textContent = buildAmenityFocusText(features, activeCategoryProfile);
+    if (detailCategoryComparison) {
+      detailCategoryComparison.innerHTML = renderCategoryComparisonTable(categoryKey);
+    }
+
     // Image gallery
     const images = car.images || [];
     const mainImg = document.getElementById('detailMainImage');
@@ -507,17 +709,17 @@
 
     if (mainImg) {
       if (images.length > 0 && images[0] && (images[0].startsWith('http') || images[0].startsWith('/api/'))) {
-        mainImg.innerHTML = '<img src="' + images[0] + '" alt="' + escapeHtml(car.brand + ' ' + car.model) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'<span style=color:var(--gray-400);font-size:0.875rem>No Photo Available</span>\'">';
+        mainImg.innerHTML = '<img src="' + images[0] + '" alt="' + escapeHtml(car.brand + ' ' + car.model) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.onerror=null;this.src=\'/resources/images/logo/logo.png\';">';
         if (thumbsEl && images.length > 1) {
           thumbsEl.innerHTML = images.filter(img => img && (img.startsWith('http') || img.startsWith('/api/'))).map((img, i) => 
             '<div class="detail-thumb ' + (i === 0 ? 'active' : '') + '" onclick="switchDetailImage(\'' + img + '\', this)">' +
-            '<img src="' + img + '" alt="Photo ' + (i+1) + '"></div>'
+            '<img src="' + img + '" alt="Photo ' + (i+1) + '" onerror="this.onerror=null;this.src=\'/resources/images/logo/logo.png\';"></div>'
           ).join('');
         } else if (thumbsEl) {
           thumbsEl.innerHTML = '';
         }
       } else {
-        mainImg.innerHTML = '<span style="color:var(--gray-400);font-size:0.875rem;">No Photo Available</span>';
+        mainImg.innerHTML = '<img src="/resources/images/logo/logo.png" alt="Vehicle" style="width:100%;height:100%;object-fit:cover;">';
         if (thumbsEl) thumbsEl.innerHTML = '';
       }
     }
@@ -525,20 +727,16 @@
     // Specs grid
     const detailSpecs = document.getElementById('detailSpecs');
     if (detailSpecs) {
-      const fuelIcon = car.fuel_type === 'electric' ? '🔋' : '⛽';
       detailSpecs.innerHTML = 
+        specItem('🏷️', 'Category', activeCategoryProfile.label) +
         specItem('👤', 'Seats', car.seats) +
-        specItem('⚙️', 'Transmission', ucfirst(car.transmission)) +
-        specItem(fuelIcon, 'Fuel Type', ucfirst(car.fuel_type)) +
-        specItem('📏', 'Engine', car.engine_size || 'N/A') +
-        specItem('📊', 'Consumption', car.consumption || 'N/A') +
+        specItem('🧳', 'Luggage', activeCategoryProfile.luggage) +
         specItem('🎨', 'Color', ucfirst(car.color || 'N/A')) +
         specItem('📅', 'Year', car.year) +
         specItem('📋', 'Bookings', car.total_bookings || 0);
     }
 
     // Features
-    const features = car.features || [];
     const featSection = document.getElementById('detailFeaturesSection');
     const detailFeatures = document.getElementById('detailFeatures');
     if (featSection && detailFeatures) {
@@ -565,14 +763,6 @@
       }
     }
 
-    // Owner
-    const ownerName = car.owner_name || 'Unknown Owner';
-    const initials = ownerName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-    const detailOwnerAvatar = document.getElementById('detailOwnerAvatar');
-    const detailOwnerName = document.getElementById('detailOwnerName');
-    if (detailOwnerAvatar) detailOwnerAvatar.textContent = initials;
-    if (detailOwnerName) detailOwnerName.textContent = ownerName;
-
     // Hide price breakdown (no longer applicable - using service tiers instead)
     const detailDailyRate = document.getElementById('detailDailyRate');
     if (detailDailyRate && detailDailyRate.parentElement) {
@@ -589,24 +779,6 @@
       monthlyRow.style.display = 'none';
     }
 
-    // Book button
-    const bookBtn = document.getElementById('detailBookBtn');
-    const statusNotice = document.getElementById('detailStatusNotice');
-    if (bookBtn && statusNotice) {
-      bookBtn.setAttribute('onclick', "bookCar('" + car.id + "')");
-      if ((car.status || 'available') === 'available') {
-        bookBtn.disabled = false;
-        bookBtn.style.opacity = '1';
-        bookBtn.textContent = '📋 Book This Car';
-        statusNotice.style.display = 'none';
-      } else {
-        bookBtn.disabled = true;
-        bookBtn.style.opacity = '0.5';
-        bookBtn.textContent = '🔒 Currently Rented';
-        statusNotice.style.display = 'block';
-      }
-    }
-
     // Open modal
     const modal = document.getElementById('carDetailModal');
     if (modal) modal.classList.add('open');
@@ -615,7 +787,7 @@
   function switchDetailImage(src, thumbEl) {
     const detailMainImage = document.getElementById('detailMainImage');
     if (detailMainImage) {
-      detailMainImage.innerHTML = '<img src="' + src + '" style="width:100%;height:100%;object-fit:cover;">';
+      detailMainImage.innerHTML = '<img src="' + src + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.onerror=null;this.src=\'/resources/images/logo/logo.png\';">';
     }
     document.querySelectorAll('.detail-thumb').forEach(t => t.classList.remove('active'));
     if (thumbEl) thumbEl.classList.add('active');
@@ -635,17 +807,24 @@
   }
 
   function bookCar(carId) {
+    if (!CAN_SELF_SELECT_VEHICLE_BOOKING) {
+      if (typeof showToast === 'function') {
+        showToast('Customers cannot self-select a vehicle. Please contact Call Center staff to book.', 'warning');
+      }
+      return;
+    }
+
     if (!isLoggedIn) {
       if (typeof showToast === 'function') showToast('Please sign in to book a car.', 'warning');
-      setTimeout(() => {
-        window.location.href = 'login.php?redirect=/booking.php&car_id=' + encodeURIComponent(carId);
-      }, 1000);
+      if (typeof showAuthModal === 'function') {
+        showAuthModal('login');
+      }
       return;
     }
     // Check if car is available
     const car = allLoadedCars.find(c => c.id === carId);
-    if (car && car.status !== 'available') {
-      if (typeof showToast === 'function') showToast('This vehicle is currently rented and not available for booking.', 'warning');
+    if (car && !isVehicleAvailableForCustomer(car.status)) {
+      if (typeof showToast === 'function') showToast('This vehicle is not available for booking right now.', 'warning');
       return;
     }
     window.location.href = '/booking.php?car_id=' + encodeURIComponent(carId);
@@ -666,7 +845,7 @@
   }
 
   function escapeHtml(text) {
-    if (!text) return '';
+    if (text === null || text === undefined) return '';
     const map = {
       '&': '&amp;',
       '<': '&lt;',
@@ -674,7 +853,7 @@
       '"': '&quot;',
       "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    return String(text).replace(/[&<>"']/g, m => map[m]);
   }
 
   // ===== INITIALIZATION =====

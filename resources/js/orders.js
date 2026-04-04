@@ -476,13 +476,34 @@ function formatDateTime(dateStr) {
     }
 }
 
+function formatPickupTimeDisplay(timeValue) {
+    const raw = String(timeValue || '').trim();
+    if (!raw) return '-';
+
+    const m = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (!m) return raw;
+
+    let hour = parseInt(m[1], 10);
+    const minute = String(m[2] || '00').padStart(2, '0');
+    const meridiem = String(m[3] || '').toUpperCase();
+
+    if (meridiem === 'PM' && hour < 12) hour += 12;
+    if (meridiem === 'AM' && hour === 12) hour = 0;
+
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    let displayHour = hour % 12;
+    if (displayHour === 0) displayHour = 12;
+
+    return String(displayHour).padStart(2, '0') + ':' + minute + ampm;
+}
+
 function formatPickupDate(order) {
     if (!order || !order.pickup_date) return '-';
     if (order.booking_type === 'minicab') {
         // If pickup_time is available, combine date with the correct time
         if (order.pickup_time) {
             const dateOnly = formatDate(order.pickup_date); // e.g., "27 Mar 2026"
-            return dateOnly + ', ' + order.pickup_time; // e.g., "27 Mar 2026, 10:00AM"
+            return dateOnly + ', ' + formatPickupTimeDisplay(order.pickup_time); // e.g., "27 Mar 2026, 10:00AM"
         }
         return formatDateTime(order.pickup_date);
     }
@@ -1209,9 +1230,15 @@ function toDateTimeLocalValue(dateValue, timeValue) {
     const date = String(dateValue || '').trim();
     if (!date) return '';
     const timeRaw = String(timeValue || '').trim();
-    const m = timeRaw.match(/^(\d{1,2}):(\d{2})/);
-    const hh = m ? String(Math.max(0, Math.min(23, parseInt(m[1], 10) || 0))).padStart(2, '0') : '00';
+    const m = timeRaw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    let hour = m ? Math.max(0, Math.min(23, parseInt(m[1], 10) || 0)) : 0;
     const mm = m ? String(Math.max(0, Math.min(59, parseInt(m[2], 10) || 0))).padStart(2, '0') : '00';
+    const meridiem = m ? String(m[3] || '').toUpperCase() : '';
+
+    if (meridiem === 'PM' && hour < 12) hour += 12;
+    if (meridiem === 'AM' && hour === 12) hour = 0;
+
+    const hh = String(hour).padStart(2, '0');
     return date.substring(0, 10) + 'T' + hh + ':' + mm;
 }
 

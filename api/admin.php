@@ -136,6 +136,51 @@ function requireAdmin() {
     }
 }
 
+/**
+ * @param array<string,mixed> $source
+ * @return array<string,mixed>
+ */
+function adminHistoryExtractFilters(array $source): array
+{
+    $status = strtolower(trim((string)($source['status'] ?? '')));
+    if (!in_array($status, ['completed', 'cancelled'], true)) {
+        $status = '';
+    }
+
+    $dateFrom = trim((string)($source['date_from'] ?? ''));
+    if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+        $dateFrom = '';
+    }
+
+    $dateTo = trim((string)($source['date_to'] ?? ''));
+    if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+        $dateTo = '';
+    }
+
+    return [
+        'status' => $status,
+        'search' => trim((string)($source['search'] ?? '')),
+        'region_id' => trim((string)($source['region_id'] ?? '')),
+        'date_from' => $dateFrom,
+        'date_to' => $dateTo,
+    ];
+}
+
+/**
+ * @param array<string,mixed> $filters
+ */
+function adminHistoryBuildExportQuery(array $filters): string
+{
+    $pairs = [];
+    foreach (['status', 'search', 'region_id', 'date_from', 'date_to'] as $key) {
+        $value = trim((string)($filters[$key] ?? ''));
+        if ($value !== '') {
+            $pairs[$key] = $value;
+        }
+    }
+    return http_build_query($pairs);
+}
+
 // ==========================================================
 // HERO SLIDES - LIST (admin)
 // ==========================================================
@@ -484,13 +529,18 @@ if ($action === 'admin-delete-booking') {
     requireAdmin();
 
     $bookingId = $input['booking_id'] ?? '';
+    $deleteReason = trim((string)($input['delete_reason'] ?? ''));
     if (empty($bookingId)) {
         echo json_encode(['success' => false, 'message' => 'Booking ID is required.']);
         exit;
     }
 
     try {
-        $deleted = $bookingRepo->deleteBooking($bookingId);
+        $deleted = $bookingRepo->deleteBookingWithAudit(
+            (string)$bookingId,
+            (string)($_SESSION['user_id'] ?? ''),
+            $deleteReason !== '' ? $deleteReason : null
+        );
 
         if (!$deleted) {
             echo json_encode(['success' => false, 'message' => 'Booking not found.']);
@@ -588,6 +638,292 @@ if ($action === 'admin-list-bookings') {
         echo json_encode(['success' => true, 'bookings' => $bookings]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - BOOKING HISTORY LIST (archived completed/cancelled)
+// ==========================================================
+if ($action === 'admin-booking-history-list') {
+    requireAdmin();
+
+    try {
+        $bookingRepo->ensureBookingHistorySchema();
+        $bookingRepo->backfillBookingHistory(500);
+
+        $limit = max(1, min(200, intval($input['limit'] ?? 50)));
+        $page = max(1, intval($input['page'] ?? 1));
+        $offset = ($page - 1) * $limit;
+
+        $filters = adminHistoryExtractFilters($input);
+        $result = $bookingRepo->listBookingHistory($filters, $limit, $offset);
+        $regions = $bookingRepo->listBookingHistoryRegions();
+
+        $total = (int)($result['total'] ?? 0);
+        $totalPages = (int)max(1, ceil($total / $limit));
+
+        echo json_encode([
+            'success' => true,
+            'history' => $result['rows'] ?? [],
+            'regions' => $regions,
+            'filters' => $filters,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'total_pages' => $totalPages,
+            ],
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Failed to load booking history: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - BOOKING HISTORY SUMMARY (KPIs + daily/quarterly)
+// ==========================================================
+if ($action === 'admin-booking-history-summary') {
+    requireAdmin();
+
+    try {
+        $bookingRepo->ensureBookingHistorySchema();
+        $bookingRepo->backfillBookingHistory(500);
+
+        $filters = adminHistoryExtractFilters($input);
+        $summary = $bookingRepo->getBookingHistorySummary($filters);
+        $daily = $bookingRepo->getBookingHistoryAggregation($filters, 'daily');
+        $quarterly = $bookingRepo->getBookingHistoryAggregation($filters, 'quarterly');
+
+        echo json_encode([
+            'success' => true,
+            'summary' => $summary,
+            'daily' => $daily,
+            'quarterly' => $quarterly,
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Failed to load history summary: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - BOOKING HISTORY EXPORT CSV
+// ==========================================================
+if ($action === 'admin-booking-history-export-csv') {
+    requireAdmin();
+
+    try {
+        $source = array_merge($_GET ?? [], $input ?? []);
+        $filters = adminHistoryExtractFilters($source);
+        $bookingRepo->ensureBookingHistorySchema();
+        $bookingRepo->backfillBookingHistory(1000);
+
+        $rows = [];
+        $offset = 0;
+        $chunkSize = 1000;
+        $maxRows = 50000;
+
+        while (count($rows) < $maxRows) {
+            $chunk = $bookingRepo->listBookingHistory($filters, $chunkSize, $offset);
+            $chunkRows = $chunk['rows'] ?? [];
+            if (empty($chunkRows)) {
+                break;
+            }
+
+            foreach ($chunkRows as $row) {
+                $rows[] = $row;
+                if (count($rows) >= $maxRows) {
+                    break;
+                }
+            }
+
+            if (count($chunkRows) < $chunkSize) {
+                break;
+            }
+            $offset += $chunkSize;
+        }
+
+        $filename = 'booking-history-' . gmdate('Ymd-His') . '.csv';
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            throw new RuntimeException('Unable to open output stream.');
+        }
+
+        fputcsv($out, [
+            'booking_id',
+            'status',
+            'archived_at_utc',
+            'completed_at_utc',
+            'cancelled_at_utc',
+            'customer_name',
+            'customer_email',
+            'customer_phone',
+            'region',
+            'pickup_date',
+            'pickup_location',
+            'return_location',
+            'payment_method',
+            'total_amount',
+        ]);
+
+        foreach ($rows as $row) {
+            fputcsv($out, [
+                (string)($row['booking_id'] ?? ''),
+                (string)($row['status'] ?? ''),
+                (string)($row['archived_at'] ?? ''),
+                (string)($row['completed_at'] ?? ''),
+                (string)($row['cancelled_at'] ?? ''),
+                (string)($row['customer_name'] ?? ''),
+                (string)($row['customer_email'] ?? ''),
+                (string)($row['customer_phone'] ?? ''),
+                (string)($row['region_name'] ?? ''),
+                (string)($row['pickup_date'] ?? ''),
+                (string)($row['pickup_location'] ?? ''),
+                (string)($row['return_location'] ?? ''),
+                (string)($row['payment_method'] ?? ''),
+                (string)($row['total_amount'] ?? ''),
+            ]);
+        }
+
+        fclose($out);
+    } catch (Throwable $e) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'CSV export failed: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - BOOKING HISTORY EXPORT PDF
+// ==========================================================
+if ($action === 'admin-booking-history-export-pdf') {
+    requireAdmin();
+
+    try {
+        if (!class_exists('Mpdf\\Mpdf')) {
+            $autoload = __DIR__ . '/../vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+        }
+
+        if (!class_exists('Mpdf\\Mpdf')) {
+            throw new RuntimeException('PDF export dependency is not available.');
+        }
+
+        $source = array_merge($_GET ?? [], $input ?? []);
+        $filters = adminHistoryExtractFilters($source);
+        $bookingRepo->ensureBookingHistorySchema();
+        $bookingRepo->backfillBookingHistory(1000);
+
+        $summary = $bookingRepo->getBookingHistorySummary($filters);
+        $result = $bookingRepo->listBookingHistory($filters, 2000, 0);
+        $rows = $result['rows'] ?? [];
+
+        $escape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+        $formatUtc = static function (?string $value): string {
+            if (!$value) {
+                return '-';
+            }
+            $ts = strtotime($value);
+            if ($ts === false) {
+                return '-';
+            }
+            return gmdate('Y-m-d H:i', $ts) . ' UTC';
+        };
+
+        $queryText = adminHistoryBuildExportQuery($filters);
+        $queryText = $queryText === '' ? 'No filters' : $queryText;
+
+        $rowsHtml = '';
+        foreach ($rows as $row) {
+            $rowsHtml .= '<tr>'
+                . '<td>' . $escape((string)($row['booking_id'] ?? '')) . '</td>'
+                . '<td>' . $escape((string)($row['status'] ?? '')) . '</td>'
+                . '<td>' . $escape((string)($row['customer_name'] ?? '')) . '</td>'
+                . '<td>' . $escape((string)($row['customer_email'] ?? '')) . '</td>'
+                . '<td>' . $escape((string)($row['region_name'] ?? '')) . '</td>'
+                . '<td>' . $escape($formatUtc((string)($row['archived_at'] ?? ''))) . '</td>'
+                . '<td style="text-align:right;">' . $escape(number_format((float)($row['total_amount'] ?? 0), 2)) . '</td>'
+                . '</tr>';
+        }
+
+        if ($rowsHtml === '') {
+            $rowsHtml = '<tr><td colspan="7">No records found.</td></tr>';
+        }
+
+        $html = '<h1 style="font-size:20px;">Booking History Report</h1>'
+            . '<p><strong>Generated:</strong> ' . gmdate('Y-m-d H:i:s') . ' UTC</p>'
+            . '<p><strong>Filters:</strong> ' . $escape($queryText) . '</p>'
+            . '<table width="100%" cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse;font-size:11px;margin-bottom:14px;">'
+            . '<tr><th align="left">Total</th><th align="left">Completed</th><th align="left">Cancelled</th><th align="left">Revenue</th></tr>'
+            . '<tr>'
+            . '<td>' . $escape((string)($summary['total_bookings'] ?? 0)) . '</td>'
+            . '<td>' . $escape((string)($summary['completed_bookings'] ?? 0)) . '</td>'
+            . '<td>' . $escape((string)($summary['cancelled_bookings'] ?? 0)) . '</td>'
+            . '<td>' . $escape(number_format((float)($summary['total_revenue'] ?? 0), 2)) . '</td>'
+            . '</tr>'
+            . '</table>'
+            . '<table width="100%" cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse;font-size:10px;">'
+            . '<thead><tr>'
+            . '<th align="left">Booking ID</th>'
+            . '<th align="left">Status</th>'
+            . '<th align="left">Customer</th>'
+            . '<th align="left">Email</th>'
+            . '<th align="left">Region</th>'
+            . '<th align="left">Archived At (UTC)</th>'
+            . '<th align="right">Amount</th>'
+            . '</tr></thead>'
+            . '<tbody>' . $rowsHtml . '</tbody>'
+            . '</table>';
+
+        $pdf = new \Mpdf\Mpdf(['tempDir' => sys_get_temp_dir()]);
+        $pdf->WriteHTML($html);
+
+        $filename = 'booking-history-' . gmdate('Ymd-His') . '.pdf';
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        echo $pdf->Output($filename, \Mpdf\Output\Destination::STRING_RETURN);
+    } catch (Throwable $e) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'PDF export failed: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================================
+// ADMIN - BOOKING HISTORY DELETE (audited hard delete)
+// ==========================================================
+if ($action === 'admin-booking-history-delete') {
+    requireAdmin();
+
+    $bookingId = trim((string)($input['booking_id'] ?? ''));
+    $deleteReason = trim((string)($input['delete_reason'] ?? ''));
+    if ($bookingId === '') {
+        echo json_encode(['success' => false, 'message' => 'Booking ID is required.']);
+        exit;
+    }
+
+    try {
+        $deleted = $bookingRepo->deleteBookingWithAudit(
+            $bookingId,
+            (string)($_SESSION['user_id'] ?? ''),
+            $deleteReason !== '' ? $deleteReason : null
+        );
+
+        if (!$deleted) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found.']);
+            exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Booking deleted with audit log.']);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Delete failed: ' . $e->getMessage()]);
     }
     exit;
 }

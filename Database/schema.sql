@@ -168,6 +168,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     transmission    VARCHAR(20) NOT NULL DEFAULT 'automatic', -- automatic, manual
     fuel_type       VARCHAR(20) NOT NULL DEFAULT 'petrol',    -- petrol, diesel, electric, hybrid
     seats           INT NOT NULL DEFAULT 5,
+    capacity        INT,                       -- luggage capacity in lbs (staff-managed)
     color           VARCHAR(30),
     
     -- Specs
@@ -324,6 +325,154 @@ CREATE INDEX idx_bookings_owner ON bookings(owner_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_driver ON bookings(driver_id);
 CREATE INDEX idx_bookings_status ON bookings(status);
 CREATE INDEX idx_bookings_dates ON bookings(pickup_date, return_date);
+
+-- =====================================================
+-- 5a. BOOKING HISTORY TABLES (US-29)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS booking_regions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name            VARCHAR(120) NOT NULL,
+    normalized_key  VARCHAR(160) NOT NULL UNIQUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS booking_archive (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    booking_id      UUID NOT NULL UNIQUE,
+    status          booking_status NOT NULL,
+    archived_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ,
+    cancelled_at    TIMESTAMPTZ,
+    archive_reason  VARCHAR(80) NOT NULL DEFAULT 'status_transition',
+
+    renter_id       UUID,
+    owner_id        UUID,
+    vehicle_id      UUID,
+    driver_id       UUID,
+
+    customer_name   VARCHAR(255),
+    customer_email  VARCHAR(255),
+    customer_phone  VARCHAR(30),
+    pickup_date     DATE,
+    pickup_location TEXT,
+    return_location TEXT,
+    total_amount    DECIMAL(10, 2),
+    payment_method  VARCHAR(50),
+    booking_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    region_id       UUID REFERENCES booking_regions(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS booking_deletion_audit (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    booking_id      UUID NOT NULL,
+    deleted_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+    deleted_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    delete_reason   TEXT,
+    booking_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_booking_archive_archived_at ON booking_archive(archived_at DESC);
+CREATE INDEX IF NOT EXISTS idx_booking_archive_status_archived ON booking_archive(status, archived_at DESC);
+CREATE INDEX IF NOT EXISTS idx_booking_archive_region_archived ON booking_archive(region_id, archived_at DESC);
+CREATE INDEX IF NOT EXISTS idx_booking_archive_customer_email ON booking_archive(customer_email);
+CREATE INDEX IF NOT EXISTS idx_booking_archive_customer_phone ON booking_archive(customer_phone);
+CREATE INDEX IF NOT EXISTS idx_booking_archive_completed_at ON booking_archive(completed_at);
+CREATE INDEX IF NOT EXISTS idx_booking_archive_cancelled_at ON booking_archive(cancelled_at);
+CREATE INDEX IF NOT EXISTS idx_booking_deletion_deleted_at ON booking_deletion_audit(deleted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_booking_deletion_booking_id ON booking_deletion_audit(booking_id);
+
+CREATE OR REPLACE FUNCTION archive_booking_on_status_change()
+RETURNS TRIGGER AS $$
+DECLARE
+    region_name TEXT;
+    region_key TEXT;
+    resolved_region_id UUID;
+    payload JSONB;
+BEGIN
+    IF TG_OP <> 'UPDATE' THEN
+        RETURN NEW;
+    END IF;
+
+    IF NEW.status NOT IN ('completed'::booking_status, 'cancelled'::booking_status) THEN
+        RETURN NEW;
+    END IF;
+
+    region_name := COALESCE(NULLIF(TRIM(split_part(COALESCE(NEW.pickup_location, ''), ',', 1)), ''), 'Unknown');
+    region_key := LOWER(REGEXP_REPLACE(region_name, '[^a-z0-9]+', '-', 'g'));
+    region_key := TRIM(BOTH '-' FROM region_key);
+    IF region_key = '' THEN
+        region_key := 'region-' || SUBSTR(MD5(region_name), 1, 10);
+    END IF;
+
+    INSERT INTO booking_regions (name, normalized_key)
+    VALUES (region_name, region_key)
+    ON CONFLICT (normalized_key) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id INTO resolved_region_id;
+
+    payload := to_jsonb(NEW);
+
+    INSERT INTO booking_archive (
+        booking_id, status, archived_at,
+        completed_at, cancelled_at,
+        archive_reason,
+        renter_id, owner_id, vehicle_id, driver_id,
+        customer_name, customer_email, customer_phone,
+        pickup_date, pickup_location, return_location,
+        total_amount, payment_method,
+        booking_payload, region_id
+    )
+    SELECT
+        NEW.id,
+        NEW.status,
+        NOW(),
+        NEW.completed_at,
+        NEW.cancelled_at,
+        'status_transition',
+        NEW.renter_id,
+        NEW.owner_id,
+        NEW.vehicle_id,
+        NEW.driver_id,
+        u.full_name,
+        u.email,
+        u.phone,
+        NEW.pickup_date,
+        NEW.pickup_location,
+        NEW.return_location,
+        NEW.total_amount,
+        NEW.payment_method::text,
+        payload,
+        resolved_region_id
+    FROM users u
+    WHERE u.id = NEW.renter_id
+    ON CONFLICT (booking_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        archived_at = EXCLUDED.archived_at,
+        completed_at = EXCLUDED.completed_at,
+        cancelled_at = EXCLUDED.cancelled_at,
+        archive_reason = EXCLUDED.archive_reason,
+        renter_id = EXCLUDED.renter_id,
+        owner_id = EXCLUDED.owner_id,
+        vehicle_id = EXCLUDED.vehicle_id,
+        driver_id = EXCLUDED.driver_id,
+        customer_name = EXCLUDED.customer_name,
+        customer_email = EXCLUDED.customer_email,
+        customer_phone = EXCLUDED.customer_phone,
+        pickup_date = EXCLUDED.pickup_date,
+        pickup_location = EXCLUDED.pickup_location,
+        return_location = EXCLUDED.return_location,
+        total_amount = EXCLUDED.total_amount,
+        payment_method = EXCLUDED.payment_method,
+        booking_payload = EXCLUDED.booking_payload,
+        region_id = EXCLUDED.region_id;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_bookings_archive_on_final_status ON bookings;
+CREATE TRIGGER trg_bookings_archive_on_final_status
+    AFTER UPDATE OF status, completed_at, cancelled_at ON bookings
+    FOR EACH ROW EXECUTE FUNCTION archive_booking_on_status_change();
 
 -- =====================================================
 -- 5b. ACTIVE TRIPS TABLE (real-time minicab tracking)
@@ -558,6 +707,25 @@ CREATE INDEX idx_notif_user ON notifications(user_id, is_read);
 CREATE INDEX idx_notif_created ON notifications(created_at DESC);
 
 -- =====================================================
+-- 13b. VEHICLE AVAILABILITY SUBSCRIPTIONS
+-- =====================================================
+CREATE TABLE IF NOT EXISTS vehicle_availability_subscriptions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    vehicle_id      UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    notified_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE(user_id, vehicle_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vehicle_availability_subscriptions_vehicle_active
+    ON vehicle_availability_subscriptions(vehicle_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_vehicle_availability_subscriptions_user
+    ON vehicle_availability_subscriptions(user_id);
+
+-- =====================================================
 -- 14. MEMBERSHIPS TABLE (subscription history)
 -- =====================================================
 CREATE TABLE memberships (
@@ -727,6 +895,7 @@ ALTER TABLE community_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE community_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vehicle_availability_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gps_tracking ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trip_enquiries ENABLE ROW LEVEL SECURITY;
@@ -738,6 +907,9 @@ ALTER TABLE active_trips ENABLE ROW LEVEL SECURITY;
 ALTER TABLE driver_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hero_slides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vehicle_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE booking_regions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE booking_archive ENABLE ROW LEVEL SECURITY;
+ALTER TABLE booking_deletion_audit ENABLE ROW LEVEL SECURITY;
 
 -- Public read for vehicles & promotions
 DROP POLICY IF EXISTS "Vehicles are viewable by everyone" ON vehicles;

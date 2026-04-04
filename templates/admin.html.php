@@ -6,7 +6,7 @@
             <!-- Admin Header -->
             <div style="margin-bottom:32px;">
                 <h1 style="font-size:2rem;font-weight:800;color:var(--gray-900);">⚙️ Admin Dashboard</h1>
-                <p style="color:var(--gray-500);margin-top:4px;">Manage users, hero slides, promotions, vehicles and bookings</p>
+                <p style="color:var(--gray-500);margin-top:4px;">Manage users, hero slides, promotions, vehicles, bookings and booking history reports</p>
             </div>
 
             <!-- Tab Navigation -->
@@ -16,6 +16,7 @@
                 <button class="admin-tab" onclick="switchTab('users')" id="tab-users">👥 Users</button>
                 <button class="admin-tab" onclick="switchTab('vehicles')" id="tab-vehicles">🚗 Vehicles</button>
                 <button class="admin-tab" onclick="switchTab('bookings')" id="tab-bookings">📋 Bookings</button>
+                <button class="admin-tab" onclick="switchTab('history')" id="tab-history">📚 Booking History</button>
             </div>
 
             <!-- ===== HERO SLIDES TAB ===== -->
@@ -178,6 +179,55 @@
                 </div>
             </div>
 
+            <!-- ===== BOOKING HISTORY TAB ===== -->
+            <div class="admin-panel" id="panel-history" style="display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                    <h2 style="font-size:1.25rem;font-weight:700;">📚 Booking History (Completed/Cancelled)</h2>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <button class="btn btn-outline" onclick="exportBookingHistoryCsv()">Export CSV</button>
+                        <button class="btn btn-outline" onclick="exportBookingHistoryPdf()">Export PDF</button>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px;">
+                    <input type="text" id="historySearchInput" placeholder="Search id/name/email/phone..." style="padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                    <select id="historyStatusFilter" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                        <option value="">All Final Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <select id="historyRegionFilter" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                        <option value="">All Regions</option>
+                    </select>
+                    <input type="date" id="historyDateFrom" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                    <input type="date" id="historyDateTo" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:0.85rem;">
+                    <button class="btn btn-primary" onclick="refreshBookingHistory()">Refresh</button>
+                </div>
+
+                <div id="bookingHistorySummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px;">
+                    <div class="history-kpi-card"><div class="history-kpi-label">Total</div><div id="historyKpiTotal" class="history-kpi-value">-</div></div>
+                    <div class="history-kpi-card"><div class="history-kpi-label">Completed</div><div id="historyKpiCompleted" class="history-kpi-value">-</div></div>
+                    <div class="history-kpi-card"><div class="history-kpi-label">Cancelled</div><div id="historyKpiCancelled" class="history-kpi-value">-</div></div>
+                    <div class="history-kpi-card"><div class="history-kpi-label">Revenue</div><div id="historyKpiRevenue" class="history-kpi-value">-</div></div>
+                </div>
+
+                <div id="adminHistoryList">
+                    <div style="text-align:center;padding:40px;color:var(--gray-400);">Loading booking history...</div>
+                </div>
+                <div id="historyPagination" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px;"></div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:18px;">
+                    <div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);padding:12px;">
+                        <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:8px;">Daily Aggregation (UTC)</h3>
+                        <div id="historyDailyAggregation" style="font-size:0.85rem;color:var(--gray-500);">Loading...</div>
+                    </div>
+                    <div style="border:1px solid var(--gray-200);border-radius:var(--radius-md);padding:12px;">
+                        <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:8px;">Quarterly Aggregation (UTC)</h3>
+                        <div id="historyQuarterlyAggregation" style="font-size:0.85rem;color:var(--gray-500);">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -235,6 +285,24 @@
         .btn-xs.edit:hover:not(:disabled) { background: #2563eb; color: white; }
         .btn-xs.toggle { background: #f0fdf4; color: #16a34a; }
         .btn-xs.toggle:hover:not(:disabled) { background: #16a34a; color: white; }
+        .history-kpi-card {
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+        .history-kpi-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--gray-500);
+            margin-bottom: 4px;
+        }
+        .history-kpi-value {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--gray-900);
+        }
 
         /* Admin inline notification banner */
         .admin-alert {

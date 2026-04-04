@@ -7,6 +7,7 @@ final class BookingRepository
     private PDO $pdo;
     /** @var array<string,bool>|null */
     private ?array $bookingColumnCache = null;
+    private bool $historySchemaEnsured = false;
 
     public function __construct(PDO $pdo)
     {
@@ -64,11 +65,454 @@ final class BookingRepository
         }
     }
 
+    public function ensureBookingHistorySchema(): void
+    {
+        if ($this->historySchemaEnsured) {
+            return;
+        }
+
+        $ddl = [
+            "CREATE TABLE IF NOT EXISTS booking_regions (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                name VARCHAR(120) NOT NULL,
+                normalized_key VARCHAR(160) NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+            "CREATE TABLE IF NOT EXISTS booking_archive (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                booking_id UUID NOT NULL UNIQUE,
+                status booking_status NOT NULL,
+                archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                completed_at TIMESTAMPTZ,
+                cancelled_at TIMESTAMPTZ,
+                archive_reason VARCHAR(80) NOT NULL DEFAULT 'status_transition',
+                renter_id UUID,
+                owner_id UUID,
+                vehicle_id UUID,
+                driver_id UUID,
+                customer_name VARCHAR(255),
+                customer_email VARCHAR(255),
+                customer_phone VARCHAR(30),
+                pickup_date DATE,
+                pickup_location TEXT,
+                return_location TEXT,
+                total_amount DECIMAL(10,2),
+                payment_method VARCHAR(50),
+                booking_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                region_id UUID REFERENCES booking_regions(id) ON DELETE SET NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS booking_deletion_audit (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                booking_id UUID NOT NULL,
+                deleted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                delete_reason TEXT,
+                booking_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb
+            )",
+            "CREATE INDEX IF NOT EXISTS idx_booking_archive_archived_at ON booking_archive(archived_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_archive_status_archived ON booking_archive(status, archived_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_archive_region_archived ON booking_archive(region_id, archived_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_archive_customer_email ON booking_archive(customer_email)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_archive_customer_phone ON booking_archive(customer_phone)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_archive_completed_at ON booking_archive(completed_at)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_archive_cancelled_at ON booking_archive(cancelled_at)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_deletion_deleted_at ON booking_deletion_audit(deleted_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_booking_deletion_booking_id ON booking_deletion_audit(booking_id)",
+            "CREATE OR REPLACE FUNCTION archive_booking_on_status_change()
+            RETURNS TRIGGER AS $$
+            DECLARE
+                region_name TEXT;
+                region_key TEXT;
+                resolved_region_id UUID;
+                payload JSONB;
+            BEGIN
+                IF TG_OP <> 'UPDATE' THEN
+                    RETURN NEW;
+                END IF;
+
+                IF NEW.status NOT IN ('completed'::booking_status, 'cancelled'::booking_status) THEN
+                    RETURN NEW;
+                END IF;
+
+                region_name := COALESCE(NULLIF(TRIM(split_part(COALESCE(NEW.pickup_location, ''), ',', 1)), ''), 'Unknown');
+                region_key := LOWER(REGEXP_REPLACE(region_name, '[^a-z0-9]+', '-', 'g'));
+                region_key := TRIM(BOTH '-' FROM region_key);
+                IF region_key = '' THEN
+                    region_key := 'region-' || SUBSTR(MD5(region_name), 1, 10);
+                END IF;
+
+                INSERT INTO booking_regions (name, normalized_key)
+                VALUES (region_name, region_key)
+                ON CONFLICT (normalized_key)
+                DO UPDATE SET name = EXCLUDED.name
+                RETURNING id INTO resolved_region_id;
+
+                payload := to_jsonb(NEW);
+
+                INSERT INTO booking_archive (
+                    booking_id, status, archived_at,
+                    completed_at, cancelled_at,
+                    archive_reason,
+                    renter_id, owner_id, vehicle_id, driver_id,
+                    customer_name, customer_email, customer_phone,
+                    pickup_date, pickup_location, return_location,
+                    total_amount, payment_method,
+                    booking_payload, region_id
+                )
+                SELECT
+                    NEW.id,
+                    NEW.status,
+                    NOW(),
+                    NEW.completed_at,
+                    NEW.cancelled_at,
+                    'status_transition',
+                    NEW.renter_id,
+                    NEW.owner_id,
+                    NEW.vehicle_id,
+                    NEW.driver_id,
+                    u.full_name,
+                    u.email,
+                    u.phone,
+                    NEW.pickup_date,
+                    NEW.pickup_location,
+                    NEW.return_location,
+                    NEW.total_amount,
+                    NEW.payment_method::text,
+                    payload,
+                    resolved_region_id
+                FROM users u
+                WHERE u.id = NEW.renter_id
+                ON CONFLICT (booking_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    archived_at = EXCLUDED.archived_at,
+                    completed_at = EXCLUDED.completed_at,
+                    cancelled_at = EXCLUDED.cancelled_at,
+                    archive_reason = EXCLUDED.archive_reason,
+                    renter_id = EXCLUDED.renter_id,
+                    owner_id = EXCLUDED.owner_id,
+                    vehicle_id = EXCLUDED.vehicle_id,
+                    driver_id = EXCLUDED.driver_id,
+                    customer_name = EXCLUDED.customer_name,
+                    customer_email = EXCLUDED.customer_email,
+                    customer_phone = EXCLUDED.customer_phone,
+                    pickup_date = EXCLUDED.pickup_date,
+                    pickup_location = EXCLUDED.pickup_location,
+                    return_location = EXCLUDED.return_location,
+                    total_amount = EXCLUDED.total_amount,
+                    payment_method = EXCLUDED.payment_method,
+                    booking_payload = EXCLUDED.booking_payload,
+                    region_id = EXCLUDED.region_id;
+
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql",
+            "DROP TRIGGER IF EXISTS trg_bookings_archive_on_final_status ON bookings",
+            "CREATE TRIGGER trg_bookings_archive_on_final_status
+                AFTER UPDATE OF status, completed_at, cancelled_at ON bookings
+                FOR EACH ROW EXECUTE FUNCTION archive_booking_on_status_change()",
+        ];
+
+        foreach ($ddl as $sql) {
+            try {
+                $this->pdo->exec($sql);
+            } catch (Throwable $e) {
+                // Ignore environments without migration permissions.
+            }
+        }
+
+        $this->historySchemaEnsured = true;
+    }
+
+    private function normalizeRegionName(?string $pickupLocation): ?string
+    {
+        $raw = trim((string)($pickupLocation ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $parts = preg_split('/[,|\-]/', $raw);
+        $name = trim((string)($parts[0] ?? $raw));
+        if ($name === '') {
+            $name = $raw;
+        }
+
+        if (strlen($name) > 120) {
+            $name = substr($name, 0, 120);
+        }
+
+        return ucwords(strtolower($name));
+    }
+
+    private function normalizeRegionKey(string $name): string
+    {
+        $key = strtolower(trim($name));
+        $key = preg_replace('/[^a-z0-9]+/', '-', $key) ?? '';
+        $key = trim($key, '-');
+        if ($key === '') {
+            $key = 'region-' . substr(md5($name), 0, 10);
+        }
+        return $key;
+    }
+
+    private function findOrCreateRegionId(?string $pickupLocation): ?string
+    {
+        $name = $this->normalizeRegionName($pickupLocation);
+        if ($name === null) {
+            return null;
+        }
+
+        $key = $this->normalizeRegionKey($name);
+        $stmt = $this->pdo->prepare("\n            INSERT INTO booking_regions (name, normalized_key)\n            VALUES (?, ?)\n            ON CONFLICT (normalized_key)\n            DO UPDATE SET name = EXCLUDED.name\n            RETURNING id\n        ");
+        $stmt->execute([$name, $key]);
+        $id = $stmt->fetchColumn();
+        return $id === false ? null : (string)$id;
+    }
+
+    public function archiveBookingSnapshotIfEligible(string $bookingId): bool
+    {
+        $this->ensureBookingHistorySchema();
+
+        $stmt = $this->pdo->prepare("\n            SELECT\n                b.*,\n                u.full_name AS customer_name,\n                u.email AS customer_email,\n                u.phone AS customer_phone\n            FROM bookings b\n            LEFT JOIN users u ON u.id = b.renter_id\n            WHERE b.id = ?\n              AND b.status IN ('completed'::booking_status, 'cancelled'::booking_status)\n            LIMIT 1\n        ");
+        $stmt->execute([$bookingId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return false;
+        }
+
+        $regionId = $this->findOrCreateRegionId((string)($row['pickup_location'] ?? ''));
+        $payload = json_encode($row);
+
+        $insert = $this->pdo->prepare("\n            INSERT INTO booking_archive (\n                booking_id, status, archived_at,\n                completed_at, cancelled_at,\n                archive_reason,\n                renter_id, owner_id, vehicle_id, driver_id,\n                customer_name, customer_email, customer_phone,\n                pickup_date, pickup_location, return_location,\n                total_amount, payment_method,\n                booking_payload, region_id\n            ) VALUES (\n                :booking_id, :status, NOW(),\n                :completed_at, :cancelled_at,\n                'status_transition',\n                :renter_id, :owner_id, :vehicle_id, :driver_id,\n                :customer_name, :customer_email, :customer_phone,\n                :pickup_date, :pickup_location, :return_location,\n                :total_amount, :payment_method,\n                :booking_payload::jsonb, :region_id\n            )\n            ON CONFLICT (booking_id) DO UPDATE SET\n                status = EXCLUDED.status,\n                archived_at = EXCLUDED.archived_at,\n                completed_at = EXCLUDED.completed_at,\n                cancelled_at = EXCLUDED.cancelled_at,\n                archive_reason = EXCLUDED.archive_reason,\n                renter_id = EXCLUDED.renter_id,\n                owner_id = EXCLUDED.owner_id,\n                vehicle_id = EXCLUDED.vehicle_id,\n                driver_id = EXCLUDED.driver_id,\n                customer_name = EXCLUDED.customer_name,\n                customer_email = EXCLUDED.customer_email,\n                customer_phone = EXCLUDED.customer_phone,\n                pickup_date = EXCLUDED.pickup_date,\n                pickup_location = EXCLUDED.pickup_location,\n                return_location = EXCLUDED.return_location,\n                total_amount = EXCLUDED.total_amount,\n                payment_method = EXCLUDED.payment_method,\n                booking_payload = EXCLUDED.booking_payload,\n                region_id = EXCLUDED.region_id\n        ");
+
+        return $insert->execute([
+            ':booking_id' => $row['id'],
+            ':status' => $row['status'],
+            ':completed_at' => $row['completed_at'] ?? null,
+            ':cancelled_at' => $row['cancelled_at'] ?? null,
+            ':renter_id' => $row['renter_id'] ?? null,
+            ':owner_id' => $row['owner_id'] ?? null,
+            ':vehicle_id' => $row['vehicle_id'] ?? null,
+            ':driver_id' => $row['driver_id'] ?? null,
+            ':customer_name' => $row['customer_name'] ?? null,
+            ':customer_email' => $row['customer_email'] ?? null,
+            ':customer_phone' => $row['customer_phone'] ?? null,
+            ':pickup_date' => $row['pickup_date'] ?? null,
+            ':pickup_location' => $row['pickup_location'] ?? null,
+            ':return_location' => $row['return_location'] ?? null,
+            ':total_amount' => $row['total_amount'] ?? null,
+            ':payment_method' => $row['payment_method'] ?? null,
+            ':booking_payload' => $payload !== false ? $payload : '{}',
+            ':region_id' => $regionId,
+        ]);
+    }
+
+    public function backfillBookingHistory(int $limit = 200): int
+    {
+        $this->ensureBookingHistorySchema();
+
+        $limit = max(1, min(2000, $limit));
+        $stmt = $this->pdo->prepare("\n            SELECT b.id\n            FROM bookings b\n            LEFT JOIN booking_archive ba ON ba.booking_id = b.id\n            WHERE b.status IN ('completed'::booking_status, 'cancelled'::booking_status)\n              AND ba.booking_id IS NULL\n            ORDER BY COALESCE(b.completed_at, b.cancelled_at, b.updated_at, b.created_at) DESC\n            LIMIT ?\n        ");
+        $stmt->execute([$limit]);
+        $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $archived = 0;
+        foreach ($ids as $id) {
+            if ($this->archiveBookingSnapshotIfEligible((string)$id)) {
+                $archived++;
+            }
+        }
+
+        return $archived;
+    }
+
+    private function buildHistoryWhereClause(array $filters, array &$params): string
+    {
+        $clauses = ["a.archived_at >= (NOW() - INTERVAL '5 years')"];
+
+        $status = strtolower(trim((string)($filters['status'] ?? '')));
+        if (in_array($status, ['completed', 'cancelled'], true)) {
+            $clauses[] = 'a.status = ?::booking_status';
+            $params[] = $status;
+        }
+
+        $dateFrom = trim((string)($filters['date_from'] ?? ''));
+        if ($dateFrom !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $clauses[] = "(COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')::date >= ?::date";
+            $params[] = $dateFrom;
+        }
+
+        $dateTo = trim((string)($filters['date_to'] ?? ''));
+        if ($dateTo !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $clauses[] = "(COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')::date <= ?::date";
+            $params[] = $dateTo;
+        }
+
+        $regionId = trim((string)($filters['region_id'] ?? ''));
+        if ($regionId !== '') {
+            $clauses[] = 'a.region_id = ?';
+            $params[] = $regionId;
+        }
+
+        $search = strtolower(trim((string)($filters['search'] ?? '')));
+        if ($search !== '') {
+            $like = '%' . $search . '%';
+            if (preg_match('/^[0-9a-f-]{36}$/i', $search)) {
+                $clauses[] = "(a.renter_id::text = ? OR a.booking_id::text = ? OR LOWER(COALESCE(a.customer_name, '')) LIKE ? OR LOWER(COALESCE(a.customer_email, '')) LIKE ? OR LOWER(COALESCE(a.customer_phone, '')) LIKE ?)";
+                $params[] = $search;
+                $params[] = $search;
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+            } else {
+                $clauses[] = "(LOWER(COALESCE(a.customer_name, '')) LIKE ? OR LOWER(COALESCE(a.customer_email, '')) LIKE ? OR LOWER(COALESCE(a.customer_phone, '')) LIKE ? OR a.booking_id::text LIKE ?)";
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+            }
+        }
+
+        return implode(' AND ', $clauses);
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array{rows:array<int,array<string,mixed>>,total:int,limit:int,offset:int}
+     */
+    public function listBookingHistory(array $filters, int $limit = 50, int $offset = 0): array
+    {
+        $this->ensureBookingHistorySchema();
+        $limit = max(1, min(200, $limit));
+        $offset = max(0, $offset);
+
+        $params = [];
+        $where = $this->buildHistoryWhereClause($filters, $params);
+
+        $countStmt = $this->pdo->prepare("SELECT COUNT(*) FROM booking_archive a WHERE {$where}");
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetchColumn();
+
+        $listParams = $params;
+        $listParams[] = $limit;
+        $listParams[] = $offset;
+
+        $stmt = $this->pdo->prepare("\n            SELECT\n                a.id,\n                a.booking_id,\n                a.status,\n                a.archived_at,\n                a.completed_at,\n                a.cancelled_at,\n                a.renter_id,\n                a.owner_id,\n                a.vehicle_id,\n                a.driver_id,\n                a.customer_name,\n                a.customer_email,\n                a.customer_phone,\n                a.pickup_date,\n                a.pickup_location,\n                a.return_location,\n                a.total_amount,\n                a.payment_method,\n                a.archive_reason,\n                r.name AS region_name\n            FROM booking_archive a\n            LEFT JOIN booking_regions r ON r.id = a.region_id\n            WHERE {$where}\n            ORDER BY a.archived_at DESC\n            LIMIT ? OFFSET ?\n        ");
+        $stmt->execute($listParams);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return [
+            'rows' => $rows,
+            'total' => $total,
+            'limit' => $limit,
+            'offset' => $offset,
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array<string,mixed>
+     */
+    public function getBookingHistorySummary(array $filters): array
+    {
+        $this->ensureBookingHistorySchema();
+
+        $params = [];
+        $where = $this->buildHistoryWhereClause($filters, $params);
+
+        $stmt = $this->pdo->prepare("\n            SELECT\n                COUNT(*)::int AS total_bookings,\n                SUM(CASE WHEN a.status = 'completed'::booking_status THEN 1 ELSE 0 END)::int AS completed_bookings,\n                SUM(CASE WHEN a.status = 'cancelled'::booking_status THEN 1 ELSE 0 END)::int AS cancelled_bookings,\n                COALESCE(SUM(a.total_amount), 0)::numeric(12,2) AS total_revenue\n            FROM booking_archive a\n            WHERE {$where}\n        ");
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'total_bookings' => (int)($row['total_bookings'] ?? 0),
+            'completed_bookings' => (int)($row['completed_bookings'] ?? 0),
+            'cancelled_bookings' => (int)($row['cancelled_bookings'] ?? 0),
+            'total_revenue' => (float)($row['total_revenue'] ?? 0),
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array<int,array<string,mixed>>
+     */
+    public function getBookingHistoryAggregation(array $filters, string $granularity = 'daily'): array
+    {
+        $this->ensureBookingHistorySchema();
+
+        $bucket = strtolower($granularity) === 'quarterly' ? 'quarter' : 'day';
+        $label = $bucket === 'quarter' ? 'YYYY-"Q"Q' : 'YYYY-MM-DD';
+        $limit = $bucket === 'quarter' ? 40 : 180;
+
+        $params = [];
+        $where = $this->buildHistoryWhereClause($filters, $params);
+
+        $sql = "\n            SELECT\n                TO_CHAR(DATE_TRUNC('{$bucket}', (COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')), '{$label}') AS period_label,\n                DATE_TRUNC('{$bucket}', (COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')) AS period_start,\n                COUNT(*)::int AS total_bookings,\n                SUM(CASE WHEN a.status = 'completed'::booking_status THEN 1 ELSE 0 END)::int AS completed_bookings,\n                SUM(CASE WHEN a.status = 'cancelled'::booking_status THEN 1 ELSE 0 END)::int AS cancelled_bookings,\n                COALESCE(SUM(a.total_amount), 0)::numeric(12,2) AS total_revenue\n            FROM booking_archive a\n            WHERE {$where}\n            GROUP BY period_label, period_start\n            ORDER BY period_start DESC\n            LIMIT {$limit}\n        ";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    public function listBookingHistoryRegions(): array
+    {
+        $this->ensureBookingHistorySchema();
+        $stmt = $this->pdo->query("SELECT id, name, normalized_key FROM booking_regions ORDER BY name ASC");
+        return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    }
+
+    public function deleteBookingWithAudit(string $bookingId, string $adminUserId, ?string $deleteReason = null): bool
+    {
+        $this->ensureBookingHistorySchema();
+
+        try {
+            $this->pdo->beginTransaction();
+
+            $bookingStmt = $this->pdo->prepare("SELECT * FROM bookings WHERE id = ? FOR UPDATE");
+            $bookingStmt->execute([$bookingId]);
+            $booking = $bookingStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$booking) {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            $this->archiveBookingSnapshotIfEligible($bookingId);
+
+            $snapshot = json_encode($booking);
+            $auditStmt = $this->pdo->prepare("\n                INSERT INTO booking_deletion_audit (booking_id, deleted_by, delete_reason, booking_snapshot)\n                VALUES (?, ?, ?, ?::jsonb)\n            ");
+            $auditStmt->execute([
+                $bookingId,
+                $adminUserId,
+                $deleteReason,
+                $snapshot !== false ? $snapshot : '{}',
+            ]);
+
+            $deleteStmt = $this->pdo->prepare("DELETE FROM bookings WHERE id = ?");
+            $deleteStmt->execute([$bookingId]);
+            $deleted = $deleteStmt->rowCount() > 0;
+
+            if (!$deleted) {
+                $this->pdo->rollBack();
+                return false;
+            }
+
+            $this->pdo->commit();
+            return true;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     /**
      * Find a vehicle matching the specified tier
      * @return array<string,mixed>|null
      */
-    public function findVehicleForTier(string $rideTier, string $excludeRenterId): ?array
+    public function findVehicleForTier(string $rideTier, string $excludeRenterId, int $seatCapacity = 4): ?array
     {
         $this->ensureVehicleServiceTierColumnExists();
 
@@ -80,11 +524,17 @@ final class BookingRepository
             default => throw new Exception('Invalid ride tier')
         };
 
+        $normalizedSeatCapacity = $seatCapacity >= 7 ? 7 : 4;
+        $seatCondition = $normalizedSeatCapacity >= 7 ? 'v.seats >= 7' : 'v.seats < 7';
+
         $stmt = $this->pdo->prepare("
-            SELECT v.id, v.owner_id, v.service_tier, 
+            SELECT v.id, v.owner_id, v.service_tier,
                    v.category, v.status, v.brand, v.model, v.seats, v.owner_id as owner_id
             FROM vehicles v
-            WHERE v.status = 'available' AND {$tierConditions} AND v.owner_id != ?
+            WHERE v.status = 'available'
+              AND {$tierConditions}
+              AND {$seatCondition}
+              AND v.owner_id != ?
             ORDER BY RANDOM()
             LIMIT 1
         ");
@@ -200,12 +650,20 @@ final class BookingRepository
     ): bool {
         try {
             $stmt = $this->pdo->prepare("
-                INSERT INTO active_trips (booking_id, user_id, driver_id, vehicle_id, status, 
-                                        pickup_lat, pickup_lng, destination_lat, destination_lng, 
-                                        created_at, updated_at)
-                VALUES (?, ?, NULL, ?, 'searching_driver', ?, ?, ?, ?, NOW(), NOW())
+                INSERT INTO active_trips (
+                    booking_id,
+                    user_id,
+                    vehicle_id,
+                    pickup_lat,
+                    pickup_lng,
+                    destination_lat,
+                    destination_lng,
+                    status,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'searching_driver', NOW(), NOW())
             ");
-            return $stmt->execute([
+            $stmt->execute([
                 $bookingId,
                 $userId,
                 $vehicleId,
@@ -214,6 +672,7 @@ final class BookingRepository
                 $destLat,
                 $destLng,
             ]);
+            return true;
         } catch (PDOException $e) {
             return false;
         }
@@ -283,7 +742,11 @@ final class BookingRepository
     public function completeBooking(string $bookingId): bool
     {
         $stmt = $this->pdo->prepare("\n            UPDATE bookings\n            SET status = 'completed'\n            WHERE id = ?\n        ");
-        return $stmt->execute([$bookingId]) && $stmt->rowCount() > 0;
+        $ok = $stmt->execute([$bookingId]) && $stmt->rowCount() > 0;
+        if ($ok) {
+            $this->archiveBookingSnapshotIfEligible($bookingId);
+        }
+        return $ok;
     }
 
     /**
@@ -292,7 +755,11 @@ final class BookingRepository
     public function cancelBooking(string $bookingId, ?string $reason = null): bool
     {
         $stmt = $this->pdo->prepare("\n            UPDATE bookings\n            SET status = 'cancelled', cancellation_reason = ?\n            WHERE id = ?\n        ");
-        return $stmt->execute([$reason, $bookingId]) && $stmt->rowCount() > 0;
+        $ok = $stmt->execute([$reason, $bookingId]) && $stmt->rowCount() > 0;
+        if ($ok) {
+            $this->archiveBookingSnapshotIfEligible($bookingId);
+        }
+        return $ok;
     }
 
     /**
@@ -305,7 +772,11 @@ final class BookingRepository
             SET status = ?
             WHERE id = ?
         ");
-        return $stmt->execute([$status, $bookingId]) && $stmt->rowCount() > 0;
+        $ok = $stmt->execute([$status, $bookingId]) && $stmt->rowCount() > 0;
+        if ($ok && in_array($status, ['completed', 'cancelled'], true)) {
+            $this->archiveBookingSnapshotIfEligible($bookingId);
+        }
+        return $ok;
     }
 
     /**
@@ -424,6 +895,7 @@ final class BookingRepository
     {
         $driverIdExpr = $this->bookingHasColumn('driver_id') ? 'b.driver_id' : 'NULL::uuid AS driver_id';
         $serviceTypeExpr = $this->bookingHasColumn('service_type') ? 'b.service_type' : 'NULL::text AS service_type';
+        $pickupTimeExpr = $this->bookingHasColumn('pickup_time') ? 'b.pickup_time' : 'NULL::text AS pickup_time';
         $passengerExpr = $this->bookingHasColumn('number_of_passengers') ? 'b.number_of_passengers' : 'NULL::int AS number_of_passengers';
         $rideTierExpr = $this->bookingHasColumn('ride_tier') ? 'b.ride_tier' : 'NULL::text AS ride_tier';
         $acceptedExpr = $this->bookingHasColumn('accepted_by_driver_at') ? 'b.accepted_by_driver_at' : 'NULL::timestamptz AS accepted_by_driver_at';
@@ -439,7 +911,7 @@ final class BookingRepository
         $stmt = $this->pdo->prepare("
             SELECT 
                 b.id, b.renter_id, {$driverIdExpr}, b.status, b.booking_type,
-                b.pickup_location, b.pickup_date, {$serviceTypeExpr},
+                b.pickup_location, b.pickup_date, {$pickupTimeExpr}, {$serviceTypeExpr},
                 b.total_amount, {$passengerExpr}, {$rideTierExpr},
                 b.created_at, {$acceptedExpr},
                 u.full_name as user_name, u.phone as user_phone,
@@ -666,7 +1138,11 @@ final class BookingRepository
         if ($newStatus === 'cancelled') $extraSql = ', cancelled_at = NOW()';
 
         $stmt = $this->pdo->prepare("UPDATE bookings SET status = ?::booking_status" . $extraSql . " WHERE id = ?");
-        return $stmt->execute([$newStatus, $bookingId]) && $stmt->rowCount() > 0;
+        $ok = $stmt->execute([$newStatus, $bookingId]) && $stmt->rowCount() > 0;
+        if ($ok && in_array($newStatus, ['completed', 'cancelled'], true)) {
+            $this->archiveBookingSnapshotIfEligible($bookingId);
+        }
+        return $ok;
     }
 
     /**

@@ -10,12 +10,22 @@ final class VehicleRepository
     {
         $this->pdo = $pdo;
         $this->ensureAddedByStaffColumnExists();
+        $this->ensureCapacityColumnExists();
     }
 
     private function ensureAddedByStaffColumnExists(): void
     {
         try {
             $this->pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS added_by_staff_id UUID NULL REFERENCES users(id) ON DELETE SET NULL");
+        } catch (Throwable $e) {
+            // Ignore in environments without ALTER permissions.
+        }
+    }
+
+    private function ensureCapacityColumnExists(): void
+    {
+        try {
+            $this->pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS capacity INT NULL");
         } catch (Throwable $e) {
             // Ignore in environments without ALTER permissions.
         }
@@ -40,7 +50,7 @@ final class VehicleRepository
      */
     public function getDistinctAvailableBrands(): array
     {
-        $stmt = $this->pdo->query("SELECT DISTINCT brand FROM vehicles WHERE status = 'available' AND brand IS NOT NULL AND brand != '' ORDER BY brand");
+        $stmt = $this->pdo->query("SELECT DISTINCT brand FROM vehicles WHERE status IN ('available', 'rented', 'maintenance', 'inactive') AND brand IS NOT NULL AND brand != '' ORDER BY brand");
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
@@ -49,7 +59,7 @@ final class VehicleRepository
      */
     public function getDistinctAvailableCategories(): array
     {
-        $stmt = $this->pdo->query("SELECT DISTINCT category FROM vehicles WHERE status = 'available' AND category IS NOT NULL AND category != '' ORDER BY category");
+        $stmt = $this->pdo->query("SELECT DISTINCT category FROM vehicles WHERE status IN ('available', 'rented', 'maintenance', 'inactive') AND category IS NOT NULL AND category != '' ORDER BY category");
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
@@ -64,7 +74,7 @@ final class VehicleRepository
         $limit = (int)($filters['limit'] ?? 50);
         $limit = min(max($limit, 1), 100);
 
-        $where = ["status = 'available'"];
+        $where = ["status IN ('available', 'rented', 'maintenance', 'inactive')"];
         $params = [];
 
         $q = trim($search);
@@ -76,7 +86,7 @@ final class VehicleRepository
             $params[] = '%' . strtolower($q) . '%';
         }
 
-        $sql = "SELECT id, brand, model, service_tier, license_plate, seats\n                FROM vehicles\n                WHERE " . implode(' AND ', $where) . "\n                ORDER BY brand, model\n                LIMIT ?";
+        $sql = "SELECT id, brand, model, service_tier, license_plate, seats, status\n                FROM vehicles\n                WHERE " . implode(' AND ', $where) . "\n                ORDER BY brand, model\n                LIMIT ?";
         $params[] = $limit;
 
         $stmt = $this->pdo->prepare($sql);
@@ -102,7 +112,7 @@ final class VehicleRepository
         $limit = min((int)($filters['limit'] ?? 20), 50);
         $offset = max((int)($filters['offset'] ?? 0), 0);
 
-        $where = ["v.status = 'available'"];
+        $where = ["v.status IN ('available', 'rented', 'maintenance', 'inactive')"];
         $params = [];
 
         if ($category !== '') {
@@ -294,13 +304,13 @@ final class VehicleRepository
         INSERT INTO vehicles
         (id, owner_id, added_by_staff_id, brand, model, year, license_plate,
          category, service_tier, transmission, fuel_type, seats, color,
-         engine_size, consumption, features,
+            engine_size, consumption, features, capacity,
          location_city, location_address,
          status, created_at, updated_at)
         VALUES
         (?, ?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?,
-         ?, ?, ?,
+            ?, ?, ?, ?,
          ?, ?,
          'available', NOW(), NOW())
     ");
@@ -322,6 +332,7 @@ final class VehicleRepository
             $data['engine_size'] ?? null,
             $data['consumption'] ?? null,
             isset($data['features']) ? json_encode($data['features']) : null,
+            isset($data['capacity']) ? (int)$data['capacity'] : null,
             $data['location_city'] ?? null,
             $data['location_address'] ?? null,
         ]);
@@ -405,7 +416,7 @@ final class VehicleRepository
         $allowedFields = [
             'brand', 'model', 'year', 'license_plate', 'category', 'transmission', 'fuel_type',
                 'service_tier',
-            'seats', 'color', 'engine_size', 'consumption',
+            'seats', 'capacity', 'color', 'engine_size', 'consumption',
             'price_per_day', 'price_per_week', 'price_per_month',
             'location_city', 'location_address', 'status', 'gps_enabled', 'thumbnail_id'
         ];
@@ -584,7 +595,7 @@ final class VehicleRepository
         $stmt = $this->pdo->prepare("
             SELECT DISTINCT brand 
             FROM vehicles
-            WHERE status = 'available' AND brand IS NOT NULL AND brand != '' AND LOWER(brand) ILIKE ?
+            WHERE status IN ('available', 'rented', 'maintenance', 'inactive') AND brand IS NOT NULL AND brand != '' AND LOWER(brand) ILIKE ?
             ORDER BY brand
             LIMIT ?
         ");

@@ -44,7 +44,9 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
                 <?php endif; ?>
                 <a href="/#how-it-works" class="navbar-nav-link <?= ($currentPage ?? '') === 'how-it-works' ? 'active' : '' ?>">How It Works</a>
                 <a href="/promotions.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'promotions' ? 'active' : '' ?>">Promotions</a>
+                <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
                 <a href="/customer-enquiry.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'customer-enquiry' ? 'active' : '' ?>">Customer Enquiry</a>
+                <?php endif; ?>
                 <a href="/membership.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'membership' ? 'active' : '' ?>">Membership</a>
                 <a href="/support.php" class="navbar-nav-link <?= ($currentPage ?? '') === 'support' ? 'active' : '' ?>">Support</a>
             </div>
@@ -108,9 +110,11 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             <a href="/promotions.php" class="side-menu-item <?= ($currentPage ?? '') === 'promotions' ? 'active' : '' ?>">
                 <span class="side-menu-icon">🏷️</span> Promotions
             </a>
+            <?php if (!$isAdminRole && !$isAnyStaffRole): ?>
             <a href="/customer-enquiry.php" class="side-menu-item <?= ($currentPage ?? '') === 'customer-enquiry' ? 'active' : '' ?>">
                 <span class="side-menu-icon">✉️</span> Customer Enquiry
             </a>
+            <?php endif; ?>
             <a href="/membership.php" class="side-menu-item <?= ($currentPage ?? '') === 'membership' ? 'active' : '' ?>">
                 <span class="side-menu-icon">⭐</span> Membership
             </a>

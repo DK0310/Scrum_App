@@ -553,6 +553,7 @@
                 <select class="ctrl-select" id="ctrlCategory">
                     <option value="sedan" selected>Sedan</option>
                     <option value="suv">SUV</option>
+                    <option value="luxury">Luxury</option>
                     <option value="electric">Electric</option>
                     <option value="hybrid">Hybrid</option>
                 </select>
@@ -565,6 +566,7 @@
                     <option value="5" selected>4 seats</option>
                     <option value="7">7 seats</option>
                 </select>
+                <input class="ctrl-input" id="ctrlLuggageCapacity" type="number" min="1" step="1" placeholder="Luggage Capacity (lbs)">
                 <input class="ctrl-input" id="ctrlColor" placeholder="Color">
                 <input class="ctrl-input" id="ctrlVehicleImage" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
             </div>

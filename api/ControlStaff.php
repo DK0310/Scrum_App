@@ -87,6 +87,15 @@ function ensure_vehicle_service_tier_column(PDO $pdo): void
     }
 }
 
+function ensure_vehicle_capacity_column(PDO $pdo): void
+{
+    try {
+        $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS capacity INT NULL");
+    } catch (Throwable $e) {
+        // ignore
+    }
+}
+
 function control_normalize_role(string $role): string
 {
     $normalized = strtolower(trim($role));
@@ -593,6 +602,9 @@ try {
             $vid = (string)($vehicle['id'] ?? '');
             $locked = isset($lockedVehicleIds[$vid]);
             $vehicle['is_locked_in_progress'] = $locked;
+            $vehicle['luggage_capacity_lbs'] = (isset($vehicle['capacity']) && is_numeric($vehicle['capacity']) && (int)$vehicle['capacity'] > 0)
+                ? (int)$vehicle['capacity']
+                : null;
             $vehicle['lock_reason'] = $locked
                 ? 'Vehicle is currently assigned to an in-progress order. Complete that order before editing or deleting this vehicle.'
                 : '';
@@ -701,6 +713,7 @@ try {
 
     if ($action === 'add_vehicle') {
         ensure_vehicle_service_tier_column($pdo);
+        ensure_vehicle_capacity_column($pdo);
         $payload = is_array($bodyJson) ? $bodyJson : $_POST;
 
         $brand = trim((string)($payload['brand'] ?? ''));
@@ -728,6 +741,11 @@ try {
             throw new Exception('Seats must be 5 or 7.');
         }
 
+        $luggageCapacityLbsRaw = $payload['luggage_capacity_lbs'] ?? ($payload['capacity'] ?? null);
+        $luggageCapacityLbs = (is_numeric($luggageCapacityLbsRaw) && (int)$luggageCapacityLbsRaw > 0)
+            ? (int)$luggageCapacityLbsRaw
+            : null;
+
         $vehicleId = $vehicleRepo->create([
             'added_by_staff_id' => $userId,
             'brand' => $brand,
@@ -736,6 +754,7 @@ try {
             'license_plate' => $licensePlate,
             'category' => trim((string)($payload['category'] ?? 'sedan')),
             'seats' => $seats,
+            'capacity' => $luggageCapacityLbs,
             'color' => trim((string)($payload['color'] ?? '')),
             'price_per_day' => $pricePerDay,
             'service_tier' => $serviceTier,
@@ -759,6 +778,7 @@ try {
 
     if ($action === 'edit_vehicle') {
         ensure_vehicle_service_tier_column($pdo);
+        ensure_vehicle_capacity_column($pdo);
         $payload = is_array($bodyJson) ? $bodyJson : $_POST;
 
         $vehicleId = trim((string)($payload['vehicle_id'] ?? ''));
@@ -778,7 +798,7 @@ try {
         $fields = [];
         $editable = [
             'brand', 'model', 'year', 'license_plate', 'category', 'transmission', 'fuel_type',
-            'seats', 'color', 'engine_size', 'consumption', 'price_per_day', 'price_per_week',
+            'seats', 'capacity', 'color', 'engine_size', 'consumption', 'price_per_day', 'price_per_week',
             'price_per_month', 'location_city', 'location_address', 'status', 'service_tier'
         ];
 
@@ -794,6 +814,11 @@ try {
                 throw new Exception('Seats must be 5 or 7.');
             }
             $fields['seats'] = $seats;
+        }
+
+        if (array_key_exists('luggage_capacity_lbs', $payload)) {
+            $raw = $payload['luggage_capacity_lbs'];
+            $fields['capacity'] = (is_numeric($raw) && (int)$raw > 0) ? (int)$raw : null;
         }
 
         if (empty($fields)) {
