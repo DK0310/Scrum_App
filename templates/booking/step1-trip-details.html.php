@@ -133,8 +133,19 @@
                             <!-- Scheduled datetime for minicab (hidden by default) -->
                             <div class="form-group" id="scheduledDateTimeGroup" style="display:none;">
                                 <label class="form-label">📅 Scheduled Pick-up Date & Time</label>
-                                <input type="datetime-local" class="form-input" id="scheduledDateTime" min="">
+                                <div class="form-row">
+                                    <div class="form-group" style="margin-bottom:0;">
+                                        <input type="date" class="form-input" id="scheduledDateOnly" min="">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:0;">
+                                        <select class="form-input" id="scheduledTimeSlot">
+                                            <option value="">Select time</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <input type="hidden" id="scheduledDateTime" value="">
                                 <div id="pickupDateTimeError" style="display:none;margin-top:8px;padding:10px 12px;background:#fee;border-radius:6px;border-left:3px solid #d32f2f;color:#d32f2f;font-size:0.85rem;"></div>
+                                <small id="scheduledTimeSlotHint" style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">Choose a date to load available time slots.</small>
                                 <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">📌 <strong>Cancellation Policy:</strong> Free cancellation and booking modifications are available only if pickup is at least 24 hours away.</small>
                             </div>
                         </div>

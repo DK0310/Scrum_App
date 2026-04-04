@@ -165,6 +165,7 @@ if ($action === 'create') {
     $frontendRideFare = isset($input['ride_fare']) ? floatval($input['ride_fare']) : null;
     $serviceType = $input['service_type'] ?? 'local'; // 'local', 'long-distance', 'airport-transfer', 'hotel-transfer'
     $rideTiming = strtolower(trim((string)($input['ride_timing'] ?? '')));
+    $requestWindow = null;
 
     // Single workflow policy: minicab + schedule only
     if ($bookingType !== 'minicab') {
@@ -197,15 +198,15 @@ if ($action === 'create') {
             exit;
         }
 
-        try {
-            $pickupAt = new DateTime($pickupDate);
-            $now = new DateTime('now');
-            if ($pickupAt <= $now) {
-                echo json_encode(['success' => false, 'message' => 'Scheduled pickup time must be in the future.']);
-                exit;
-            }
-        } catch (Exception $e) {
+        $requestWindow = $bookingRepo->buildMinicabRequestWindow($pickupDate, $pickupTime, $distanceKm);
+        if (!$requestWindow) {
             echo json_encode(['success' => false, 'message' => 'Invalid scheduled pickup date/time.']);
+            exit;
+        }
+
+        $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        if ($requestWindow['pickup_at'] <= $nowUtc) {
+            echo json_encode(['success' => false, 'message' => 'Scheduled pickup time must be in the future.']);
             exit;
         }
     }
@@ -235,8 +236,22 @@ if ($action === 'create') {
                 exit;
             }
 
-            // Find a random available vehicle matching the tier (exclude own vehicles)
-            $vehicle = $bookingRepo->findVehicleForTier($rideTier, $renterId, $seatCapacity);
+            if (!$requestWindow) {
+                $requestWindow = $bookingRepo->buildMinicabRequestWindow($pickupDate, $pickupTime, $distanceKm);
+            }
+            if (!$requestWindow) {
+                echo json_encode(['success' => false, 'message' => 'Unable to validate booking schedule. Please choose date and time again.']);
+                exit;
+            }
+
+            // Find a random available vehicle matching tier/seat and requested time window.
+            $vehicle = $bookingRepo->findVehicleForTier(
+                $rideTier,
+                $renterId,
+                $seatCapacity,
+                $requestWindow['window_start']->format('Y-m-d H:i:sP'),
+                $requestWindow['window_end']->format('Y-m-d H:i:sP')
+            );
 
             if (!$vehicle) {
                 echo json_encode(['success' => false, 'message' => 'No available vehicles found for the ' . ucfirst($rideTier) . ' tier. Please try another tier.']);
@@ -304,7 +319,10 @@ if ($action === 'create') {
         
         // Ensure pickup_date is converted to UTC before storage
         $pickupDateForDB = $pickupDate;
-        if (!empty($pickupDate)) {
+        if ($bookingType === 'minicab' && $requestWindow) {
+            // pickup_date column is date-based in current schema.
+            $pickupDateForDB = $requestWindow['pickup_at']->format('Y-m-d');
+        } elseif (!empty($pickupDate)) {
             try {
                 $dt = new DateTime($pickupDate);
                 $dt->setTimeZone(new DateTimeZone('UTC'));

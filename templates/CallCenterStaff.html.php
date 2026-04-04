@@ -502,8 +502,15 @@
                         </div>
                         <div class="cc-form-field">
                             <label>Pickup Date & Time *</label>
-                            <input class="cc-input" id="ccPickupDate" type="datetime-local" required>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                <input class="cc-input" id="ccPickupDateOnly" type="date" required>
+                                <select class="cc-select" id="ccPickupTimeSlot" required>
+                                    <option value="">Select time</option>
+                                </select>
+                            </div>
+                            <input class="cc-input" id="ccPickupDate" type="hidden" value="">
                             <small id="ccPickupDateHint" class="cc-help">Pickup must be at least 30 minutes from now.</small>
+                            <small id="ccPickupSlotHint" class="cc-help">Choose a date to load available time slots.</small>
                         </div>
                         <div class="cc-form-field">
                             <label>Pickup Location *</label>

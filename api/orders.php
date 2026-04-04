@@ -152,20 +152,83 @@ function buildCutoffErrorMessageOrders(int $hours): string {
     return 'Booking cannot be modified or cancelled within ' . $hours . ' hours before pickup.';
 }
 
-function countAvailableVehiclesForTierAndSeats(PDO $pdo, string $tier, int $seats): int {
+function estimateMinicabDurationHoursOrders(?float $distanceKm): int {
+    if ($distanceKm === null || $distanceKm <= 0) {
+        return 1;
+    }
+
+    $distanceMiles = $distanceKm * 0.621371;
+    return max(1, (int)ceil($distanceMiles / 20.0));
+}
+
+function countAvailableVehiclesForTierAndSeats(
+    PDO $pdo,
+    string $tier,
+    int $seats,
+    ?DateTimeImmutable $requestedPickupAt = null,
+    ?float $distanceKm = null,
+    ?string $excludeBookingId = null
+): int {
     $normalizedTier = strtolower(trim($tier));
     if ($normalizedTier === 'premium') {
         $normalizedTier = 'luxury';
     }
 
+    $seatClass = $seats >= 7 ? 7 : 4;
+    $seatClause = $seatClass >= 7 ? 'v.seats >= ?' : 'v.seats < ?';
+    $params = [7, $normalizedTier];
+
+    $bookingPickupExpr = "COALESCE(
+        CASE
+            WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                 AND UPPER(REPLACE(TRIM(COALESCE(b.pickup_time, '')), ' ', '')) ~ '^[0-9]{1,2}:[0-9]{2}(AM|PM)$'
+                THEN to_timestamp(
+                    to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || UPPER(REPLACE(TRIM(b.pickup_time), ' ', '')),
+                    'YYYY-MM-DD HH12:MIAM'
+                )
+            WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                 AND TRIM(COALESCE(b.pickup_time, '')) ~ '^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$'
+                THEN (to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || TRIM(b.pickup_time))::timestamp
+            ELSE b.pickup_date::timestamp
+        END,
+        b.pickup_date::timestamp
+    )";
+
+    $conflictClause = '';
+    if ($requestedPickupAt !== null) {
+        $pickupAt = $requestedPickupAt->format('Y-m-d H:i:sP');
+
+        $conflictClause = "
+          AND NOT EXISTS (
+                SELECT 1
+                FROM bookings b
+                WHERE b.vehicle_id = v.id
+                  AND b.booking_type = 'minicab'
+                  AND b.status IN ('pending', 'in_progress')
+                  AND (? IS NULL OR b.id <> ?)
+                  AND (
+                      ({$bookingPickupExpr} - INTERVAL '2 hour') < ?::timestamptz
+                      AND
+                      ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > ?::timestamptz
+                  )
+            )
+        ";
+
+        $params[] = $excludeBookingId;
+        $params[] = $excludeBookingId;
+        $params[] = $pickupAt;
+        $params[] = $pickupAt;
+    }
+
     $stmt = $pdo->prepare(
         "SELECT COUNT(*)
-         FROM vehicles
-         WHERE status = 'available'
-           AND seats >= ?
-           AND LOWER(CASE WHEN service_tier = 'premium' THEN 'luxury' ELSE service_tier END) = ?"
+         FROM vehicles v
+         WHERE v.status = 'available'
+           AND {$seatClause}
+           AND LOWER(CASE WHEN v.service_tier = 'premium' THEN 'luxury' ELSE v.service_tier END) = ?
+           {$conflictClause}"
     );
-    $stmt->execute([$seats, $normalizedTier]);
+    $stmt->execute($params);
     return (int)$stmt->fetchColumn();
 }
 
@@ -402,8 +465,20 @@ if ($action === 'modify-booking') {
 
         $effectiveTier = strtolower(trim((string)($updates['ride_tier'] ?? $booking['ride_tier'] ?? '')));
         $effectiveSeats = (int)($updates['number_of_passengers'] ?? $booking['number_of_passengers'] ?? 0);
+        $effectiveDistanceKm = (float)($updates['distance_km'] ?? $booking['distance_km'] ?? 0);
+        $effectivePickupAt = parseOrderPickupDateTime([
+            'pickup_date' => $updates['pickup_date'] ?? $booking['pickup_date'] ?? '',
+            'pickup_time' => $updates['pickup_time'] ?? $booking['pickup_time'] ?? '',
+        ]);
         if (in_array($effectiveTier, ['eco', 'standard', 'luxury', 'premium'], true) && in_array($effectiveSeats, [4, 7], true)) {
-            $availableCount = countAvailableVehiclesForTierAndSeats($pdo, $effectiveTier, $effectiveSeats);
+            $availableCount = countAvailableVehiclesForTierAndSeats(
+                $pdo,
+                $effectiveTier,
+                $effectiveSeats,
+                $effectivePickupAt,
+                $effectiveDistanceKm,
+                $bookingId
+            );
             if ($availableCount <= 0) {
                 echo json_encode([
                     'success' => false,
@@ -424,7 +499,6 @@ if ($action === 'modify-booking') {
             exit;
         }
 
-        $effectiveDistanceKm = (float)($updates['distance_km'] ?? $booking['distance_km'] ?? 0);
         if ($effectiveDistanceKm > 0) {
             $newSubtotal = computeMinicabFareOrders($effectiveTier, $effectiveSeats, $effectiveDistanceKm);
             if ($newSubtotal === null) {
@@ -559,23 +633,33 @@ if ($action === 'update-status') {
         $updatedVehicleStatus = null;
         $availabilitySubscribersNotified = 0;
 
+        $isMinicabBooking = strtolower(trim((string)($booking['booking_type'] ?? ''))) === 'minicab';
+
         if ($newStatus === 'confirmed') {
-            $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
-            $updatedVehicleStatus = 'rented';
-            $bookingRepo->incrementVehicleStats($vehicleId, 'bookings');
-        } elseif ($newStatus === 'in_progress') {
-            $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
-            $updatedVehicleStatus = 'rented';
-        } elseif ($newStatus === 'completed') {
-            $vehicleUpdateSuccess = $bookingRepo->updateVehicleStatus($vehicleId, 'available');
-            if (!$vehicleUpdateSuccess) {
-                echo json_encode(['success' => false, 'message' => 'Failed to update vehicle status to available.']);
-                exit;
+            if (!$isMinicabBooking && !empty($vehicleId)) {
+                $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
+                $updatedVehicleStatus = 'rented';
             }
-            $updatedVehicleStatus = 'available';
-            $availabilitySubscribersNotified = notifyVehicleAvailabilitySubscribers($pdo, $vehicleId);
-        } elseif ($newStatus === 'cancelled') {
             if (!empty($vehicleId)) {
+                $bookingRepo->incrementVehicleStats($vehicleId, 'bookings');
+            }
+        } elseif ($newStatus === 'in_progress') {
+            if (!$isMinicabBooking && !empty($vehicleId)) {
+                $bookingRepo->updateVehicleStatus($vehicleId, 'rented');
+                $updatedVehicleStatus = 'rented';
+            }
+        } elseif ($newStatus === 'completed') {
+            if (!$isMinicabBooking && !empty($vehicleId)) {
+                $vehicleUpdateSuccess = $bookingRepo->updateVehicleStatus($vehicleId, 'available');
+                if (!$vehicleUpdateSuccess) {
+                    echo json_encode(['success' => false, 'message' => 'Failed to update vehicle status to available.']);
+                    exit;
+                }
+                $updatedVehicleStatus = 'available';
+                $availabilitySubscribersNotified = notifyVehicleAvailabilitySubscribers($pdo, $vehicleId);
+            }
+        } elseif ($newStatus === 'cancelled') {
+            if (!$isMinicabBooking && !empty($vehicleId)) {
                 $vehicleStatus = $bookingRepo->getVehicleStatus($vehicleId);
                 if ($vehicleStatus === 'rented') {
                     $bookingRepo->updateVehicleStatus($vehicleId, 'available');

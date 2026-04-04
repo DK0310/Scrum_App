@@ -468,9 +468,12 @@ try {
         }
 
         $vehicleId = $effectiveVehicleId;
+        $isMinicabBooking = strtolower(trim((string)($booking['booking_type'] ?? ''))) === 'minicab';
         if ($vehicleId !== '') {
             if ($requestedStatus === 'in_progress') {
-                $bookingRepo->markVehicleRented($vehicleId);
+                if (!$isMinicabBooking) {
+                    $bookingRepo->markVehicleRented($vehicleId);
+                }
             }
         }
 
@@ -574,7 +577,8 @@ try {
         $bookingRepo->unassignVehicleFromBooking($bookingId);
 
         $vehicleId = (string)($booking['vehicle_id'] ?? '');
-        if ($vehicleId !== '') {
+        $isMinicabBooking = strtolower(trim((string)($booking['booking_type'] ?? ''))) === 'minicab';
+        if ($vehicleId !== '' && !$isMinicabBooking) {
             $bookingRepo->markVehicleAvailable($vehicleId);
         }
 

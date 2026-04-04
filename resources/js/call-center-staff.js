@@ -20,6 +20,8 @@
     let pickupMarker = null;
     let returnMarker = null;
     let selectedCustomerBalance = 0;
+    let availabilityRefreshTimer = null;
+    let availabilityRequestSeq = 0;
 
     const el = {
         form: document.getElementById('ccBookingForm'),
@@ -32,6 +34,8 @@
         rideTier: document.getElementById('ccRideTier'),
         seatCapacity: document.getElementById('ccSeatCapacity'),
         serviceType: document.getElementById('ccServiceType'),
+        pickupDateOnly: document.getElementById('ccPickupDateOnly'),
+        pickupTimeSlot: document.getElementById('ccPickupTimeSlot'),
         pickupDate: document.getElementById('ccPickupDate'),
         pickupLocation: document.getElementById('ccPickupLocation'),
         returnLocation: document.getElementById('ccReturnLocation'),
@@ -50,6 +54,7 @@
         requestsTable: document.getElementById('ccRequestsTable'),
         resetBtn: document.getElementById('ccResetBtn'),
         pickupDateHint: document.getElementById('ccPickupDateHint'),
+        pickupSlotHint: document.getElementById('ccPickupSlotHint'),
         rideTierHint: document.getElementById('ccRideTierHint'),
         seatCapacityHint: document.getElementById('ccSeatCapacityHint')
         ,
@@ -140,6 +145,8 @@
         hideCustomerResults();
         selectedAddresses = { pickup: null, return: null };
         updateDestinationMode();
+        renderPickupTimeSlots([]);
+        syncPickupDateTimeFromParts();
         applyAvailabilityToOptions();
         updatePaymentMethodAvailability();
         refreshBookingEstimatePreview();
@@ -340,6 +347,7 @@
         }
 
         updatePaymentMethodAvailability();
+        scheduleRealtimeAvailabilityRefresh(150);
     }
 
     function updateDestinationMode() {
@@ -409,6 +417,32 @@
 
             map[tier][seats] = (map[tier][seats] || 0) + 1;
         });
+
+        return map;
+    }
+
+    function buildAvailabilityMapFromMatrix(matrix) {
+        const map = {
+            eco: { 4: 0, 7: 0 },
+            standard: { 4: 0, 7: 0 },
+            premium: { 4: 0, 7: 0 }
+        };
+
+        if (!matrix || typeof matrix !== 'object') {
+            return map;
+        }
+
+        const toCount = function (value) {
+            const n = Number(value || 0);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        };
+
+        map.eco[4] = toCount(matrix.eco && matrix.eco['4']);
+        map.eco[7] = toCount(matrix.eco && matrix.eco['7']);
+        map.standard[4] = toCount(matrix.standard && matrix.standard['4']);
+        map.standard[7] = toCount(matrix.standard && matrix.standard['7']);
+        map.premium[4] = toCount(matrix.luxury && matrix.luxury['4']);
+        map.premium[7] = toCount(matrix.luxury && matrix.luxury['7']);
 
         return map;
     }
@@ -497,15 +531,54 @@
         updatePaymentMethodAvailability();
     }
 
+    function getRealtimeAvailabilityPayload() {
+        const payload = {};
+        const pickupValue = String(el.pickupDate && el.pickupDate.value ? el.pickupDate.value : '').trim();
+        if (pickupValue !== '') {
+            payload.pickup_datetime = pickupValue;
+        }
+
+        const estimatedDistanceKm = estimateDistanceKm();
+        if (Number.isFinite(estimatedDistanceKm) && estimatedDistanceKm > 0) {
+            payload.distance_km = Number(estimatedDistanceKm.toFixed(2));
+        }
+
+        return payload;
+    }
+
     async function loadAvailabilityOptions() {
+        const requestId = ++availabilityRequestSeq;
         try {
-            const data = await apiGet({ action: 'get_vehicles' });
-            if (!data.success) return;
-            availabilityMap = buildAvailabilityMap(data.vehicles || []);
+            const matrixRes = await fetch('/api/vehicles.php?action=tier-seat-availability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(getRealtimeAvailabilityPayload())
+            });
+            const matrixData = await matrixRes.json();
+
+            if (requestId !== availabilityRequestSeq) {
+                return;
+            }
+
+            if (!matrixData.success) {
+                return;
+            }
+
+            availabilityMap = buildAvailabilityMapFromMatrix(matrixData.availability || {});
             applyAvailabilityToOptions();
         } catch (err) {
             // Keep form usable with current static options if availability fetch fails.
         }
+    }
+
+    function scheduleRealtimeAvailabilityRefresh(delayMs) {
+        if (availabilityRefreshTimer) {
+            clearTimeout(availabilityRefreshTimer);
+        }
+        availabilityRefreshTimer = setTimeout(function () {
+            loadAvailabilityOptions();
+            loadPickupTimeSlotAvailability();
+        }, delayMs || 200);
     }
 
     function hideCustomerResults() {
@@ -913,6 +986,134 @@
         return Math.round(haversineDistance(p.lat, p.lon, r.lat, r.lon) * 1.3 * 10) / 10;
     }
 
+    function formatTimeSlotLabel(timeValue) {
+        const parts = String(timeValue || '').split(':');
+        if (parts.length !== 2) return timeValue;
+        const hour24 = Number(parts[0]);
+        const minute = Number(parts[1]);
+        if (!Number.isFinite(hour24) || !Number.isFinite(minute)) return timeValue;
+        const suffix = hour24 >= 12 ? 'PM' : 'AM';
+        const hour12 = (hour24 % 12) === 0 ? 12 : (hour24 % 12);
+        return String(hour12).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ' ' + suffix;
+    }
+
+    function buildDailyTimeSlots() {
+        const slots = [];
+        for (let minutes = 0; minutes < 24 * 60; minutes += 30) {
+            const hour = Math.floor(minutes / 60);
+            const minute = minutes % 60;
+            slots.push(String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0'));
+        }
+        return slots;
+    }
+
+    function compareTimeValues(a, b) {
+        const [ah, am] = String(a || '00:00').split(':').map(Number);
+        const [bh, bm] = String(b || '00:00').split(':').map(Number);
+        return (ah * 60 + am) - (bh * 60 + bm);
+    }
+
+    function getMinAllowedSlotTimeForDate(dateValue) {
+        if (!dateValue) return null;
+        const now = new Date();
+        now.setMinutes(now.getMinutes() + MIN_PICKUP_LEAD_MINUTES, 0, 0);
+        const today = now.toISOString().split('T')[0];
+        if (dateValue !== today) return null;
+        return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    }
+
+    function syncPickupDateTimeFromParts() {
+        if (!el.pickupDate || !el.pickupDateOnly || !el.pickupTimeSlot) return '';
+        const dateValue = el.pickupDateOnly.value || '';
+        const timeValue = el.pickupTimeSlot.value || '';
+        const combined = (dateValue && timeValue) ? (dateValue + 'T' + timeValue) : '';
+        el.pickupDate.value = combined;
+        return combined;
+    }
+
+    function renderPickupTimeSlots(unavailableTimes) {
+        if (!el.pickupDateOnly || !el.pickupTimeSlot) return;
+
+        const selectedDate = el.pickupDateOnly.value || '';
+        const previousValue = el.pickupTimeSlot.value || '';
+        const blockedSet = new Set(Array.isArray(unavailableTimes) ? unavailableTimes : []);
+        const minTodayTime = getMinAllowedSlotTimeForDate(selectedDate);
+
+        let enabledCount = 0;
+        const options = ['<option value="">Select time</option>'];
+        buildDailyTimeSlots().forEach((slot) => {
+            let disabled = blockedSet.has(slot);
+            if (minTodayTime && compareTimeValues(slot, minTodayTime) < 0) {
+                disabled = true;
+            }
+
+            if (!disabled) {
+                enabledCount += 1;
+            }
+
+            options.push('<option value="' + slot + '"' + (disabled ? ' disabled' : '') + '>' + formatTimeSlotLabel(slot) + (disabled ? ' (Unavailable)' : '') + '</option>');
+        });
+
+        el.pickupTimeSlot.innerHTML = options.join('');
+        if (previousValue && !blockedSet.has(previousValue) && (!minTodayTime || compareTimeValues(previousValue, minTodayTime) >= 0)) {
+            el.pickupTimeSlot.value = previousValue;
+        } else {
+            el.pickupTimeSlot.value = '';
+        }
+
+        syncPickupDateTimeFromParts();
+
+        if (el.pickupSlotHint) {
+            if (!selectedDate) {
+                el.pickupSlotHint.textContent = 'Choose a date to load available time slots.';
+                el.pickupSlotHint.className = 'cc-help';
+            } else if (enabledCount > 0) {
+                el.pickupSlotHint.textContent = 'Available slots: ' + enabledCount + ' for selected date.';
+                el.pickupSlotHint.className = 'cc-help cc-help-ok';
+            } else {
+                el.pickupSlotHint.textContent = 'No available slot for selected date. Please choose another date.';
+                el.pickupSlotHint.className = 'cc-help cc-help-error';
+            }
+        }
+    }
+
+    async function loadPickupTimeSlotAvailability() {
+        if (!el.pickupDateOnly) return;
+        const dateValue = String(el.pickupDateOnly.value || '').trim();
+        if (!dateValue) {
+            renderPickupTimeSlots([]);
+            return;
+        }
+
+        const payload = {
+            date: dateValue,
+            ride_tier: normalizeTier(el.rideTier && el.rideTier.value ? el.rideTier.value : ''),
+            seat_capacity: normalizeSeat(el.seatCapacity && el.seatCapacity.value ? el.seatCapacity.value : 4)
+        };
+
+        const distanceKm = estimateDistanceKm();
+        if (distanceKm && distanceKm > 0) {
+            payload.distance_km = Number(distanceKm.toFixed(2));
+        }
+
+        try {
+            const res = await fetch('/api/vehicles.php?action=unavailable-time-slots', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!data.success) {
+                renderPickupTimeSlots([]);
+                return;
+            }
+
+            renderPickupTimeSlots(data.unavailable_times || []);
+        } catch (err) {
+            renderPickupTimeSlots([]);
+        }
+    }
+
     async function submitRequest(event) {
         event.preventDefault();
 
@@ -920,6 +1121,8 @@
             setFormStatus('Please choose a valid pickup date & time.', true);
             return;
         }
+
+        await loadAvailabilityOptions();
 
         const selectedTier = normalizeTier(el.rideTier.value || '');
         const selectedSeat = normalizeSeat(el.seatCapacity ? el.seatCapacity.value : 4);
@@ -1026,6 +1229,7 @@
                     updateMapCoords(type, lat, lon, name);
                     updatePaymentMethodAvailability();
                     refreshBookingEstimatePreview();
+                    scheduleRealtimeAvailabilityRefresh(150);
                 });
             });
         } catch (err) {
@@ -1152,6 +1356,7 @@
             document.getElementById(type + 'MapContainer').classList.remove('expanded');
             updatePaymentMethodAvailability();
             refreshBookingEstimatePreview();
+            scheduleRealtimeAvailabilityRefresh(120);
             return;
         }
 
@@ -1176,6 +1381,7 @@
         document.getElementById(type + 'MapContainer').classList.remove('expanded');
         updatePaymentMethodAvailability();
         refreshBookingEstimatePreview();
+        scheduleRealtimeAvailabilityRefresh(120);
     }
 
     function bindEvents() {
@@ -1193,7 +1399,10 @@
         }
 
         if (el.rideTier) {
-            el.rideTier.addEventListener('change', applyAvailabilityToOptions);
+            el.rideTier.addEventListener('change', function () {
+                applyAvailabilityToOptions();
+                scheduleRealtimeAvailabilityRefresh(120);
+            });
         }
 
         if (el.seatCapacity) {
@@ -1201,6 +1410,7 @@
                 applyAvailabilityToOptions();
                 updatePaymentMethodAvailability();
                 refreshBookingEstimatePreview();
+                scheduleRealtimeAvailabilityRefresh(120);
             });
         }
 
@@ -1209,18 +1419,21 @@
                 updateDestinationMode();
                 updatePaymentMethodAvailability();
                 refreshBookingEstimatePreview();
+                scheduleRealtimeAvailabilityRefresh(150);
             });
         }
 
         if (el.airportSelect) {
             el.airportSelect.addEventListener('change', function () {
                 applyPresetDestination(el.airportSelect);
+                scheduleRealtimeAvailabilityRefresh(150);
             });
         }
 
         if (el.hotelSelect) {
             el.hotelSelect.addEventListener('change', function () {
                 applyPresetDestination(el.hotelSelect);
+                scheduleRealtimeAvailabilityRefresh(150);
             });
         }
 
@@ -1228,6 +1441,7 @@
             el.pickupLocation.addEventListener('input', function () {
                 updatePaymentMethodAvailability();
                 refreshBookingEstimatePreview();
+                scheduleRealtimeAvailabilityRefresh(250);
             });
         }
 
@@ -1235,6 +1449,7 @@
             el.returnLocation.addEventListener('input', function () {
                 updatePaymentMethodAvailability();
                 refreshBookingEstimatePreview();
+                scheduleRealtimeAvailabilityRefresh(250);
             });
         }
 
@@ -1247,9 +1462,35 @@
         }
 
         if (el.pickupDate) {
-            el.pickupDate.addEventListener('input', validatePickupDateTimeRealtime);
-            el.pickupDate.addEventListener('change', validatePickupDateTimeRealtime);
-            el.pickupDate.addEventListener('blur', validatePickupDateTimeRealtime);
+            if (el.pickupDateOnly) {
+                el.pickupDateOnly.addEventListener('focus', initPickupMinDateTime);
+                el.pickupDateOnly.addEventListener('change', function () {
+                    syncPickupDateTimeFromParts();
+                    validatePickupDateTimeRealtime();
+                    scheduleRealtimeAvailabilityRefresh(80);
+                });
+            }
+
+            if (el.pickupTimeSlot) {
+                el.pickupTimeSlot.addEventListener('change', function () {
+                    syncPickupDateTimeFromParts();
+                    validatePickupDateTimeRealtime();
+                    scheduleRealtimeAvailabilityRefresh(120);
+                });
+            }
+
+            el.pickupDate.addEventListener('input', function () {
+                validatePickupDateTimeRealtime();
+                scheduleRealtimeAvailabilityRefresh(120);
+            });
+            el.pickupDate.addEventListener('change', function () {
+                validatePickupDateTimeRealtime();
+                scheduleRealtimeAvailabilityRefresh(80);
+            });
+            el.pickupDate.addEventListener('blur', function () {
+                validatePickupDateTimeRealtime();
+                scheduleRealtimeAvailabilityRefresh(80);
+            });
         }
 
         if (el.createAccountForm) {
@@ -1269,14 +1510,23 @@
     }
 
     function initPickupMinDateTime() {
+        if (!el.pickupDateOnly) {
+            return;
+        }
+
         const dt = new Date();
         dt.setMinutes(dt.getMinutes() + MIN_PICKUP_LEAD_MINUTES);
         const yyyy = dt.getFullYear();
         const mm = String(dt.getMonth() + 1).padStart(2, '0');
         const dd = String(dt.getDate()).padStart(2, '0');
-        const hh = String(dt.getHours()).padStart(2, '0');
-        const mi = String(dt.getMinutes()).padStart(2, '0');
-        el.pickupDate.min = yyyy + '-' + mm + '-' + dd + 'T' + hh + ':' + mi;
+        const minDateValue = yyyy + '-' + mm + '-' + dd;
+        el.pickupDateOnly.min = minDateValue;
+
+        if (el.pickupDateOnly.value && el.pickupDateOnly.value < minDateValue) {
+            el.pickupDateOnly.value = '';
+        }
+
+        syncPickupDateTimeFromParts();
     }
 
     function validatePickupDateTimeRealtime() {
@@ -1320,11 +1570,14 @@
         bindEvents();
         initLeafletAutocomplete();
         initPickupMinDateTime();
+        renderPickupTimeSlots([]);
+        syncPickupDateTimeFromParts();
         validatePickupDateTimeRealtime();
         updateDestinationMode();
         updatePaymentMethodAvailability();
         refreshBookingEstimatePreview();
         await loadAvailabilityOptions();
+        await loadPickupTimeSlotAvailability();
         await loadRequests();
         await loadEnquiries();
     }

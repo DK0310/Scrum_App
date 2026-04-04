@@ -74,6 +74,223 @@
   };
 
   let availableTiersByPassengers = {};  // Track which tiers are available per passenger count
+  let scheduledAvailabilityTimer = null;
+  let scheduledSlotRequestSeq = 0;
+  const SLOT_INTERVAL_MINUTES = 30;
+
+  function getMinScheduledDateTimeValue() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 1);
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  function formatTimeSlotLabel(timeValue) {
+    const parts = String(timeValue || '').split(':');
+    if (parts.length !== 2) return timeValue;
+    const hour24 = Number(parts[0]);
+    const minute = Number(parts[1]);
+    if (!Number.isFinite(hour24) || !Number.isFinite(minute)) return timeValue;
+    const suffix = hour24 >= 12 ? 'PM' : 'AM';
+    const hour12 = (hour24 % 12) === 0 ? 12 : (hour24 % 12);
+    return String(hour12).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ' ' + suffix;
+  }
+
+  function buildDailyTimeSlots() {
+    const slots = [];
+    for (let minutes = 0; minutes < 24 * 60; minutes += SLOT_INTERVAL_MINUTES) {
+      const hour = Math.floor(minutes / 60);
+      const minute = minutes % 60;
+      slots.push(String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0'));
+    }
+    return slots;
+  }
+
+  function getMinAllowedSlotTimeForDate(dateValue) {
+    if (!dateValue) return null;
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 1, 0, 0);
+    const today = now.toISOString().split('T')[0];
+    if (dateValue !== today) return null;
+    return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  }
+
+  function compareTimeValues(a, b) {
+    const [ah, am] = String(a || '00:00').split(':').map(Number);
+    const [bh, bm] = String(b || '00:00').split(':').map(Number);
+    return (ah * 60 + am) - (bh * 60 + bm);
+  }
+
+  function syncScheduledDateTimeFromParts() {
+    const dateEl = document.getElementById('scheduledDateOnly');
+    const timeEl = document.getElementById('scheduledTimeSlot');
+    const datetimeEl = document.getElementById('scheduledDateTime');
+    if (!dateEl || !timeEl || !datetimeEl) return '';
+
+    const dateValue = dateEl.value || '';
+    const timeValue = timeEl.value || '';
+    const combined = (dateValue && timeValue) ? (dateValue + 'T' + timeValue) : '';
+    datetimeEl.value = combined;
+    return combined;
+  }
+
+  function renderScheduledTimeSlots(unavailableTimes, options) {
+    const dateEl = document.getElementById('scheduledDateOnly');
+    const timeEl = document.getElementById('scheduledTimeSlot');
+    const hintEl = document.getElementById('scheduledTimeSlotHint');
+    if (!dateEl || !timeEl) return;
+
+    const settings = options && typeof options === 'object' ? options : {};
+    const isLoading = settings.loading === true;
+    const hasLoadError = settings.loadError === true;
+
+    const selectedDate = dateEl.value || '';
+
+    if (!selectedDate) {
+      timeEl.disabled = true;
+      timeEl.innerHTML = '<option value="">Select date first</option>';
+      timeEl.value = '';
+      syncScheduledDateTimeFromParts();
+
+      if (hintEl) {
+        hintEl.textContent = 'Choose a date to load available time slots.';
+      }
+      return;
+    }
+
+    if (isLoading) {
+      timeEl.disabled = true;
+      timeEl.innerHTML = '<option value="">Loading available slots...</option>';
+      timeEl.value = '';
+      syncScheduledDateTimeFromParts();
+
+      if (hintEl) {
+        hintEl.textContent = 'Loading available time slots...';
+      }
+      return;
+    }
+
+    const previousValue = timeEl.value || '';
+    const allSlots = buildDailyTimeSlots();
+    const blockedSet = new Set(Array.isArray(unavailableTimes) ? unavailableTimes : []);
+    const minTodayTime = getMinAllowedSlotTimeForDate(selectedDate);
+
+    let enabledCount = 0;
+    const slotOptions = ['<option value="">Select time</option>'];
+    allSlots.forEach(slot => {
+      let disabled = blockedSet.has(slot);
+      if (minTodayTime && compareTimeValues(slot, minTodayTime) < 0) {
+        disabled = true;
+      }
+
+      if (!disabled) {
+        enabledCount += 1;
+      }
+
+      slotOptions.push('<option value="' + slot + '"' + (disabled ? ' disabled' : '') + '>' + formatTimeSlotLabel(slot) + (disabled ? ' (Unavailable)' : '') + '</option>');
+    });
+
+    timeEl.innerHTML = slotOptions.join('');
+    timeEl.disabled = enabledCount <= 0;
+
+    if (previousValue && !blockedSet.has(previousValue) && (!minTodayTime || compareTimeValues(previousValue, minTodayTime) >= 0)) {
+      timeEl.value = previousValue;
+    } else {
+      timeEl.value = '';
+    }
+
+    syncScheduledDateTimeFromParts();
+
+    if (hintEl) {
+      if (enabledCount > 0) {
+        hintEl.textContent = 'Available slots: ' + enabledCount + ' for selected date.';
+      } else if (hasLoadError) {
+        hintEl.textContent = 'Unable to load slot availability right now. Please try again.';
+      } else {
+        hintEl.textContent = 'No available time slot for this date. Please choose another date.';
+      }
+    }
+  }
+
+  async function refreshScheduledTimeSlotAvailability() {
+    const dateEl = document.getElementById('scheduledDateOnly');
+    if (!dateEl) return;
+    const requestId = ++scheduledSlotRequestSeq;
+    const selectedDate = dateEl.value || '';
+
+    if (!selectedDate) {
+      renderScheduledTimeSlots([]);
+      return;
+    }
+
+    renderScheduledTimeSlots([], { loading: true });
+
+    const payload = {
+      date: selectedDate,
+      seat_capacity: selectedSeatCapacity,
+      ride_tier: selectedRideTier || '',
+    };
+    if (Number.isFinite(calculatedDistance) && calculatedDistance > 0) {
+      payload.distance_km = calculatedDistance;
+    }
+
+    try {
+      const res = await fetch('/api/vehicles.php?action=unavailable-time-slots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (requestId !== scheduledSlotRequestSeq) {
+        return;
+      }
+
+      if (!data.success) {
+        renderScheduledTimeSlots([], { loadError: true });
+        return;
+      }
+
+      renderScheduledTimeSlots(data.unavailable_times || []);
+    } catch (err) {
+      if (requestId !== scheduledSlotRequestSeq) {
+        return;
+      }
+
+      renderScheduledTimeSlots([], { loadError: true });
+    }
+  }
+
+  function scheduleRealtimeSlotRefresh(delayMs) {
+    if (scheduledAvailabilityTimer) {
+      clearTimeout(scheduledAvailabilityTimer);
+    }
+    scheduledAvailabilityTimer = setTimeout(function() {
+      refreshScheduledTimeSlotAvailability();
+      checkAvailableTiers(selectedSeatCapacity);
+    }, delayMs || 150);
+  }
+
+  function refreshScheduledDateTimeConstraint(clearInvalidValue) {
+    const scheduledDate = document.getElementById('scheduledDateOnly');
+    if (!scheduledDate) return;
+
+    const minDate = getMinScheduledDateTimeValue().split('T')[0];
+    scheduledDate.min = minDate;
+
+    if (!clearInvalidValue || !scheduledDate.value) {
+      return;
+    }
+
+    if (scheduledDate.value < minDate) {
+      scheduledDate.value = '';
+    }
+
+    syncScheduledDateTimeFromParts();
+  }
 
   function getOnlineRatePerMile(tier, seatCapacity) {
     const seatRates = ONLINE_RATE_TABLE[seatCapacity] || ONLINE_RATE_TABLE[4];
@@ -123,8 +340,15 @@
     }
   }
 
+  let bookingPageInitialized = false;
+
   // ===== INITIALIZATION =====
-  document.addEventListener('DOMContentLoaded', async function() {
+  async function initializeBookingPage() {
+    if (bookingPageInitialized) {
+      return;
+    }
+    bookingPageInitialized = true;
+
     const paypalHandled = await processPayPalCallback();
     if (paypalHandled) {
       return;
@@ -153,11 +377,38 @@
       returnDateEl.addEventListener('change', updateTripSummary);
     }
 
-    const scheduledDTEl = document.getElementById('scheduledDateTime');
-    if (scheduledDTEl) {
-      scheduledDTEl.addEventListener('change', function() {
+    const scheduledDateEl = document.getElementById('scheduledDateOnly');
+    const scheduledTimeEl = document.getElementById('scheduledTimeSlot');
+    if (scheduledDateEl && scheduledTimeEl) {
+      refreshScheduledDateTimeConstraint(true);
+      renderScheduledTimeSlots([]);
+
+      scheduledDateEl.addEventListener('focus', function() {
+        refreshScheduledDateTimeConstraint(true);
+      });
+
+      scheduledDateEl.addEventListener('change', function() {
+        refreshScheduledDateTimeConstraint(false);
+        syncScheduledDateTimeFromParts();
         validatePickupDateTime();
         updateTripSummary();
+        scheduleRealtimeSlotRefresh(100);
+      });
+
+      scheduledTimeEl.addEventListener('change', function() {
+        syncScheduledDateTimeFromParts();
+        validatePickupDateTime();
+        updateTripSummary();
+        checkAvailableTiers(selectedSeatCapacity);
+      });
+
+      scheduledDateEl.addEventListener('blur', function() {
+        refreshScheduledDateTimeConstraint(true);
+        scheduleRealtimeSlotRefresh(120);
+      });
+
+      scheduledTimeEl.addEventListener('blur', function() {
+        syncScheduledDateTimeFromParts();
       });
     }
 
@@ -177,7 +428,19 @@
       if (promoInput) promoInput.value = INITIAL_PROMO;
     }
     initLeafletAutocomplete();
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeBookingPage().catch(function(err) {
+        console.error('Booking initialization failed:', err);
+      });
+    });
+  } else {
+    initializeBookingPage().catch(function(err) {
+      console.error('Booking initialization failed:', err);
+    });
+  }
 
   async function processPayPalCallback() {
     const params = new URLSearchParams(window.location.search);
@@ -403,16 +666,8 @@
       if (returnDateGroup) returnDateGroup.style.display = 'none';
       if (scheduledDateTimeGroup) scheduledDateTimeGroup.style.display = 'block';
 
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const minDT = `${year}-${month}-${day}T${hours}:${minutes}`;
-
-      const scheduledDateTime = document.getElementById('scheduledDateTime');
-      if (scheduledDateTime) scheduledDateTime.min = minDT;
+      refreshScheduledDateTimeConstraint(true);
+      scheduleRealtimeSlotRefresh(80);
     }
 
     // Pickup label
@@ -647,16 +902,29 @@
     renderRideTierOptions();
     updateSeatCapacityInfo();
     updateTripSummary();
+    scheduleRealtimeSlotRefresh(120);
   }
 
   // ===== CHECK AVAILABLE TIERS =====
   async function checkAvailableTiers(seatCapacity = 4) {
     const normalizedSeatCapacity = Number(seatCapacity) >= 7 ? 7 : 4;
+    const scheduledDateTime = document.getElementById('scheduledDateTime');
+    const scheduledValue = scheduledDateTime ? scheduledDateTime.value : '';
+    const payload = { seat_capacity: normalizedSeatCapacity };
+
+    if (scheduledValue) {
+      payload.pickup_datetime = scheduledValue;
+    }
+
+    if (Number.isFinite(calculatedDistance) && calculatedDistance > 0) {
+      payload.distance_km = calculatedDistance;
+    }
+
     try {
       const response = await fetch('/api/vehicles.php?action=check-available-tiers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seat_capacity: normalizedSeatCapacity })
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
@@ -667,8 +935,10 @@
 
       // Update ride tier UI based on availability and passenger count
       updateRideTierUI(normalizedSeatCapacity, availableTiersByPassengers);
+      return availableTiersByPassengers;
     } catch (err) {
       console.error('Error checking available tiers:', err);
+      return availableTiersByPassengers;
     }
   }
 
@@ -921,8 +1191,14 @@
         if (typeof showToast === 'function') showToast('Please enter a destination.', 'warning');
         return;
       }
+      const latestTierAvailability = await checkAvailableTiers(selectedSeatCapacity);
+
       if (requiresManualRideTierSelection() && !selectedRideTier) {
         if (typeof showToast === 'function') showToast('Please select a ride tier (Eco, Standard, or Luxury).', 'warning');
+        return;
+      }
+      if (selectedRideTier && latestTierAvailability && latestTierAvailability[selectedRideTier] === false) {
+        if (typeof showToast === 'function') showToast('Selected ride tier is not available for this time window. Please choose another tier or time.', 'warning');
         return;
       }
       if (rideFare === null || rideFare <= 0) {
@@ -1442,7 +1718,7 @@
       payload.service_type = serviceType ? serviceType.value : '';
       payload.ride_timing = 'schedule';
       const scheduledDateTime = document.getElementById('scheduledDateTime');
-      payload.pickup_date = convertToUTCISO(scheduledDateTime ? scheduledDateTime.value : '');
+      payload.pickup_date = scheduledDateTime ? scheduledDateTime.value : '';
       payload.pickup_time = extractPickupTime(scheduledDateTime ? scheduledDateTime.value : '');
     } else {
       payload.vehicle_id = CAR_ID;
@@ -1562,6 +1838,7 @@
       el.classList.toggle('active', el.dataset.tier === tier);
     });
     updateTripSummary();
+    scheduleRealtimeSlotRefresh(120);
   }
 
   function renderRideTierOptions() {
@@ -1608,6 +1885,7 @@
     if (!pickupAddr || !returnAddr) {
       if (selectedBookingType === 'minicab') renderRideTierOptions();
       updateTripSummary();
+      scheduleRealtimeSlotRefresh(150);
       return;
     }
     if (selectedBookingType === 'with-driver') {
@@ -1627,6 +1905,7 @@
     }
 
     updateTripSummary();
+    scheduleRealtimeSlotRefresh(120);
   }
 
   function initLeafletAutocomplete() {

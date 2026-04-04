@@ -820,8 +820,6 @@
         }
     </style>
 
-<?php include __DIR__ . '/layout/footer.html.php'; ?>
-
     <!-- ===== BOOKING JAVASCRIPT ===== -->
     <script>
         // Pass PHP variables to booking.js module
@@ -830,4 +828,7 @@
         window.BOOKING_MODE = '<?= htmlspecialchars($bookingMode ?? '') ?>';
         window.isLoggedIn = <?= $isLoggedIn ? 'true' : 'false' ?>;
     </script>
-    <script src="/resources/js/booking.js"></script>
+    <?php $bookingJsVersion = @filemtime(__DIR__ . '/../resources/js/booking.js') ?: time(); ?>
+    <script src="/resources/js/booking.js?v=<?= urlencode((string)$bookingJsVersion) ?>"></script>
+
+<?php include __DIR__ . '/layout/footer.html.php'; ?>

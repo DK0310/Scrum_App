@@ -41,6 +41,79 @@ final class BookingRepository
         }
     }
 
+    private function parseMinicabPickupDateTime(?string $pickupDateRaw, ?string $pickupTimeRaw = null): ?DateTimeImmutable
+    {
+        $pickupDateRaw = trim((string)$pickupDateRaw);
+        if ($pickupDateRaw === '') {
+            return null;
+        }
+
+        $timezone = new DateTimeZone('UTC');
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $pickupDateRaw) === 1) {
+            $dt = DateTimeImmutable::createFromFormat('Y-m-d\\TH:i', $pickupDateRaw, $timezone);
+            if ($dt instanceof DateTimeImmutable) {
+                return $dt;
+            }
+        }
+
+        try {
+            $pickupAt = new DateTimeImmutable($pickupDateRaw, $timezone);
+        } catch (Exception $e) {
+            return null;
+        }
+
+        $pickupTimeRaw = strtoupper(str_replace(' ', '', trim((string)$pickupTimeRaw)));
+        if ($pickupTimeRaw === '') {
+            return $pickupAt;
+        }
+
+        $datePart = $pickupAt->format('Y-m-d');
+        $formats = ['Y-m-d h:iA', 'Y-m-d H:i:s', 'Y-m-d H:i'];
+        foreach ($formats as $format) {
+            $candidate = DateTimeImmutable::createFromFormat($format, $datePart . ' ' . $pickupTimeRaw, $timezone);
+            if ($candidate instanceof DateTimeImmutable) {
+                return $candidate;
+            }
+        }
+
+        return $pickupAt;
+    }
+
+    private function estimateMinicabDurationHours(?float $distanceKm): int
+    {
+        if ($distanceKm === null || $distanceKm <= 0) {
+            return 1;
+        }
+
+        $distanceMiles = $distanceKm * 0.621371;
+        return max(1, (int)ceil($distanceMiles / 20.0));
+    }
+
+    /**
+     * @return array{pickup_at:DateTimeImmutable,window_start:DateTimeImmutable,window_end:DateTimeImmutable,duration_hours:int}|null
+     */
+    public function buildMinicabRequestWindow(?string $pickupDateRaw, ?string $pickupTimeRaw = null, ?float $distanceKm = null, int $bufferHours = 2): ?array
+    {
+        $pickupAt = $this->parseMinicabPickupDateTime($pickupDateRaw, $pickupTimeRaw);
+        if (!$pickupAt) {
+            return null;
+        }
+
+        $bufferHours = max(0, $bufferHours);
+        $durationHours = $this->estimateMinicabDurationHours($distanceKm);
+
+        $windowStart = $pickupAt->sub(new DateInterval('PT' . $bufferHours . 'H'));
+        $windowEnd = $pickupAt->add(new DateInterval('PT' . ($durationHours + $bufferHours) . 'H'));
+
+        return [
+            'pickup_at' => $pickupAt,
+            'window_start' => $windowStart,
+            'window_end' => $windowEnd,
+            'duration_hours' => $durationHours,
+        ];
+    }
+
     /**
      * Ensure schema columns exist for minicab bookings
      */
@@ -512,7 +585,13 @@ final class BookingRepository
      * Find a vehicle matching the specified tier
      * @return array<string,mixed>|null
      */
-    public function findVehicleForTier(string $rideTier, string $excludeRenterId, int $seatCapacity = 4): ?array
+    public function findVehicleForTier(
+        string $rideTier,
+        string $excludeRenterId,
+        int $seatCapacity = 4,
+        ?string $requestWindowStart = null,
+        ?string $requestWindowEnd = null
+    ): ?array
     {
         $this->ensureVehicleServiceTierColumnExists();
 
@@ -527,6 +606,43 @@ final class BookingRepository
         $normalizedSeatCapacity = $seatCapacity >= 7 ? 7 : 4;
         $seatCondition = $normalizedSeatCapacity >= 7 ? 'v.seats >= 7' : 'v.seats < 7';
 
+        $bookingPickupExpr = "COALESCE(
+            CASE
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND UPPER(REPLACE(TRIM(COALESCE(b.pickup_time, '')), ' ', '')) ~ '^[0-9]{1,2}:[0-9]{2}(AM|PM)$'
+                    THEN to_timestamp(
+                        to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || UPPER(REPLACE(TRIM(b.pickup_time), ' ', '')),
+                        'YYYY-MM-DD HH12:MIAM'
+                    )
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND TRIM(COALESCE(b.pickup_time, '')) ~ '^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$'
+                    THEN (to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || TRIM(b.pickup_time))::timestamp
+                ELSE b.pickup_date::timestamp
+            END,
+            b.pickup_date::timestamp
+        )";
+
+        $conflictClause = '';
+        $params = [$excludeRenterId];
+        if (!empty($requestWindowStart)) {
+            $conflictClause = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                                            AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (
+                          ({$bookingPickupExpr} - INTERVAL '2 hour') < (?::timestamptz + INTERVAL '2 hour')
+                          AND
+                          ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > (?::timestamptz + INTERVAL '2 hour')
+                      )
+                )
+            ";
+            $params[] = $requestWindowStart;
+            $params[] = $requestWindowStart;
+        }
+
         $stmt = $this->pdo->prepare("
             SELECT v.id, v.owner_id, v.service_tier,
                    v.category, v.status, v.brand, v.model, v.seats, v.owner_id as owner_id
@@ -535,10 +651,11 @@ final class BookingRepository
               AND {$tierConditions}
               AND {$seatCondition}
               AND v.owner_id != ?
+              {$conflictClause}
             ORDER BY RANDOM()
             LIMIT 1
         ");
-        $stmt->execute([$excludeRenterId]);
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }

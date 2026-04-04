@@ -137,6 +137,74 @@ function appendVehicleCustomerFields(array &$vehicle): void {
     $vehicle['luggage_capacity_lbs'] = toOptionalCapacityLbs($vehicle['capacity'] ?? null);
 }
 
+function parseMinicabPickupDateTimeVehicles(?string $pickupDateRaw, ?string $pickupTimeRaw = null): ?DateTimeImmutable {
+    $pickupDateRaw = trim((string)$pickupDateRaw);
+    if ($pickupDateRaw === '') {
+        return null;
+    }
+
+    $timezone = new DateTimeZone('UTC');
+
+    if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $pickupDateRaw) === 1) {
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d\\TH:i', $pickupDateRaw, $timezone);
+        if ($dt instanceof DateTimeImmutable) {
+            return $dt;
+        }
+    }
+
+    try {
+        $pickupAt = new DateTimeImmutable($pickupDateRaw, $timezone);
+    } catch (Exception $e) {
+        return null;
+    }
+
+    $pickupTimeRaw = strtoupper(str_replace(' ', '', trim((string)$pickupTimeRaw)));
+    if ($pickupTimeRaw === '') {
+        return $pickupAt;
+    }
+
+    $datePart = $pickupAt->format('Y-m-d');
+    $formats = ['Y-m-d h:iA', 'Y-m-d H:i:s', 'Y-m-d H:i'];
+    foreach ($formats as $format) {
+        $candidate = DateTimeImmutable::createFromFormat($format, $datePart . ' ' . $pickupTimeRaw, $timezone);
+        if ($candidate instanceof DateTimeImmutable) {
+            return $candidate;
+        }
+    }
+
+    return $pickupAt;
+}
+
+function estimateMinicabDurationHoursVehicles(?float $distanceKm): int {
+    if ($distanceKm === null || $distanceKm <= 0) {
+        return 1;
+    }
+
+    $distanceMiles = $distanceKm * 0.621371;
+    return max(1, (int)ceil($distanceMiles / 20.0));
+}
+
+/**
+ * @return array{window_start:DateTimeImmutable,window_end:DateTimeImmutable,duration_hours:int}|null
+ */
+function buildMinicabWindowVehicles(?string $pickupDateRaw, ?string $pickupTimeRaw = null, ?float $distanceKm = null, int $bufferHours = 2): ?array {
+    $pickupAt = parseMinicabPickupDateTimeVehicles($pickupDateRaw, $pickupTimeRaw);
+    if (!$pickupAt) {
+        return null;
+    }
+
+    $bufferHours = max(0, $bufferHours);
+    $durationHours = estimateMinicabDurationHoursVehicles($distanceKm);
+    $windowStart = $pickupAt->sub(new DateInterval('PT' . $bufferHours . 'H'));
+    $windowEnd = $pickupAt->add(new DateInterval('PT' . ($durationHours + $bufferHours) . 'H'));
+
+    return [
+        'window_start' => $windowStart,
+        'window_end' => $windowEnd,
+        'duration_hours' => $durationHours,
+    ];
+}
+
 // ==========================================================
 // NOTIFY ME WHEN VEHICLE BECOMES AVAILABLE (auth required)
 // ==========================================================
@@ -213,6 +281,15 @@ if ($action === 'filter-options') {
 if ($action === 'check-available-tiers') {
     $seatCapacity = (int)($input['seat_capacity'] ?? $input['passengers'] ?? 4);
     $seatCapacity = ($seatCapacity >= 7) ? 7 : 4;
+    $pickupDateRaw = (string)($input['pickup_datetime'] ?? $input['pickup_date'] ?? $_GET['pickup_datetime'] ?? '');
+    $pickupTimeRaw = (string)($input['pickup_time'] ?? $_GET['pickup_time'] ?? '');
+    $distanceKmRaw = $input['distance_km'] ?? $_GET['distance_km'] ?? null;
+    $distanceKm = is_numeric($distanceKmRaw) ? (float)$distanceKmRaw : null;
+    $requestWindow = null;
+
+    if ($pickupDateRaw !== '') {
+        $requestWindow = buildMinicabWindowVehicles($pickupDateRaw, $pickupTimeRaw, $distanceKm);
+    }
     
     try {
         // Match seat class exactly for minicab options:
@@ -220,16 +297,54 @@ if ($action === 'check-available-tiers') {
         $seatClause = $seatCapacity >= 7 ? 'seats >= ?' : 'seats < ?';
         $seatValue = 7;
 
+        $bookingPickupExpr = "COALESCE(
+            CASE
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND UPPER(REPLACE(TRIM(COALESCE(b.pickup_time, '')), ' ', '')) ~ '^[0-9]{1,2}:[0-9]{2}(AM|PM)$'
+                    THEN to_timestamp(
+                        to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || UPPER(REPLACE(TRIM(b.pickup_time), ' ', '')),
+                        'YYYY-MM-DD HH12:MIAM'
+                    )
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND TRIM(COALESCE(b.pickup_time, '')) ~ '^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$'
+                    THEN (to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || TRIM(b.pickup_time))::timestamp
+                ELSE b.pickup_date::timestamp
+            END,
+            b.pickup_date::timestamp
+        )";
+
+        $conflictClause = '';
+        $params = [$seatValue];
+        if ($requestWindow) {
+            $conflictClause = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = vehicles.id
+                                            AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (
+                          ({$bookingPickupExpr} - INTERVAL '2 hour') < (?::timestamptz + INTERVAL '2 hour')
+                          AND
+                          ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > (?::timestamptz + INTERVAL '2 hour')
+                      )
+                )
+            ";
+            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+        }
+
         $query = "
-            SELECT service_tier, COUNT(*) AS total
+            SELECT LOWER(CASE WHEN service_tier = 'premium' THEN 'luxury' ELSE service_tier END) AS normalized_tier, COUNT(*) AS total
             FROM vehicles
             WHERE status = 'available'
               AND {$seatClause}
               AND service_tier IN ('eco', 'standard', 'luxury', 'premium')
-            GROUP BY service_tier
+              {$conflictClause}
+            GROUP BY normalized_tier
         ";
         $stmt = $pdo->prepare($query);
-        $stmt->execute([$seatValue]);
+        $stmt->execute($params);
         
         $availableTiers = [
             'eco' => false,
@@ -237,10 +352,7 @@ if ($action === 'check-available-tiers') {
             'luxury' => false,
         ];
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $tier = strtolower((string)$row['service_tier']);
-            if ($tier === 'premium') {
-                $tier = 'luxury';
-            }
+            $tier = strtolower((string)($row['normalized_tier'] ?? ''));
             if (array_key_exists($tier, $availableTiers)) {
                 $availableTiers[$tier] = ((int)($row['total'] ?? 0) > 0);
             }
@@ -258,18 +370,181 @@ if ($action === 'check-available-tiers') {
 }
 
 // ==========================================================
+// UNAVAILABLE TIME SLOTS (public)
+// Returns blocked pickup time slots for selected date based on tier/seat and time-window rules.
+// ==========================================================
+if ($action === 'unavailable-time-slots') {
+    $dateRaw = trim((string)($input['date'] ?? $_GET['date'] ?? ''));
+    $seatCapacity = (int)($input['seat_capacity'] ?? $_GET['seat_capacity'] ?? 4);
+    $seatCapacity = ($seatCapacity >= 7) ? 7 : 4;
+    $tierRaw = strtolower(trim((string)($input['ride_tier'] ?? $_GET['ride_tier'] ?? '')));
+    if ($tierRaw === 'premium') {
+        $tierRaw = 'luxury';
+    }
+    $distanceKmRaw = $input['distance_km'] ?? $_GET['distance_km'] ?? null;
+    $distanceKm = is_numeric($distanceKmRaw) ? (float)$distanceKmRaw : null;
+    $slotMinutes = 30;
+
+    if ($dateRaw === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) !== 1) {
+        echo json_encode(['success' => false, 'message' => 'Valid date is required.']);
+        exit;
+    }
+
+    try {
+        $seatClause = $seatCapacity >= 7 ? 'v.seats >= 7' : 'v.seats < 7';
+
+        $tierClause = '';
+        if (in_array($tierRaw, ['eco', 'standard', 'luxury'], true)) {
+            if ($tierRaw === 'luxury') {
+                $tierClause = " AND LOWER(COALESCE(v.service_tier, '')) IN ('luxury', 'premium')";
+            } else {
+                $tierClause = " AND LOWER(COALESCE(v.service_tier, '')) = :tier";
+            }
+        }
+
+        $bookingPickupExpr = "COALESCE(
+            CASE
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND UPPER(REPLACE(TRIM(COALESCE(b.pickup_time, '')), ' ', '')) ~ '^[0-9]{1,2}:[0-9]{2}(AM|PM)$'
+                    THEN to_timestamp(
+                        to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || UPPER(REPLACE(TRIM(b.pickup_time), ' ', '')),
+                        'YYYY-MM-DD HH12:MIAM'
+                    )
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND TRIM(COALESCE(b.pickup_time, '')) ~ '^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$'
+                    THEN (to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || TRIM(b.pickup_time))::timestamp
+                ELSE b.pickup_date::timestamp
+            END,
+            b.pickup_date::timestamp
+        )";
+
+        $query = "
+            SELECT COUNT(*)
+            FROM vehicles v
+            WHERE v.status = 'available'
+              AND {$seatClause}
+              {$tierClause}
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                                            AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (
+                                                    ({$bookingPickupExpr} - INTERVAL '2 hour') < :request_pickup_at::timestamptz
+                          AND
+                                                    ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > :request_pickup_at::timestamptz
+                      )
+                )
+        ";
+
+        $stmt = $pdo->prepare($query);
+        $allTimes = [];
+        $unavailableTimes = [];
+
+        for ($minutes = 0; $minutes < 24 * 60; $minutes += $slotMinutes) {
+            $hour = intdiv($minutes, 60);
+            $minute = $minutes % 60;
+            $timeValue = sprintf('%02d:%02d', $hour, $minute);
+            $candidateRaw = $dateRaw . 'T' . $timeValue;
+
+            $pickupAt = parseMinicabPickupDateTimeVehicles($candidateRaw, null);
+            if (!$pickupAt) {
+                continue;
+            }
+
+            $params = [
+                ':request_pickup_at' => $pickupAt->format('Y-m-d H:i:sP'),
+            ];
+            if ($tierClause !== '' && $tierRaw !== 'luxury') {
+                $params[':tier'] = $tierRaw;
+            }
+
+            $stmt->execute($params);
+            $availableCount = (int)$stmt->fetchColumn();
+
+            $allTimes[] = $timeValue;
+            if ($availableCount <= 0) {
+                $unavailableTimes[] = $timeValue;
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'date' => $dateRaw,
+            'slot_minutes' => $slotMinutes,
+            'all_times' => $allTimes,
+            'unavailable_times' => $unavailableTimes,
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Failed to compute unavailable slots.']);
+    }
+    exit;
+}
+
+// ==========================================================
 // TIER/SEAT AVAILABILITY MATRIX (public)
 // Returns available vehicle counts for each tier by passenger count 1..7
 // ==========================================================
 if ($action === 'tier-seat-availability') {
+    $pickupDateRaw = (string)($input['pickup_datetime'] ?? $input['pickup_date'] ?? $_GET['pickup_datetime'] ?? '');
+    $pickupTimeRaw = (string)($input['pickup_time'] ?? $_GET['pickup_time'] ?? '');
+    $distanceKmRaw = $input['distance_km'] ?? $_GET['distance_km'] ?? null;
+    $distanceKm = is_numeric($distanceKmRaw) ? (float)$distanceKmRaw : null;
+    $requestWindow = null;
+
+    if ($pickupDateRaw !== '') {
+        $requestWindow = buildMinicabWindowVehicles($pickupDateRaw, $pickupTimeRaw, $distanceKm);
+    }
+
     try {
-        $stmt = $pdo->query(
-            "SELECT service_tier, seats, COUNT(*) AS total
-             FROM vehicles
-             WHERE status = 'available'
-               AND service_tier IN ('eco', 'standard', 'luxury', 'premium')
-             GROUP BY service_tier, seats"
+        $bookingPickupExpr = "COALESCE(
+            CASE
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND UPPER(REPLACE(TRIM(COALESCE(b.pickup_time, '')), ' ', '')) ~ '^[0-9]{1,2}:[0-9]{2}(AM|PM)$'
+                    THEN to_timestamp(
+                        to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || UPPER(REPLACE(TRIM(b.pickup_time), ' ', '')),
+                        'YYYY-MM-DD HH12:MIAM'
+                    )
+                WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                     AND TRIM(COALESCE(b.pickup_time, '')) ~ '^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$'
+                    THEN (to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || TRIM(b.pickup_time))::timestamp
+                ELSE b.pickup_date::timestamp
+            END,
+            b.pickup_date::timestamp
+        )";
+
+        $conflictClause = '';
+        $params = [];
+        if ($requestWindow) {
+            $conflictClause = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                                            AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (
+                          ({$bookingPickupExpr} - INTERVAL '2 hour') < (?::timestamptz + INTERVAL '2 hour')
+                          AND
+                          ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > (?::timestamptz + INTERVAL '2 hour')
+                      )
+                )
+            ";
+            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+        }
+
+        $stmt = $pdo->prepare(
+            "SELECT v.service_tier, v.seats, COUNT(*) AS total
+             FROM vehicles v
+             WHERE v.status = 'available'
+               AND v.service_tier IN ('eco', 'standard', 'luxury', 'premium')
+               {$conflictClause}
+             GROUP BY v.service_tier, v.seats"
         );
+
+        $stmt->execute($params);
 
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

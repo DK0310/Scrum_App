@@ -170,7 +170,62 @@ function cc_is_callcenterstaff_only(string $role): bool
     return cc_normalize_role($role) === 'callcenterstaff';
 }
 
-function cc_has_available_vehicle_for_request(PDO $pdo, string $rideTier, int $seatCapacity, string $excludeOwnerId = ''): bool
+function cc_build_request_window(string $pickupDateTimeRaw, string $pickupTimeRaw = '', ?float $distanceKm = null): ?array
+{
+    $pickupDateTimeRaw = trim($pickupDateTimeRaw);
+    if ($pickupDateTimeRaw === '') {
+        return null;
+    }
+
+    $timezone = new DateTimeZone('UTC');
+
+    $pickupAt = null;
+    if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $pickupDateTimeRaw) === 1) {
+        $pickupAt = DateTimeImmutable::createFromFormat('Y-m-d\\TH:i', $pickupDateTimeRaw, $timezone);
+    }
+
+    if (!$pickupAt) {
+        try {
+            $pickupAt = new DateTimeImmutable($pickupDateTimeRaw, $timezone);
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    $pickupTimeRaw = strtoupper(str_replace(' ', '', trim($pickupTimeRaw)));
+    if ($pickupTimeRaw !== '') {
+        $datePart = $pickupAt->format('Y-m-d');
+        $timeCandidate = DateTimeImmutable::createFromFormat('Y-m-d h:iA', $datePart . ' ' . $pickupTimeRaw, $timezone);
+        if (!$timeCandidate) {
+            $timeCandidate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $datePart . ' ' . $pickupTimeRaw, $timezone);
+        }
+        if (!$timeCandidate) {
+            $timeCandidate = DateTimeImmutable::createFromFormat('Y-m-d H:i', $datePart . ' ' . $pickupTimeRaw, $timezone);
+        }
+        if ($timeCandidate) {
+            $pickupAt = $timeCandidate;
+        }
+    }
+
+    $distanceMiles = ($distanceKm !== null && $distanceKm > 0) ? ($distanceKm * 0.621371) : 0.0;
+    $durationHours = max(1, (int)ceil($distanceMiles / 20.0));
+
+    return [
+        'pickup_at' => $pickupAt->format('Y-m-d H:i:sP'),
+        'start' => $pickupAt->sub(new DateInterval('PT2H'))->format('Y-m-d H:i:sP'),
+        'end' => $pickupAt->add(new DateInterval('PT' . ($durationHours + 2) . 'H'))->format('Y-m-d H:i:sP'),
+    ];
+}
+
+function cc_has_available_vehicle_for_request(
+    PDO $pdo,
+    string $rideTier,
+    int $seatCapacity,
+    string $pickupDateTimeRaw,
+    string $pickupTimeRaw = '',
+    ?float $distanceKm = null,
+    string $excludeOwnerId = ''
+): bool
 {
     $tier = strtolower(trim($rideTier));
     $tierSql = "LOWER(COALESCE(v.service_tier, '')) = :tier";
@@ -178,20 +233,63 @@ function cc_has_available_vehicle_for_request(PDO $pdo, string $rideTier, int $s
         $tierSql = "LOWER(COALESCE(v.service_tier, '')) IN ('premium', 'luxury')";
     }
 
+    $seatCondition = ((int)$seatCapacity >= 7)
+        ? 'v.seats >= :seat_boundary'
+        : 'v.seats < :seat_boundary';
+
+    $requestWindow = cc_build_request_window($pickupDateTimeRaw, $pickupTimeRaw, $distanceKm);
+
+    $bookingPickupExpr = "COALESCE(
+        CASE
+            WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                 AND UPPER(REPLACE(TRIM(COALESCE(b.pickup_time, '')), ' ', '')) ~ '^[0-9]{1,2}:[0-9]{2}(AM|PM)$'
+                THEN to_timestamp(
+                    to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || UPPER(REPLACE(TRIM(b.pickup_time), ' ', '')),
+                    'YYYY-MM-DD HH12:MIAM'
+                )
+            WHEN NULLIF(TRIM(COALESCE(b.pickup_time, '')), '') IS NOT NULL
+                 AND TRIM(COALESCE(b.pickup_time, '')) ~ '^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$'
+                THEN (to_char(b.pickup_date, 'YYYY-MM-DD') || ' ' || TRIM(b.pickup_time))::timestamp
+            ELSE b.pickup_date::timestamp
+        END,
+        b.pickup_date::timestamp
+    )";
+
     $ownerScope = '';
     if ($excludeOwnerId !== '') {
         $ownerScope = ' AND v.owner_id <> :exclude_owner_id';
     }
 
-    $sql = "\n        SELECT 1\n        FROM vehicles v\n        WHERE v.status = 'available'\n          AND v.seats >= :seat_capacity\n          AND {$tierSql}{$ownerScope}\n        LIMIT 1\n    ";
+    $conflictScope = '';
+    if ($requestWindow) {
+        $conflictScope = "
+          AND NOT EXISTS (
+                SELECT 1
+                FROM bookings b
+                WHERE b.vehicle_id = v.id
+                  AND b.booking_type = 'minicab'
+                  AND b.status IN ('pending', 'in_progress')
+                  AND (
+                                            ({$bookingPickupExpr} - INTERVAL '2 hour') < :request_pickup_at::timestamptz
+                      AND
+                                            ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > :request_pickup_at::timestamptz
+                  )
+            )
+        ";
+    }
+
+    $sql = "\n        SELECT 1\n        FROM vehicles v\n        WHERE v.status = 'available'\n          AND {$seatCondition}\n          AND {$tierSql}{$ownerScope}{$conflictScope}\n        LIMIT 1\n    ";
 
     $stmt = $pdo->prepare($sql);
     $params = [
-        ':seat_capacity' => $seatCapacity,
+        ':seat_boundary' => 7,
         ':tier' => $tier,
     ];
     if ($excludeOwnerId !== '') {
         $params[':exclude_owner_id'] = $excludeOwnerId;
+    }
+    if ($requestWindow) {
+        $params[':request_pickup_at'] = $requestWindow['pickup_at'];
     }
 
     $stmt->execute($params);
@@ -479,7 +577,15 @@ try {
 
         $days = 1;
 
-        $hasAvailableVehicle = cc_has_available_vehicle_for_request($pdo, $rideTier, $seatCapacity, (string)$selectedCustomerId);
+        $hasAvailableVehicle = cc_has_available_vehicle_for_request(
+            $pdo,
+            $rideTier,
+            $seatCapacity,
+            $pickupInput,
+            $pickupTime,
+            $distanceKm,
+            (string)$selectedCustomerId
+        );
         if (!$hasAvailableVehicle) {
             throw new Exception('No available vehicle found for selected tier and seat capacity');
         }
@@ -586,7 +692,8 @@ try {
             throw new Exception('Unable to cancel request');
         }
 
-        if (!empty($booking['vehicle_id'])) {
+        $isMinicabBooking = strtolower(trim((string)($booking['booking_type'] ?? ''))) === 'minicab';
+        if (!empty($booking['vehicle_id']) && !$isMinicabBooking) {
             $bookingRepo->markVehicleAvailable((string)$booking['vehicle_id']);
         }
 
@@ -616,7 +723,8 @@ try {
 
         cc_process_staff_refund($userRepo, $bookingRepo, $paypalGateway, $bookingId, $booking);
 
-        if (!empty($booking['vehicle_id'])) {
+        $isMinicabBooking = strtolower(trim((string)($booking['booking_type'] ?? ''))) === 'minicab';
+        if (!empty($booking['vehicle_id']) && !$isMinicabBooking) {
             $bookingRepo->markVehicleAvailable((string)$booking['vehicle_id']);
         }
 

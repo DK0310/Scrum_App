@@ -482,7 +482,8 @@ try {
                 }
 
                 $vehicleId = (string)($row['vehicle_id'] ?? '');
-                if ($vehicleId !== '') {
+                $isMinicabBooking = strtolower(trim((string)($row['booking_type'] ?? ''))) === 'minicab';
+                if ($vehicleId !== '' && !$isMinicabBooking) {
                     $bookingRepo->markVehicleAvailable($vehicleId);
                 }
 
