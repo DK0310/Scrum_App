@@ -10,6 +10,10 @@
         4: { eco: 2.5, standard: 3.0, premium: 4.0 },
         7: { eco: 3.0, standard: 3.5, premium: 5.0 }
     };
+    const DAILY_HIRE_RATES = {
+        4: { eco: 180.0, standard: 220.0, premium: 300.0 },
+        7: { eco: 220.0, standard: 270.0, premium: 400.0 }
+    };
 
     let searchTimer = null;
     let autocompleteTimers = {};
@@ -263,14 +267,31 @@
         return 4;
     }
 
+    function getCurrentServiceType() {
+        return String(el.serviceType && el.serviceType.value ? el.serviceType.value : 'local').toLowerCase();
+    }
+
+    function isDailyHireService() {
+        return getCurrentServiceType() === 'daily-hire';
+    }
+
     function isPresetDestinationService() {
-        const service = String(el.serviceType && el.serviceType.value ? el.serviceType.value : 'local').toLowerCase();
+        const service = getCurrentServiceType();
         return service === 'airport-transfer' || service === 'hotel-transfer';
     }
 
     function estimateSubtotalAmount() {
         const tier = normalizeTier(el.rideTier && el.rideTier.value ? el.rideTier.value : '');
         const seats = normalizeSeat(el.seatCapacity && el.seatCapacity.value ? el.seatCapacity.value : 4);
+
+        if (isDailyHireService()) {
+            const dailyBase = DAILY_HIRE_RATES[seats] && DAILY_HIRE_RATES[seats][tier] ? DAILY_HIRE_RATES[seats][tier] : null;
+            if (dailyBase === null) {
+                return PHONE_BOOKING_FEE;
+            }
+            return Math.round((dailyBase + PHONE_BOOKING_FEE) * 100) / 100;
+        }
+
         const distanceKm = estimateDistanceKm();
         const rate = PHONE_TIER_RATES[seats] && PHONE_TIER_RATES[seats][tier] ? PHONE_TIER_RATES[seats][tier] : null;
         if (rate === null) {
@@ -285,7 +306,11 @@
     function refreshBookingEstimatePreview() {
         if (el.estimateDistance) {
             const d = estimateDistanceKm();
-            el.estimateDistance.textContent = (d && d > 0) ? (d.toFixed(1) + ' km') : 'Select locations';
+            if (isDailyHireService()) {
+                el.estimateDistance.textContent = 'Not required for Daily Hire';
+            } else {
+                el.estimateDistance.textContent = (d && d > 0) ? (d.toFixed(1) + ' km') : 'Select locations';
+            }
         }
 
         if (el.estimateTotal) {
@@ -351,10 +376,12 @@
     }
 
     function updateDestinationMode() {
-        const service = String(el.serviceType && el.serviceType.value ? el.serviceType.value : 'local').toLowerCase();
+        const service = getCurrentServiceType();
         const isAirport = service === 'airport-transfer';
         const isHotel = service === 'hotel-transfer';
+        const isDailyHire = service === 'daily-hire';
         const isPreset = isAirport || isHotel;
+        const destinationLabel = document.getElementById('ccReturnLocationLabel');
 
         if (el.returnInputWrapper) {
             el.returnInputWrapper.style.display = isPreset ? 'none' : 'flex';
@@ -373,6 +400,19 @@
         if (isPreset && returnMapContainer) {
             returnMapContainer.style.display = 'none';
             returnMapContainer.classList.remove('expanded');
+        }
+
+        if (el.returnLocation) {
+            el.returnLocation.required = !isDailyHire;
+            if (isDailyHire) {
+                el.returnLocation.placeholder = 'Optional destination for Daily Hire';
+            } else {
+                el.returnLocation.placeholder = 'Search destination';
+            }
+        }
+
+        if (destinationLabel) {
+            destinationLabel.textContent = isDailyHire ? 'Destination (optional)' : 'Destination *';
         }
 
         if (isAirport) {
@@ -533,13 +573,15 @@
 
     function getRealtimeAvailabilityPayload() {
         const payload = {};
+        payload.service_type = getCurrentServiceType();
+
         const pickupValue = String(el.pickupDate && el.pickupDate.value ? el.pickupDate.value : '').trim();
         if (pickupValue !== '') {
             payload.pickup_datetime = pickupValue;
         }
 
         const estimatedDistanceKm = estimateDistanceKm();
-        if (Number.isFinite(estimatedDistanceKm) && estimatedDistanceKm > 0) {
+        if (!isDailyHireService() && Number.isFinite(estimatedDistanceKm) && estimatedDistanceKm > 0) {
             payload.distance_km = Number(estimatedDistanceKm.toFixed(2));
         }
 
@@ -1087,12 +1129,13 @@
 
         const payload = {
             date: dateValue,
+            service_type: getCurrentServiceType(),
             ride_tier: normalizeTier(el.rideTier && el.rideTier.value ? el.rideTier.value : ''),
             seat_capacity: normalizeSeat(el.seatCapacity && el.seatCapacity.value ? el.seatCapacity.value : 4)
         };
 
         const distanceKm = estimateDistanceKm();
-        if (distanceKm && distanceKm > 0) {
+        if (!isDailyHireService() && distanceKm && distanceKm > 0) {
             payload.distance_km = Number(distanceKm.toFixed(2));
         }
 
@@ -1124,6 +1167,14 @@
 
         await loadAvailabilityOptions();
 
+        const serviceType = getCurrentServiceType();
+        const destinationRequired = serviceType !== 'daily-hire';
+        const destinationValue = String(el.returnLocation && el.returnLocation.value ? el.returnLocation.value : '').trim();
+        if (destinationRequired && !destinationValue) {
+            setFormStatus('Destination is required for this service type.', true);
+            return;
+        }
+
         const selectedTier = normalizeTier(el.rideTier.value || '');
         const selectedSeat = normalizeSeat(el.seatCapacity ? el.seatCapacity.value : 4);
         if (!availabilityMap[selectedTier] || (availabilityMap[selectedTier][selectedSeat] || 0) <= 0) {
@@ -1141,14 +1192,14 @@
             customer_email: el.customerEmail.value,
             ride_tier: selectedTier,
             seat_capacity: selectedSeat,
-            service_type: el.serviceType && el.serviceType.value ? el.serviceType.value : 'local',
+            service_type: serviceType,
             pickup_date: el.pickupDate.value,
             pickup_time: extractPickupTimeFromInput(el.pickupDate.value),
             pickup_location: el.pickupLocation.value,
-            return_location: el.returnLocation.value,
+            return_location: destinationValue,
             payment_method: el.paymentMethod.value,
             special_requests: el.specialRequests.value,
-            distance_km: estimateDistanceKm()
+            distance_km: serviceType === 'daily-hire' ? null : estimateDistanceKm()
         };
 
         if (payload.payment_method === 'account_balance') {

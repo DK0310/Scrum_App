@@ -101,6 +101,21 @@ function computeMinicabFareOrders(string $rideTier, int $seatCapacity, float $di
     return round($distanceMiles * $ratesPerMile[$seatCapacity][$tier], 2);
 }
 
+function computeDailyHireFareOrders(string $rideTier, int $seatCapacity): ?float {
+    $tier = strtolower(trim($rideTier));
+    if ($tier === 'premium') {
+        $tier = 'luxury';
+    }
+
+    $seatClass = $seatCapacity >= 7 ? 7 : 4;
+    $dailyRates = [
+        4 => ['eco' => 180.00, 'standard' => 220.00, 'luxury' => 300.00],
+        7 => ['eco' => 220.00, 'standard' => 270.00, 'luxury' => 400.00],
+    ];
+
+    return $dailyRates[$seatClass][$tier] ?? null;
+}
+
 function parseOrderPickupDateTime(array $booking): ?DateTimeImmutable {
     $pickupDateRaw = trim((string)($booking['pickup_date'] ?? ''));
     if ($pickupDateRaw === '') {
@@ -152,7 +167,11 @@ function buildCutoffErrorMessageOrders(int $hours): string {
     return 'Booking cannot be modified or cancelled within ' . $hours . ' hours before pickup.';
 }
 
-function estimateMinicabDurationHoursOrders(?float $distanceKm): int {
+function estimateMinicabDurationHoursOrders(?float $distanceKm, ?string $serviceType = null): int {
+    if (strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire') {
+        return 24;
+    }
+
     if ($distanceKm === null || $distanceKm <= 0) {
         return 1;
     }
@@ -161,13 +180,33 @@ function estimateMinicabDurationHoursOrders(?float $distanceKm): int {
     return max(1, (int)ceil($distanceMiles / 20.0));
 }
 
+function getMinicabPreBufferHoursOrders(?string $serviceType): int {
+    return strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire' ? 24 : 2;
+}
+
+/**
+ * @return array{pickup_at:DateTimeImmutable,window_start:DateTimeImmutable,window_end:DateTimeImmutable}
+ */
+function buildMinicabRequestWindowOrders(DateTimeImmutable $pickupAt, ?float $distanceKm, ?string $serviceType): array {
+    $preBufferHours = getMinicabPreBufferHoursOrders($serviceType);
+    $durationHours = estimateMinicabDurationHoursOrders($distanceKm, $serviceType);
+    $postBufferHours = 2;
+
+    return [
+        'pickup_at' => $pickupAt,
+        'window_start' => $pickupAt->sub(new DateInterval('PT' . $preBufferHours . 'H')),
+        'window_end' => $pickupAt->add(new DateInterval('PT' . ($durationHours + $postBufferHours) . 'H')),
+    ];
+}
+
 function countAvailableVehiclesForTierAndSeats(
     PDO $pdo,
     string $tier,
     int $seats,
     ?DateTimeImmutable $requestedPickupAt = null,
     ?float $distanceKm = null,
-    ?string $excludeBookingId = null
+    ?string $excludeBookingId = null,
+    ?string $serviceType = null
 ): int {
     $normalizedTier = strtolower(trim($tier));
     if ($normalizedTier === 'premium') {
@@ -194,30 +233,67 @@ function countAvailableVehiclesForTierAndSeats(
         b.pickup_date::timestamp
     )";
 
+    $existingPreBufferExpr = "CASE
+        WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+        ELSE 2
+    END";
+    $existingDurationExpr = "CASE
+        WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+        ELSE GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int
+    END";
+    $existingWindowStartExpr = "({$bookingPickupExpr} - ({$existingPreBufferExpr} * INTERVAL '1 hour'))";
+    $existingWindowEndExpr = "({$bookingPickupExpr} + (({$existingDurationExpr} + 2) * INTERVAL '1 hour'))";
+
     $conflictClause = '';
     if ($requestedPickupAt !== null) {
-        $pickupAt = $requestedPickupAt->format('Y-m-d H:i:sP');
+        $requestWindow = buildMinicabRequestWindowOrders($requestedPickupAt, $distanceKm, $serviceType);
+        $isDailyHireRequest = strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire';
 
-        $conflictClause = "
-          AND NOT EXISTS (
-                SELECT 1
-                FROM bookings b
-                WHERE b.vehicle_id = v.id
-                  AND b.booking_type = 'minicab'
-                  AND b.status IN ('pending', 'in_progress')
-                  AND (? IS NULL OR b.id <> ?)
-                  AND (
-                      ({$bookingPickupExpr} - INTERVAL '2 hour') < ?::timestamptz
-                      AND
-                      ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > ?::timestamptz
-                  )
-            )
-        ";
+        if ($isDailyHireRequest) {
+            $conflictClause = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                      AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (? IS NULL OR b.id <> ?)
+                      AND (
+                          {$existingWindowStartExpr} < ?::timestamptz
+                          AND
+                          {$existingWindowEndExpr} > ?::timestamptz
+                      )
+                )
+            ";
 
-        $params[] = $excludeBookingId;
-        $params[] = $excludeBookingId;
-        $params[] = $pickupAt;
-        $params[] = $pickupAt;
+            $params[] = $excludeBookingId;
+            $params[] = $excludeBookingId;
+            $params[] = $requestWindow['window_end']->format('Y-m-d H:i:sP');
+            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+        } else {
+            $pickupAt = $requestWindow['pickup_at']->format('Y-m-d H:i:sP');
+
+            $conflictClause = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                      AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (? IS NULL OR b.id <> ?)
+                      AND (
+                          {$existingWindowStartExpr} < ?::timestamptz
+                          AND
+                          {$existingWindowEndExpr} > ?::timestamptz
+                      )
+                )
+            ";
+
+            $params[] = $excludeBookingId;
+            $params[] = $excludeBookingId;
+            $params[] = $pickupAt;
+            $params[] = $pickupAt;
+        }
     }
 
     $stmt = $pdo->prepare(
@@ -408,7 +484,7 @@ if ($action === 'modify-booking') {
 
         if (array_key_exists('service_type', $updates)) {
             $updates['service_type'] = strtolower(trim((string)$updates['service_type']));
-            if (!in_array($updates['service_type'], ['local', 'long-distance', 'airport-transfer', 'hotel-transfer'], true)) {
+            if (!in_array($updates['service_type'], ['local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'], true)) {
                 echo json_encode(['success' => false, 'message' => 'Invalid service type.']);
                 exit;
             }
@@ -465,6 +541,7 @@ if ($action === 'modify-booking') {
 
         $effectiveTier = strtolower(trim((string)($updates['ride_tier'] ?? $booking['ride_tier'] ?? '')));
         $effectiveSeats = (int)($updates['number_of_passengers'] ?? $booking['number_of_passengers'] ?? 0);
+        $effectiveServiceType = strtolower(trim((string)($updates['service_type'] ?? $booking['service_type'] ?? 'local')));
         $effectiveDistanceKm = (float)($updates['distance_km'] ?? $booking['distance_km'] ?? 0);
         $effectivePickupAt = parseOrderPickupDateTime([
             'pickup_date' => $updates['pickup_date'] ?? $booking['pickup_date'] ?? '',
@@ -477,7 +554,8 @@ if ($action === 'modify-booking') {
                 $effectiveSeats,
                 $effectivePickupAt,
                 $effectiveDistanceKm,
-                $bookingId
+                $bookingId,
+                $effectiveServiceType
             );
             if ($availableCount <= 0) {
                 echo json_encode([
@@ -491,7 +569,8 @@ if ($action === 'modify-booking') {
         $distanceChanged = array_key_exists('distance_km', $updates);
         $pickupChanged = array_key_exists('pickup_location', $updates);
         $destinationChanged = array_key_exists('return_location', $updates);
-        if (($pickupChanged || $destinationChanged) && !$distanceChanged) {
+        $isDailyHireService = $effectiveServiceType === 'daily-hire';
+        if (($pickupChanged || $destinationChanged) && !$distanceChanged && !$isDailyHireService) {
             echo json_encode([
                 'success' => false,
                 'message' => 'Distance is required when changing pick-up or destination to recalculate fare.'
@@ -499,7 +578,23 @@ if ($action === 'modify-booking') {
             exit;
         }
 
-        if ($effectiveDistanceKm > 0) {
+        if ($isDailyHireService) {
+            $newSubtotal = computeDailyHireFareOrders($effectiveTier, $effectiveSeats);
+            if ($newSubtotal === null) {
+                echo json_encode(['success' => false, 'message' => 'Unable to recalculate fare for selected options.']);
+                exit;
+            }
+
+            $oldSubtotal = (float)($booking['subtotal'] ?? 0);
+            $oldTotal = (float)($booking['total_amount'] ?? $oldSubtotal);
+            $fixedDiscount = max(0, $oldSubtotal - $oldTotal);
+            $newTotal = max(0, $newSubtotal - $fixedDiscount);
+
+            $updates['distance_km'] = null;
+            $updates['subtotal'] = $newSubtotal;
+            $updates['total_amount'] = $newTotal;
+            $updates['transfer_cost'] = $newSubtotal;
+        } elseif ($effectiveDistanceKm > 0) {
             $newSubtotal = computeMinicabFareOrders($effectiveTier, $effectiveSeats, $effectiveDistanceKm);
             if ($newSubtotal === null) {
                 echo json_encode(['success' => false, 'message' => 'Unable to recalculate fare for selected options.']);

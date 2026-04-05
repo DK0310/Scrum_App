@@ -80,8 +80,12 @@ final class BookingRepository
         return $pickupAt;
     }
 
-    private function estimateMinicabDurationHours(?float $distanceKm): int
+    private function estimateMinicabDurationHours(?float $distanceKm, ?string $serviceType = null): int
     {
+        if (strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire') {
+            return 24;
+        }
+
         if ($distanceKm === null || $distanceKm <= 0) {
             return 1;
         }
@@ -90,21 +94,33 @@ final class BookingRepository
         return max(1, (int)ceil($distanceMiles / 20.0));
     }
 
+    private function getMinicabPreBufferHours(?string $serviceType): int
+    {
+        return strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire' ? 24 : 2;
+    }
+
     /**
      * @return array{pickup_at:DateTimeImmutable,window_start:DateTimeImmutable,window_end:DateTimeImmutable,duration_hours:int}|null
      */
-    public function buildMinicabRequestWindow(?string $pickupDateRaw, ?string $pickupTimeRaw = null, ?float $distanceKm = null, int $bufferHours = 2): ?array
+    public function buildMinicabRequestWindow(
+        ?string $pickupDateRaw,
+        ?string $pickupTimeRaw = null,
+        ?float $distanceKm = null,
+        ?string $serviceType = null,
+        int $bufferHours = 2
+    ): ?array
     {
         $pickupAt = $this->parseMinicabPickupDateTime($pickupDateRaw, $pickupTimeRaw);
         if (!$pickupAt) {
             return null;
         }
 
-        $bufferHours = max(0, $bufferHours);
-        $durationHours = $this->estimateMinicabDurationHours($distanceKm);
+        $bufferHours = max(0, $this->getMinicabPreBufferHours($serviceType));
+        $durationHours = $this->estimateMinicabDurationHours($distanceKm, $serviceType);
+        $postBufferHours = max(0, $bufferHours > 2 ? 2 : $bufferHours);
 
         $windowStart = $pickupAt->sub(new DateInterval('PT' . $bufferHours . 'H'));
-        $windowEnd = $pickupAt->add(new DateInterval('PT' . ($durationHours + $bufferHours) . 'H'));
+        $windowEnd = $pickupAt->add(new DateInterval('PT' . ($durationHours + $postBufferHours) . 'H'));
 
         return [
             'pickup_at' => $pickupAt,
@@ -590,7 +606,9 @@ final class BookingRepository
         string $excludeRenterId,
         int $seatCapacity = 4,
         ?string $requestWindowStart = null,
-        ?string $requestWindowEnd = null
+        ?string $requestWindowEnd = null,
+        ?string $requestPickupAt = null,
+        ?string $requestServiceType = null
     ): ?array
     {
         $this->ensureVehicleServiceTierColumnExists();
@@ -622,9 +640,32 @@ final class BookingRepository
             b.pickup_date::timestamp
         )";
 
+        if (($requestPickupAt === null || trim($requestPickupAt) === '') && !empty($requestWindowStart)) {
+            try {
+                $requestPickupAt = (new DateTimeImmutable($requestWindowStart))
+                    ->add(new DateInterval('PT2H'))
+                    ->format('Y-m-d H:i:sP');
+            } catch (Exception $e) {
+                $requestPickupAt = null;
+            }
+        }
+
+        $existingPreBufferExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE 2
+        END";
+        $existingDurationExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int
+        END";
+        $existingWindowStartExpr = "({$bookingPickupExpr} - ({$existingPreBufferExpr} * INTERVAL '1 hour'))";
+        $existingWindowEndExpr = "({$bookingPickupExpr} + (({$existingDurationExpr} + 2) * INTERVAL '1 hour'))";
+
+        $isDailyHireRequest = strtolower(trim((string)($requestServiceType ?? ''))) === 'daily-hire';
+
         $conflictClause = '';
         $params = [$excludeRenterId];
-        if (!empty($requestWindowStart)) {
+        if ($isDailyHireRequest && !empty($requestWindowStart) && !empty($requestWindowEnd)) {
             $conflictClause = "
               AND NOT EXISTS (
                     SELECT 1
@@ -633,14 +674,31 @@ final class BookingRepository
                                             AND b.booking_type = 'minicab'
                       AND b.status IN ('pending', 'in_progress')
                       AND (
-                          ({$bookingPickupExpr} - INTERVAL '2 hour') < (?::timestamptz + INTERVAL '2 hour')
+                          {$existingWindowStartExpr} < ?::timestamptz
                           AND
-                          ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > (?::timestamptz + INTERVAL '2 hour')
+                          {$existingWindowEndExpr} > ?::timestamptz
                       )
                 )
             ";
+            $params[] = $requestWindowEnd;
             $params[] = $requestWindowStart;
-            $params[] = $requestWindowStart;
+        } elseif (!empty($requestPickupAt)) {
+            $conflictClause = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                                            AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (
+                          {$existingWindowStartExpr} < ?::timestamptz
+                          AND
+                          {$existingWindowEndExpr} > ?::timestamptz
+                      )
+                )
+            ";
+            $params[] = $requestPickupAt;
+            $params[] = $requestPickupAt;
         }
 
         $stmt = $this->pdo->prepare("

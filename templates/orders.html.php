@@ -367,7 +367,7 @@
                     </div>
                 </div>
                 <div class="form-group" style="margin-bottom:12px;">
-                    <label class="order-detail-label" for="modifyDestination" style="display:block;margin-bottom:6px;">Destination</label>
+                    <label class="order-detail-label" id="modifyDestinationLabel" for="modifyDestination" style="display:block;margin-bottom:6px;">Destination</label>
                     <div class="location-input-wrapper" id="modifyDestinationInputWrapper">
                         <input id="modifyDestination" class="form-input" type="text" placeholder="Enter destination" autocomplete="off">
                         <button type="button" class="location-map-btn" id="modifyDestinationMapBtn" onclick="openModifyMapPicker('return')" title="Choose on map">📍</button>
@@ -445,12 +445,20 @@
                                     <small>Executive comfort</small>
                                 </span>
                             </button>
+                            <button type="button" class="service-purpose-card" data-service="daily-hire" onclick="selectModifyServiceTypeCard('daily-hire')" aria-label="Daily Hire">
+                                <span class="service-purpose-overlay"></span>
+                                <span class="service-purpose-content">
+                                    <strong>Daily Hire</strong>
+                                    <small>24-hour package</small>
+                                </span>
+                            </button>
                         </div>
                         <select id="modifyServiceType" class="form-input" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
                             <option value="local">Local Journey</option>
                             <option value="long-distance">Long Distance Journey</option>
                             <option value="airport-transfer">Airport Transfer</option>
                             <option value="hotel-transfer">Hotel Transfer</option>
+                            <option value="daily-hire">Daily Hire</option>
                         </select>
                     </div>
                     <div class="form-group">

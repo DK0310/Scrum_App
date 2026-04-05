@@ -175,7 +175,11 @@ function parseMinicabPickupDateTimeVehicles(?string $pickupDateRaw, ?string $pic
     return $pickupAt;
 }
 
-function estimateMinicabDurationHoursVehicles(?float $distanceKm): int {
+function estimateMinicabDurationHoursVehicles(?float $distanceKm, ?string $serviceType = null): int {
+    if (strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire') {
+        return 24;
+    }
+
     if ($distanceKm === null || $distanceKm <= 0) {
         return 1;
     }
@@ -184,21 +188,33 @@ function estimateMinicabDurationHoursVehicles(?float $distanceKm): int {
     return max(1, (int)ceil($distanceMiles / 20.0));
 }
 
+function getMinicabPreBufferHoursVehicles(?string $serviceType): int {
+    return strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire' ? 24 : 2;
+}
+
 /**
- * @return array{window_start:DateTimeImmutable,window_end:DateTimeImmutable,duration_hours:int}|null
+ * @return array{pickup_at:DateTimeImmutable,window_start:DateTimeImmutable,window_end:DateTimeImmutable,duration_hours:int}|null
  */
-function buildMinicabWindowVehicles(?string $pickupDateRaw, ?string $pickupTimeRaw = null, ?float $distanceKm = null, int $bufferHours = 2): ?array {
+function buildMinicabWindowVehicles(
+    ?string $pickupDateRaw,
+    ?string $pickupTimeRaw = null,
+    ?float $distanceKm = null,
+    ?string $serviceType = null,
+    int $bufferHours = 2
+): ?array {
     $pickupAt = parseMinicabPickupDateTimeVehicles($pickupDateRaw, $pickupTimeRaw);
     if (!$pickupAt) {
         return null;
     }
 
-    $bufferHours = max(0, $bufferHours);
-    $durationHours = estimateMinicabDurationHoursVehicles($distanceKm);
+    $bufferHours = max(0, getMinicabPreBufferHoursVehicles($serviceType));
+    $durationHours = estimateMinicabDurationHoursVehicles($distanceKm, $serviceType);
+    $postBufferHours = max(0, $bufferHours > 2 ? 2 : $bufferHours);
     $windowStart = $pickupAt->sub(new DateInterval('PT' . $bufferHours . 'H'));
-    $windowEnd = $pickupAt->add(new DateInterval('PT' . ($durationHours + $bufferHours) . 'H'));
+    $windowEnd = $pickupAt->add(new DateInterval('PT' . ($durationHours + $postBufferHours) . 'H'));
 
     return [
+        'pickup_at' => $pickupAt,
         'window_start' => $windowStart,
         'window_end' => $windowEnd,
         'duration_hours' => $durationHours,
@@ -283,12 +299,16 @@ if ($action === 'check-available-tiers') {
     $seatCapacity = ($seatCapacity >= 7) ? 7 : 4;
     $pickupDateRaw = (string)($input['pickup_datetime'] ?? $input['pickup_date'] ?? $_GET['pickup_datetime'] ?? '');
     $pickupTimeRaw = (string)($input['pickup_time'] ?? $_GET['pickup_time'] ?? '');
+    $serviceTypeRaw = strtolower(trim((string)($input['service_type'] ?? $_GET['service_type'] ?? 'local')));
+    if (!in_array($serviceTypeRaw, ['local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'], true)) {
+        $serviceTypeRaw = 'local';
+    }
     $distanceKmRaw = $input['distance_km'] ?? $_GET['distance_km'] ?? null;
     $distanceKm = is_numeric($distanceKmRaw) ? (float)$distanceKmRaw : null;
     $requestWindow = null;
 
     if ($pickupDateRaw !== '') {
-        $requestWindow = buildMinicabWindowVehicles($pickupDateRaw, $pickupTimeRaw, $distanceKm);
+        $requestWindow = buildMinicabWindowVehicles($pickupDateRaw, $pickupTimeRaw, $distanceKm, $serviceTypeRaw);
     }
     
     try {
@@ -313,25 +333,56 @@ if ($action === 'check-available-tiers') {
             b.pickup_date::timestamp
         )";
 
+        $existingPreBufferExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE 2
+        END";
+        $existingDurationExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int
+        END";
+        $existingWindowStartExpr = "({$bookingPickupExpr} - ({$existingPreBufferExpr} * INTERVAL '1 hour'))";
+        $existingWindowEndExpr = "({$bookingPickupExpr} + (({$existingDurationExpr} + 2) * INTERVAL '1 hour'))";
+        $isDailyHireRequest = $serviceTypeRaw === 'daily-hire';
+
         $conflictClause = '';
         $params = [$seatValue];
         if ($requestWindow) {
-            $conflictClause = "
-              AND NOT EXISTS (
-                    SELECT 1
-                    FROM bookings b
-                    WHERE b.vehicle_id = vehicles.id
-                                            AND b.booking_type = 'minicab'
-                      AND b.status IN ('pending', 'in_progress')
-                      AND (
-                          ({$bookingPickupExpr} - INTERVAL '2 hour') < (?::timestamptz + INTERVAL '2 hour')
-                          AND
-                          ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > (?::timestamptz + INTERVAL '2 hour')
-                      )
-                )
-            ";
-            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
-            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+            if ($isDailyHireRequest) {
+                $conflictClause = "
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM bookings b
+                        WHERE b.vehicle_id = vehicles.id
+                          AND b.booking_type = 'minicab'
+                          AND b.status IN ('pending', 'in_progress')
+                          AND (
+                              {$existingWindowStartExpr} < ?::timestamptz
+                              AND
+                              {$existingWindowEndExpr} > ?::timestamptz
+                          )
+                    )
+                ";
+                $params[] = $requestWindow['window_end']->format('Y-m-d H:i:sP');
+                $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+            } else {
+                $conflictClause = "
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM bookings b
+                        WHERE b.vehicle_id = vehicles.id
+                          AND b.booking_type = 'minicab'
+                          AND b.status IN ('pending', 'in_progress')
+                          AND (
+                              {$existingWindowStartExpr} < ?::timestamptz
+                              AND
+                              {$existingWindowEndExpr} > ?::timestamptz
+                          )
+                    )
+                ";
+                $params[] = $requestWindow['pickup_at']->format('Y-m-d H:i:sP');
+                $params[] = $requestWindow['pickup_at']->format('Y-m-d H:i:sP');
+            }
         }
 
         $query = "
@@ -378,6 +429,10 @@ if ($action === 'unavailable-time-slots') {
     $seatCapacity = (int)($input['seat_capacity'] ?? $_GET['seat_capacity'] ?? 4);
     $seatCapacity = ($seatCapacity >= 7) ? 7 : 4;
     $tierRaw = strtolower(trim((string)($input['ride_tier'] ?? $_GET['ride_tier'] ?? '')));
+    $serviceTypeRaw = strtolower(trim((string)($input['service_type'] ?? $_GET['service_type'] ?? 'local')));
+    if (!in_array($serviceTypeRaw, ['local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'], true)) {
+        $serviceTypeRaw = 'local';
+    }
     if ($tierRaw === 'premium') {
         $tierRaw = 'luxury';
     }
@@ -418,6 +473,21 @@ if ($action === 'unavailable-time-slots') {
             b.pickup_date::timestamp
         )";
 
+        $existingPreBufferExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE 2
+        END";
+        $existingDurationExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int
+        END";
+        $existingWindowStartExpr = "({$bookingPickupExpr} - ({$existingPreBufferExpr} * INTERVAL '1 hour'))";
+        $existingWindowEndExpr = "({$bookingPickupExpr} + (({$existingDurationExpr} + 2) * INTERVAL '1 hour'))";
+        $isDailyHireRequest = $serviceTypeRaw === 'daily-hire';
+        $timeConflictCondition = $isDailyHireRequest
+            ? "{$existingWindowStartExpr} < :request_window_end::timestamptz AND {$existingWindowEndExpr} > :request_window_start::timestamptz"
+            : "{$existingWindowStartExpr} < :request_pickup_at::timestamptz AND {$existingWindowEndExpr} > :request_pickup_at::timestamptz";
+
         $query = "
             SELECT COUNT(*)
             FROM vehicles v
@@ -430,11 +500,7 @@ if ($action === 'unavailable-time-slots') {
                     WHERE b.vehicle_id = v.id
                                             AND b.booking_type = 'minicab'
                       AND b.status IN ('pending', 'in_progress')
-                      AND (
-                                                    ({$bookingPickupExpr} - INTERVAL '2 hour') < :request_pickup_at::timestamptz
-                          AND
-                                                    ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > :request_pickup_at::timestamptz
-                      )
+                                            AND ({$timeConflictCondition})
                 )
         ";
 
@@ -448,14 +514,18 @@ if ($action === 'unavailable-time-slots') {
             $timeValue = sprintf('%02d:%02d', $hour, $minute);
             $candidateRaw = $dateRaw . 'T' . $timeValue;
 
-            $pickupAt = parseMinicabPickupDateTimeVehicles($candidateRaw, null);
-            if (!$pickupAt) {
+            $requestWindow = buildMinicabWindowVehicles($candidateRaw, null, $distanceKm, $serviceTypeRaw);
+            if (!$requestWindow) {
                 continue;
             }
 
-            $params = [
-                ':request_pickup_at' => $pickupAt->format('Y-m-d H:i:sP'),
-            ];
+            $params = [];
+            if ($isDailyHireRequest) {
+                $params[':request_window_start'] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+                $params[':request_window_end'] = $requestWindow['window_end']->format('Y-m-d H:i:sP');
+            } else {
+                $params[':request_pickup_at'] = $requestWindow['pickup_at']->format('Y-m-d H:i:sP');
+            }
             if ($tierClause !== '' && $tierRaw !== 'luxury') {
                 $params[':tier'] = $tierRaw;
             }
@@ -489,12 +559,16 @@ if ($action === 'unavailable-time-slots') {
 if ($action === 'tier-seat-availability') {
     $pickupDateRaw = (string)($input['pickup_datetime'] ?? $input['pickup_date'] ?? $_GET['pickup_datetime'] ?? '');
     $pickupTimeRaw = (string)($input['pickup_time'] ?? $_GET['pickup_time'] ?? '');
+    $serviceTypeRaw = strtolower(trim((string)($input['service_type'] ?? $_GET['service_type'] ?? 'local')));
+    if (!in_array($serviceTypeRaw, ['local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'], true)) {
+        $serviceTypeRaw = 'local';
+    }
     $distanceKmRaw = $input['distance_km'] ?? $_GET['distance_km'] ?? null;
     $distanceKm = is_numeric($distanceKmRaw) ? (float)$distanceKmRaw : null;
     $requestWindow = null;
 
     if ($pickupDateRaw !== '') {
-        $requestWindow = buildMinicabWindowVehicles($pickupDateRaw, $pickupTimeRaw, $distanceKm);
+        $requestWindow = buildMinicabWindowVehicles($pickupDateRaw, $pickupTimeRaw, $distanceKm, $serviceTypeRaw);
     }
 
     try {
@@ -514,25 +588,56 @@ if ($action === 'tier-seat-availability') {
             b.pickup_date::timestamp
         )";
 
+        $existingPreBufferExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE 2
+        END";
+        $existingDurationExpr = "CASE
+            WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+            ELSE GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int
+        END";
+        $existingWindowStartExpr = "({$bookingPickupExpr} - ({$existingPreBufferExpr} * INTERVAL '1 hour'))";
+        $existingWindowEndExpr = "({$bookingPickupExpr} + (({$existingDurationExpr} + 2) * INTERVAL '1 hour'))";
+        $isDailyHireRequest = $serviceTypeRaw === 'daily-hire';
+
         $conflictClause = '';
         $params = [];
         if ($requestWindow) {
-            $conflictClause = "
-              AND NOT EXISTS (
-                    SELECT 1
-                    FROM bookings b
-                    WHERE b.vehicle_id = v.id
-                                            AND b.booking_type = 'minicab'
-                      AND b.status IN ('pending', 'in_progress')
-                      AND (
-                          ({$bookingPickupExpr} - INTERVAL '2 hour') < (?::timestamptz + INTERVAL '2 hour')
-                          AND
-                          ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > (?::timestamptz + INTERVAL '2 hour')
-                      )
-                )
-            ";
-            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
-            $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+            if ($isDailyHireRequest) {
+                $conflictClause = "
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM bookings b
+                        WHERE b.vehicle_id = v.id
+                                                AND b.booking_type = 'minicab'
+                          AND b.status IN ('pending', 'in_progress')
+                          AND (
+                              {$existingWindowStartExpr} < ?::timestamptz
+                              AND
+                              {$existingWindowEndExpr} > ?::timestamptz
+                          )
+                    )
+                ";
+                $params[] = $requestWindow['window_end']->format('Y-m-d H:i:sP');
+                $params[] = $requestWindow['window_start']->format('Y-m-d H:i:sP');
+            } else {
+                $conflictClause = "
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM bookings b
+                        WHERE b.vehicle_id = v.id
+                                                AND b.booking_type = 'minicab'
+                          AND b.status IN ('pending', 'in_progress')
+                          AND (
+                              {$existingWindowStartExpr} < ?::timestamptz
+                              AND
+                              {$existingWindowEndExpr} > ?::timestamptz
+                          )
+                    )
+                ";
+                $params[] = $requestWindow['pickup_at']->format('Y-m-d H:i:sP');
+                $params[] = $requestWindow['pickup_at']->format('Y-m-d H:i:sP');
+            }
         }
 
         $stmt = $pdo->prepare(

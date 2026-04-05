@@ -170,7 +170,27 @@ function cc_is_callcenterstaff_only(string $role): bool
     return cc_normalize_role($role) === 'callcenterstaff';
 }
 
-function cc_build_request_window(string $pickupDateTimeRaw, string $pickupTimeRaw = '', ?float $distanceKm = null): ?array
+function cc_estimate_duration_hours(?float $distanceKm, ?string $serviceType = null): int
+{
+    if (strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire') {
+        return 24;
+    }
+
+    $distanceMiles = ($distanceKm !== null && $distanceKm > 0) ? ($distanceKm * 0.621371) : 0.0;
+    return max(1, (int)ceil($distanceMiles / 20.0));
+}
+
+function cc_get_pre_buffer_hours(?string $serviceType): int
+{
+    return strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire' ? 24 : 2;
+}
+
+function cc_build_request_window(
+    string $pickupDateTimeRaw,
+    string $pickupTimeRaw = '',
+    ?float $distanceKm = null,
+    ?string $serviceType = null
+): ?array
 {
     $pickupDateTimeRaw = trim($pickupDateTimeRaw);
     if ($pickupDateTimeRaw === '') {
@@ -207,13 +227,14 @@ function cc_build_request_window(string $pickupDateTimeRaw, string $pickupTimeRa
         }
     }
 
-    $distanceMiles = ($distanceKm !== null && $distanceKm > 0) ? ($distanceKm * 0.621371) : 0.0;
-    $durationHours = max(1, (int)ceil($distanceMiles / 20.0));
+    $durationHours = cc_estimate_duration_hours($distanceKm, $serviceType);
+    $preBufferHours = cc_get_pre_buffer_hours($serviceType);
+    $postBufferHours = 2;
 
     return [
         'pickup_at' => $pickupAt->format('Y-m-d H:i:sP'),
-        'start' => $pickupAt->sub(new DateInterval('PT2H'))->format('Y-m-d H:i:sP'),
-        'end' => $pickupAt->add(new DateInterval('PT' . ($durationHours + 2) . 'H'))->format('Y-m-d H:i:sP'),
+        'start' => $pickupAt->sub(new DateInterval('PT' . $preBufferHours . 'H'))->format('Y-m-d H:i:sP'),
+        'end' => $pickupAt->add(new DateInterval('PT' . ($durationHours + $postBufferHours) . 'H'))->format('Y-m-d H:i:sP'),
     ];
 }
 
@@ -224,6 +245,7 @@ function cc_has_available_vehicle_for_request(
     string $pickupDateTimeRaw,
     string $pickupTimeRaw = '',
     ?float $distanceKm = null,
+    ?string $serviceType = null,
     string $excludeOwnerId = ''
 ): bool
 {
@@ -237,7 +259,7 @@ function cc_has_available_vehicle_for_request(
         ? 'v.seats >= :seat_boundary'
         : 'v.seats < :seat_boundary';
 
-    $requestWindow = cc_build_request_window($pickupDateTimeRaw, $pickupTimeRaw, $distanceKm);
+    $requestWindow = cc_build_request_window($pickupDateTimeRaw, $pickupTimeRaw, $distanceKm, $serviceType);
 
     $bookingPickupExpr = "COALESCE(
         CASE
@@ -255,6 +277,18 @@ function cc_has_available_vehicle_for_request(
         b.pickup_date::timestamp
     )";
 
+    $existingPreBufferExpr = "CASE
+        WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+        ELSE 2
+    END";
+    $existingDurationExpr = "CASE
+        WHEN LOWER(COALESCE(b.service_type, 'local')) = 'daily-hire' THEN 24
+        ELSE GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int
+    END";
+    $existingWindowStartExpr = "({$bookingPickupExpr} - ({$existingPreBufferExpr} * INTERVAL '1 hour'))";
+    $existingWindowEndExpr = "({$bookingPickupExpr} + (({$existingDurationExpr} + 2) * INTERVAL '1 hour'))";
+    $isDailyHireRequest = strtolower(trim((string)($serviceType ?? ''))) === 'daily-hire';
+
     $ownerScope = '';
     if ($excludeOwnerId !== '') {
         $ownerScope = ' AND v.owner_id <> :exclude_owner_id';
@@ -262,20 +296,37 @@ function cc_has_available_vehicle_for_request(
 
     $conflictScope = '';
     if ($requestWindow) {
-        $conflictScope = "
-          AND NOT EXISTS (
-                SELECT 1
-                FROM bookings b
-                WHERE b.vehicle_id = v.id
-                  AND b.booking_type = 'minicab'
-                  AND b.status IN ('pending', 'in_progress')
-                  AND (
-                                            ({$bookingPickupExpr} - INTERVAL '2 hour') < :request_pickup_at::timestamptz
-                      AND
-                                            ({$bookingPickupExpr} + ((GREATEST(1, CEIL((COALESCE(b.distance_km, 0) * 0.621371) / 20.0))::int + 2) * INTERVAL '1 hour')) > :request_pickup_at::timestamptz
-                  )
-            )
-        ";
+        if ($isDailyHireRequest) {
+            $conflictScope = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                      AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (
+                          {$existingWindowStartExpr} < :request_window_end::timestamptz
+                          AND
+                          {$existingWindowEndExpr} > :request_window_start::timestamptz
+                      )
+                )
+            ";
+        } else {
+            $conflictScope = "
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM bookings b
+                    WHERE b.vehicle_id = v.id
+                      AND b.booking_type = 'minicab'
+                      AND b.status IN ('pending', 'in_progress')
+                      AND (
+                          {$existingWindowStartExpr} < :request_pickup_at::timestamptz
+                          AND
+                          {$existingWindowEndExpr} > :request_pickup_at::timestamptz
+                      )
+                )
+            ";
+        }
     }
 
     $sql = "\n        SELECT 1\n        FROM vehicles v\n        WHERE v.status = 'available'\n          AND {$seatCondition}\n          AND {$tierSql}{$ownerScope}{$conflictScope}\n        LIMIT 1\n    ";
@@ -289,7 +340,12 @@ function cc_has_available_vehicle_for_request(
         $params[':exclude_owner_id'] = $excludeOwnerId;
     }
     if ($requestWindow) {
-        $params[':request_pickup_at'] = $requestWindow['pickup_at'];
+        if ($isDailyHireRequest) {
+            $params[':request_window_start'] = $requestWindow['start'];
+            $params[':request_window_end'] = $requestWindow['end'];
+        } else {
+            $params[':request_pickup_at'] = $requestWindow['pickup_at'];
+        }
     }
 
     $stmt->execute($params);
@@ -544,12 +600,16 @@ try {
         $paymentMethod = trim((string)($payload['payment_method'] ?? 'cash'));
         $distanceKm = isset($payload['distance_km']) ? (float)$payload['distance_km'] : null;
 
-        if ($pickupInput === '' || $pickupLocation === '' || $returnLocation === '') {
+        if ($pickupInput === '' || $pickupLocation === '') {
             throw new Exception('Missing required booking fields');
         }
 
-        if (!in_array($serviceType, ['local', 'long-distance', 'airport-transfer', 'hotel-transfer'], true)) {
+        if (!in_array($serviceType, ['local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'], true)) {
             throw new Exception('Invalid service type.');
+        }
+
+        if ($serviceType !== 'daily-hire' && $returnLocation === '') {
+            throw new Exception('Destination is required for selected service type.');
         }
 
         if (!in_array($paymentMethod, ['cash', 'paypal', 'account_balance'], true)) {
@@ -584,6 +644,7 @@ try {
             $pickupInput,
             $pickupTime,
             $distanceKm,
+            $serviceType,
             (string)$selectedCustomerId
         );
         if (!$hasAvailableVehicle) {
@@ -595,18 +656,32 @@ try {
             4 => ['eco' => 2.50, 'standard' => 3.00, 'premium' => 4.00],
             7 => ['eco' => 3.00, 'standard' => 3.50, 'premium' => 5.00],
         ];
+        $dailyHireRates = [
+            4 => ['eco' => 180.00, 'standard' => 220.00, 'premium' => 300.00],
+            7 => ['eco' => 220.00, 'standard' => 270.00, 'premium' => 400.00],
+        ];
         $bookingFee = 2.00;
         $ratePerMile = $tierRates[$seatCapacity][$rideTier] ?? null;
-        if ($ratePerMile === null) {
-            throw new Exception('Unable to calculate fare for selected tier and seat capacity.');
-        }
-        
-        if ($distanceKm !== null && $distanceKm > 0) {
-            // Convert km to miles and calculate with phone booking rates
-            $distanceMiles = $distanceKm * 0.621371;
-            $subtotal = round(($distanceMiles * $ratePerMile) + $bookingFee, 2);
+        $dailyBasePrice = $dailyHireRates[$seatCapacity][$rideTier] ?? null;
+
+        if ($serviceType === 'daily-hire') {
+            if ($dailyBasePrice === null) {
+                throw new Exception('Unable to calculate Daily Hire fare for selected tier and seat capacity.');
+            }
+            $subtotal = round($dailyBasePrice + $bookingFee, 2);
+            $distanceKm = null;
         } else {
-            $subtotal = $bookingFee;
+            if ($ratePerMile === null) {
+                throw new Exception('Unable to calculate fare for selected tier and seat capacity.');
+            }
+
+            if ($distanceKm !== null && $distanceKm > 0) {
+                // Convert km to miles and calculate with phone booking rates
+                $distanceMiles = $distanceKm * 0.621371;
+                $subtotal = round(($distanceMiles * $ratePerMile) + $bookingFee, 2);
+            } else {
+                $subtotal = $bookingFee;
+            }
         }
 
         if ($paymentMethod === 'account_balance') {

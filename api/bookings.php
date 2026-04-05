@@ -163,7 +163,7 @@ if ($action === 'create') {
     $rideTier = strtolower(trim((string)($input['ride_tier'] ?? ''))); // 'eco', 'standard', 'luxury'
     $seatCapacity = (int)($input['seat_capacity'] ?? $input['number_of_passengers'] ?? 4);
     $frontendRideFare = isset($input['ride_fare']) ? floatval($input['ride_fare']) : null;
-    $serviceType = $input['service_type'] ?? 'local'; // 'local', 'long-distance', 'airport-transfer', 'hotel-transfer'
+    $serviceType = strtolower(trim((string)($input['service_type'] ?? 'local'))); // 'local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'
     $rideTiming = strtolower(trim((string)($input['ride_timing'] ?? '')));
     $requestWindow = null;
 
@@ -193,12 +193,16 @@ if ($action === 'create') {
             echo json_encode(['success' => false, 'message' => 'Please select a valid seat capacity (4 or 7 seats).']);
             exit;
         }
-        if (empty($returnLocation)) {
+        if (!in_array($serviceType, ['local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'], true)) {
+            echo json_encode(['success' => false, 'message' => 'Please select a valid service type.']);
+            exit;
+        }
+        if ($serviceType !== 'daily-hire' && empty($returnLocation)) {
             echo json_encode(['success' => false, 'message' => 'Destination location is required for minicab booking.']);
             exit;
         }
 
-        $requestWindow = $bookingRepo->buildMinicabRequestWindow($pickupDate, $pickupTime, $distanceKm);
+        $requestWindow = $bookingRepo->buildMinicabRequestWindow($pickupDate, $pickupTime, $distanceKm, $serviceType);
         if (!$requestWindow) {
             echo json_encode(['success' => false, 'message' => 'Invalid scheduled pickup date/time.']);
             exit;
@@ -230,14 +234,15 @@ if ($action === 'create') {
                 4 => ['eco' => 2.00, 'standard' => 2.50, 'luxury' => 3.50],
                 7 => ['eco' => 3.00, 'standard' => 3.50, 'luxury' => 4.50],
             ];
+            $dailyHireRates = [
+                4 => ['eco' => 180.00, 'standard' => 220.00, 'luxury' => 300.00],
+                7 => ['eco' => 220.00, 'standard' => 270.00, 'luxury' => 400.00],
+            ];
             $ratePerMile = $tierRates[$seatCapacity][$rideTier] ?? 0.0;
-            if ($ratePerMile <= 0) {
-                echo json_encode(['success' => false, 'message' => 'Unable to calculate fare for selected tier and seats.']);
-                exit;
-            }
+            $dailyHirePrice = $dailyHireRates[$seatCapacity][$rideTier] ?? 0.0;
 
             if (!$requestWindow) {
-                $requestWindow = $bookingRepo->buildMinicabRequestWindow($pickupDate, $pickupTime, $distanceKm);
+                $requestWindow = $bookingRepo->buildMinicabRequestWindow($pickupDate, $pickupTime, $distanceKm, $serviceType);
             }
             if (!$requestWindow) {
                 echo json_encode(['success' => false, 'message' => 'Unable to validate booking schedule. Please choose date and time again.']);
@@ -250,7 +255,9 @@ if ($action === 'create') {
                 $renterId,
                 $seatCapacity,
                 $requestWindow['window_start']->format('Y-m-d H:i:sP'),
-                $requestWindow['window_end']->format('Y-m-d H:i:sP')
+                $requestWindow['window_end']->format('Y-m-d H:i:sP'),
+                $requestWindow['pickup_at']->format('Y-m-d H:i:sP'),
+                $serviceType
             );
 
             if (!$vehicle) {
@@ -260,16 +267,32 @@ if ($action === 'create') {
 
             $vehicleId = $vehicle['id'];
 
-            // Calculate fare based on distance × rate per mile (convert km to miles: 1 km = 0.621371 miles)
-            if ($distanceKm !== null && $distanceKm > 0) {
-                $distanceMiles = $distanceKm * 0.621371;
-                $subtotal = round($distanceMiles * $ratePerMile, 2);
-            } elseif ($frontendRideFare !== null && $frontendRideFare > 0) {
-                $subtotal = $frontendRideFare;
+            if ($serviceType === 'daily-hire') {
+                if ($dailyHirePrice <= 0) {
+                    echo json_encode(['success' => false, 'message' => 'Unable to calculate Daily Hire fare for selected tier and seats.']);
+                    exit;
+                }
+
+                $subtotal = (float)$dailyHirePrice;
+                $distanceKm = null;
             } else {
-                echo json_encode(['success' => false, 'message' => 'Unable to calculate fare. Distance information is required.']);
-                exit;
+                if ($ratePerMile <= 0) {
+                    echo json_encode(['success' => false, 'message' => 'Unable to calculate fare for selected tier and seats.']);
+                    exit;
+                }
+
+                // Calculate fare based on distance × rate per mile (convert km to miles: 1 km = 0.621371 miles)
+                if ($distanceKm !== null && $distanceKm > 0) {
+                    $distanceMiles = $distanceKm * 0.621371;
+                    $subtotal = round($distanceMiles * $ratePerMile, 2);
+                } elseif ($frontendRideFare !== null && $frontendRideFare > 0) {
+                    $subtotal = $frontendRideFare;
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Unable to calculate fare. Distance information is required.']);
+                    exit;
+                }
             }
+
             $totalDays = 1; // single trip
             $returnDate = null;
 

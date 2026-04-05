@@ -49,6 +49,10 @@ const MODIFY_MINICAB_RATES_PER_MILE = {
     4: { eco: 2.0, standard: 2.5, luxury: 3.5 },
     7: { eco: 3.0, standard: 3.5, luxury: 4.5 }
 };
+const MODIFY_DAILY_HIRE_RATES = {
+    4: { eco: 180.0, standard: 220.0, luxury: 300.0 },
+    7: { eco: 220.0, standard: 270.0, luxury: 400.0 }
+};
 
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -578,12 +582,52 @@ function getAvailabilityCountFor(tier, seats) {
     return parseInt(modifyAvailabilityMatrix[safeTier][safeSeats] || 0, 10);
 }
 
+function isModifyDailyHireService(serviceType) {
+    return String(serviceType || '').toLowerCase() === 'daily-hire';
+}
+
+function buildModifyAvailabilityPayload() {
+    const payload = { action: 'tier-seat-availability' };
+    const serviceType = String(document.getElementById('modifyServiceType')?.value || (modifyOriginalOrder && modifyOriginalOrder.service_type) || 'local').toLowerCase();
+    const pickupDateTime = String(document.getElementById('modifyPickupDateTime')?.value || '').trim();
+
+    payload.service_type = serviceType;
+    if (pickupDateTime) {
+        payload.pickup_datetime = pickupDateTime;
+    }
+
+    if (!isModifyDailyHireService(serviceType)) {
+        let distanceKm = null;
+        const pickupCoords = modifySelectedAddresses.pickup;
+        const returnCoords = modifySelectedAddresses.return;
+        if (pickupCoords && returnCoords) {
+            distanceKm = haversineDistanceKm(
+                Number(pickupCoords.lat),
+                Number(pickupCoords.lon),
+                Number(returnCoords.lat),
+                Number(returnCoords.lon)
+            );
+        } else if (modifyOriginalOrder) {
+            const existingDistance = Number(modifyOriginalOrder.distance_km || 0);
+            if (Number.isFinite(existingDistance) && existingDistance > 0) {
+                distanceKm = existingDistance;
+            }
+        }
+
+        if (Number.isFinite(distanceKm) && distanceKm > 0) {
+            payload.distance_km = Number(distanceKm.toFixed(2));
+        }
+    }
+
+    return payload;
+}
+
 async function loadModifyAvailabilityMatrix() {
     try {
         const res = await fetch(VEHICLES_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'tier-seat-availability' })
+            body: JSON.stringify(buildModifyAvailabilityPayload())
         });
         const data = await res.json();
         if (data && data.success && data.availability) {
@@ -622,6 +666,14 @@ function initModifyAvailabilityHandlers() {
             syncModifyServiceTypeUI(serviceSelect.value);
             updateModifyDestinationMode(serviceSelect.value);
             refreshModifyPreview();
+            loadModifyAvailabilityMatrix();
+        });
+    }
+
+    const pickupDateTimeInput = document.getElementById('modifyPickupDateTime');
+    if (pickupDateTimeInput) {
+        pickupDateTimeInput.addEventListener('change', () => {
+            loadModifyAvailabilityMatrix();
         });
     }
 
@@ -645,9 +697,17 @@ function formatMoneyPounds(value) {
     return '£' + Number(value || 0).toFixed(2);
 }
 
-function computeModifySubtotal(rideTier, seats, distanceKm) {
+function computeModifySubtotal(serviceType, rideTier, seats, distanceKm) {
     const tier = String(rideTier || '').toLowerCase();
     const seatCount = parseInt(seats, 10);
+
+    if (isModifyDailyHireService(serviceType)) {
+        if (!MODIFY_DAILY_HIRE_RATES[seatCount] || !MODIFY_DAILY_HIRE_RATES[seatCount][tier]) {
+            return null;
+        }
+        return Number(MODIFY_DAILY_HIRE_RATES[seatCount][tier].toFixed(2));
+    }
+
     const distance = Number(distanceKm);
     if (!MODIFY_MINICAB_RATES_PER_MILE[seatCount] || !MODIFY_MINICAB_RATES_PER_MILE[seatCount][tier]) {
         return null;
@@ -677,6 +737,8 @@ function refreshModifyPreview() {
 
     const pickupLocation = String(document.getElementById('modifyPickupLocation')?.value || '').trim();
     const destination = String(document.getElementById('modifyDestination')?.value || '').trim();
+    const serviceType = String(document.getElementById('modifyServiceType')?.value || modifyOriginalOrder.service_type || 'local').toLowerCase();
+    const isDailyHire = isModifyDailyHireService(serviceType);
     const rideTier = String(document.getElementById('modifyRideTier')?.value || normalizeRideTierValue(modifyOriginalOrder.ride_tier));
     const seats = parseInt(String(document.getElementById('modifySeats')?.value || normalizeModifySeatsValue(modifyOriginalOrder.number_of_passengers)), 10);
 
@@ -703,8 +765,13 @@ function refreshModifyPreview() {
         }
     }
 
-    const subtotal = computeModifySubtotal(rideTier, seats, effectiveDistance);
-    if (!Number.isFinite(effectiveDistance) || effectiveDistance <= 0 || subtotal === null) {
+    const subtotal = computeModifySubtotal(serviceType, rideTier, seats, effectiveDistance);
+    if (subtotal === null) {
+        setModifyPreview('-', '-', '-');
+        return;
+    }
+
+    if (!isDailyHire && (!Number.isFinite(effectiveDistance) || effectiveDistance <= 0)) {
         const distanceText = locationChanged
             ? 'Select map/dropdown'
             : ((Number(modifyOriginalOrder.distance_km || 0) > 0) ? Number(modifyOriginalOrder.distance_km).toFixed(1) + ' km' : '-');
@@ -718,7 +785,7 @@ function refreshModifyPreview() {
     const newTotal = Math.max(0, subtotal - fixedDiscount);
 
     setModifyPreview(
-        Number(effectiveDistance).toFixed(1) + ' km',
+        isDailyHire ? 'Not required' : (Number(effectiveDistance).toFixed(1) + ' km'),
         formatMoneyPounds(subtotal),
         formatMoneyPounds(newTotal)
     );
@@ -782,6 +849,7 @@ function updateModifyDestinationMode(serviceType) {
     const service = String(serviceType || '').toLowerCase();
     const destinationInputWrapper = document.getElementById('modifyDestinationInputWrapper');
     const destinationInput = document.getElementById('modifyDestination');
+    const destinationLabel = document.getElementById('modifyDestinationLabel');
     const returnMapContainer = document.getElementById('modifyReturnMapContainer');
     const airportWrapper = document.getElementById('modifyAirportSelectWrapper');
     const hotelWrapper = document.getElementById('modifyHotelSelectWrapper');
@@ -789,6 +857,7 @@ function updateModifyDestinationMode(serviceType) {
 
     const isAirport = service === 'airport-transfer';
     const isHotel = service === 'hotel-transfer';
+    const isDailyHire = service === 'daily-hire';
     const isPreset = isAirport || isHotel;
 
     if (destinationInputWrapper) {
@@ -809,6 +878,12 @@ function updateModifyDestinationMode(serviceType) {
     }
 
     if (!destinationInput) return;
+
+    destinationInput.required = !isDailyHire;
+    destinationInput.placeholder = isDailyHire ? 'Optional destination for Daily Hire' : 'Enter destination';
+    if (destinationLabel) {
+        destinationLabel.textContent = isDailyHire ? 'Destination (Optional)' : 'Destination';
+    }
 
     if (isAirport) {
         setModifyPresetSelectByDestination(service, destinationInput.value);
@@ -1327,19 +1402,20 @@ async function submitModifyBooking() {
     const pickupLocation = document.getElementById('modifyPickupLocation').value.trim();
     const destination = document.getElementById('modifyDestination').value.trim();
     const serviceType = document.getElementById('modifyServiceType').value;
+    const isDailyHire = isModifyDailyHireService(serviceType);
     const pickupDateTime = document.getElementById('modifyPickupDateTime').value;
     const rideTier = document.getElementById('modifyRideTier').value;
     const seats = parseInt(document.getElementById('modifySeats').value, 10);
 
-    if (!pickupLocation || !destination) {
-        showToast('Pickup location and destination are required.', 'warning');
+    if (!pickupLocation || (!isDailyHire && !destination)) {
+        showToast('Pickup location is required and destination is required for this service type.', 'warning');
         return;
     }
     if (!['eco', 'standard', 'luxury'].includes(rideTier)) {
         showToast('Please choose a valid service tier.', 'warning');
         return;
     }
-    if (!['local', 'long-distance', 'airport-transfer', 'hotel-transfer'].includes(serviceType)) {
+    if (!['local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'].includes(serviceType)) {
         showToast('Please choose a valid service type.', 'warning');
         return;
     }
@@ -1361,19 +1437,21 @@ async function submitModifyBooking() {
     const pickupTime = pickupDateTime.substring(11, 16);
 
     let distanceKm = null;
-    const pickupCoords = modifySelectedAddresses.pickup;
-    const returnCoords = modifySelectedAddresses.return;
-    if (pickupCoords && returnCoords) {
-        distanceKm = haversineDistanceKm(
-            Number(pickupCoords.lat),
-            Number(pickupCoords.lon),
-            Number(returnCoords.lat),
-            Number(returnCoords.lon)
-        );
-        distanceKm = Number.isFinite(distanceKm) ? Number(distanceKm.toFixed(2)) : null;
-    } else if (modifyOriginalOrder && (pickupLocation !== (modifyOriginalOrder.pickup_location || '') || destination !== (modifyOriginalOrder.return_location || ''))) {
-        showToast('Please confirm locations on map to recalculate distance and fare.', 'warning');
-        return;
+    if (!isDailyHire) {
+        const pickupCoords = modifySelectedAddresses.pickup;
+        const returnCoords = modifySelectedAddresses.return;
+        if (pickupCoords && returnCoords) {
+            distanceKm = haversineDistanceKm(
+                Number(pickupCoords.lat),
+                Number(pickupCoords.lon),
+                Number(returnCoords.lat),
+                Number(returnCoords.lon)
+            );
+            distanceKm = Number.isFinite(distanceKm) ? Number(distanceKm.toFixed(2)) : null;
+        } else if (modifyOriginalOrder && (pickupLocation !== (modifyOriginalOrder.pickup_location || '') || destination !== (modifyOriginalOrder.return_location || ''))) {
+            showToast('Please confirm locations on map to recalculate distance and fare.', 'warning');
+            return;
+        }
     }
 
     const btn = document.getElementById('modifyBookingSaveBtn');

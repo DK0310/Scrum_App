@@ -207,6 +207,12 @@
         .service-purpose-card[data-service="hotel-transfer"] {
             background-image: linear-gradient(145deg, rgba(17,94,89,0.25), rgba(15,118,110,0.75)), url('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=900&q=80');
         }
+        .service-purpose-card[data-service="daily-hire"] {
+            background-image: linear-gradient(145deg, rgba(15,118,110,0.25), rgba(13,148,136,0.75)), url('https://images.unsplash.com/photo-1485291571150-772bcfc10da5?auto=format&fit=crop&w=900&q=80');
+            grid-column: 1 / -1;
+            justify-self: center;
+            width: calc(50% - 5px);
+        }
         .service-purpose-overlay {
             position: absolute;
             inset: 0;
@@ -251,6 +257,11 @@
         }
         @media (max-width: 560px) {
             .service-purpose-grid { grid-template-columns: 1fr; }
+            .service-purpose-card[data-service="daily-hire"] {
+                grid-column: auto;
+                justify-self: stretch;
+                width: 100%;
+            }
         }
 
         .booking-steps {

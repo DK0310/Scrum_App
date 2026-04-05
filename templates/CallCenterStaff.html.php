@@ -498,6 +498,7 @@
                                 <option value="long-distance">Long Distance Journey</option>
                                 <option value="airport-transfer">Airport Transfer</option>
                                 <option value="hotel-transfer">Hotel Transfer</option>
+                                <option value="daily-hire">Daily Hire (24 hours)</option>
                             </select>
                         </div>
                         <div class="cc-form-field">
@@ -530,9 +531,9 @@
                             </div>
                         </div>
                         <div class="cc-form-field">
-                            <label>Destination *</label>
+                            <label id="ccReturnLocationLabel">Destination *</label>
                             <div class="location-input-wrapper" id="ccReturnInputWrapper">
-                                <input class="cc-input" id="ccReturnLocation" placeholder="Search destination" autocomplete="off" required>
+                                <input class="cc-input" id="ccReturnLocation" placeholder="Search destination" autocomplete="off">
                                 <button type="button" class="location-map-btn" id="ccReturnMapBtn" onclick="openMapPicker('return')" title="Choose on map">📍</button>
                             </div>
                             <div id="ccAirportSelectWrapper" style="display:none;">
