@@ -45,6 +45,7 @@ let modifyPickupMarker = null;
 let modifyReturnMarker = null;
 let modifyAutocompleteTimers = {};
 let modifySelectedAddresses = { pickup: null, return: null };
+const ORDERS_MODAL_STACK = ['tripDetailModalOverlay', 'modifyBookingModalOverlay', 'reviewModalOverlay'];
 const MODIFY_MINICAB_RATES_PER_MILE = {
     4: { eco: 2.0, standard: 2.5, luxury: 3.5 },
     7: { eco: 3.0, standard: 3.5, luxury: 4.5 }
@@ -62,6 +63,45 @@ document.addEventListener('DOMContentLoaded', () => {
     loadLoyaltyPoints();
     loadOrders();
 });
+
+function getOrdersModalOverlay(id) {
+    return document.getElementById(id);
+}
+
+function isOrdersModalOpen(id) {
+    const overlay = getOrdersModalOverlay(id);
+    return !!(overlay && overlay.style.display === 'flex');
+}
+
+function updateOrdersModalBodyLock() {
+    const hasOpenOverlay = ORDERS_MODAL_STACK.some(id => isOrdersModalOpen(id));
+    document.body.classList.toggle('orders-modal-open', hasOpenOverlay);
+}
+
+function openOrdersModal(id) {
+    const overlay = getOrdersModalOverlay(id);
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    updateOrdersModalBodyLock();
+}
+
+function closeOrdersModal(id) {
+    const overlay = getOrdersModalOverlay(id);
+    if (!overlay) return;
+    overlay.style.display = 'none';
+    updateOrdersModalBodyLock();
+}
+
+function closeTopOrdersModal() {
+    for (let i = ORDERS_MODAL_STACK.length - 1; i >= 0; i -= 1) {
+        const modalId = ORDERS_MODAL_STACK[i];
+        if (isOrdersModalOpen(modalId)) {
+            closeOrdersModal(modalId);
+            return true;
+        }
+    }
+    return false;
+}
 
 function setOrdersLoyaltyPoints(points) {
     const el = document.getElementById('ordersLoyaltyPoints');
@@ -294,8 +334,7 @@ function initTripDetailModalEvents() {
 
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') {
-            closeTripDetailModal();
-            closeModifyBookingModal();
+            closeTopOrdersModal();
         }
     });
 
@@ -304,6 +343,15 @@ function initTripDetailModalEvents() {
         modifyOverlay.addEventListener('click', event => {
             if (event.target === modifyOverlay) {
                 closeModifyBookingModal();
+            }
+        });
+    }
+
+    const reviewOverlay = document.getElementById('reviewModalOverlay');
+    if (reviewOverlay) {
+        reviewOverlay.addEventListener('click', event => {
+            if (event.target === reviewOverlay) {
+                closeReviewModal();
             }
         });
     }
@@ -333,14 +381,11 @@ function openTripDetailModal(bookingId) {
 
     updateTripVehicleSpotlight(order);
 
-    overlay.style.display = 'flex';
+    openOrdersModal('tripDetailModalOverlay');
 }
 
 function closeTripDetailModal() {
-    const overlay = document.getElementById('tripDetailModalOverlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
+    closeOrdersModal('tripDetailModalOverlay');
 }
 
 function setDetailField(id, value) {
@@ -879,10 +924,10 @@ function updateModifyDestinationMode(serviceType) {
 
     if (!destinationInput) return;
 
-    destinationInput.required = !isDailyHire;
-    destinationInput.placeholder = isDailyHire ? 'Optional destination for Daily Hire' : 'Enter destination';
+    destinationInput.required = true;
+    destinationInput.placeholder = isDailyHire ? 'Enter drop off location' : 'Enter destination';
     if (destinationLabel) {
-        destinationLabel.textContent = isDailyHire ? 'Destination (Optional)' : 'Destination';
+        destinationLabel.textContent = isDailyHire ? 'Drop Off *' : 'Destination *';
     }
 
     if (isAirport) {
@@ -1044,8 +1089,7 @@ function initModifyLocationAutocomplete() {
 
                     dropdown.style.display = 'block';
                     dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
-                        item.addEventListener('mousedown', event => {
-                            event.preventDefault();
+                        const commitSelection = () => {
                             const lat = parseFloat(item.getAttribute('data-lat') || '0');
                             const lon = parseFloat(item.getAttribute('data-lon') || '0');
                             const name = item.getAttribute('data-name') || '';
@@ -1055,7 +1099,23 @@ function initModifyLocationAutocomplete() {
                             moveModifyMapToLocation(type, lat, lon);
                             updateModifyMapCoords(type, lat, lon, name);
                             refreshModifyPreview();
-                        });
+                        };
+
+                        if (window.PointerEvent) {
+                            item.addEventListener('pointerdown', event => {
+                                event.preventDefault();
+                                commitSelection();
+                            }, { passive: false });
+                        } else {
+                            item.addEventListener('mousedown', event => {
+                                event.preventDefault();
+                                commitSelection();
+                            });
+                            item.addEventListener('touchend', event => {
+                                event.preventDefault();
+                                commitSelection();
+                            }, { passive: false });
+                        }
                     });
                 } catch (err) {
                     console.error('Modify address search error:', err);
@@ -1286,7 +1346,7 @@ function openModifyBookingModal(bookingId) {
 
     loadModifyAvailabilityMatrix();
     refreshModifyPreview();
-    document.getElementById('modifyBookingModalOverlay').style.display = 'flex';
+    openOrdersModal('modifyBookingModalOverlay');
 }
 
 function normalizeRideTierValue(rideTier) {
@@ -1377,8 +1437,7 @@ function closeModifyBookingModal() {
     modifyOriginalOrder = null;
     closeModifyMapPicker('pickup');
     closeModifyMapPicker('return');
-    const overlay = document.getElementById('modifyBookingModalOverlay');
-    if (overlay) overlay.style.display = 'none';
+    closeOrdersModal('modifyBookingModalOverlay');
 }
 
 function toRad(value) {
@@ -1407,8 +1466,8 @@ async function submitModifyBooking() {
     const rideTier = document.getElementById('modifyRideTier').value;
     const seats = parseInt(document.getElementById('modifySeats').value, 10);
 
-    if (!pickupLocation || (!isDailyHire && !destination)) {
-        showToast('Pickup location is required and destination is required for this service type.', 'warning');
+    if (!pickupLocation || !destination) {
+        showToast('Pickup and drop off destinations are required.', 'warning');
         return;
     }
     if (!['eco', 'standard', 'luxury'].includes(rideTier)) {
@@ -1520,14 +1579,11 @@ function openReviewModal(bookingId, carName) {
     carNameEl.textContent = carName;
     contentEl.value = '';
     renderStars(0);
-    modal.style.display = 'flex';
+    openOrdersModal('reviewModalOverlay');
 }
 
 function closeReviewModal() {
-    const modal = document.getElementById('reviewModalOverlay');
-    if (modal) {
-        modal.style.display = 'none';
-    }
+    closeOrdersModal('reviewModalOverlay');
     reviewBookingId = null;
     reviewRating = 0;
 }

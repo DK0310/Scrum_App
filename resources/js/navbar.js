@@ -147,3 +147,102 @@ document.querySelectorAll('.side-menu-item').forEach(link => {
         }
     });
 });
+
+// ===== RUNTIME OVERFLOW GUARD (US-32) =====
+(function initHorizontalOverflowGuard() {
+    const WATCH_SELECTORS = [
+        '.section-container',
+        '.container',
+        '.navbar-inner',
+        '.booking-grid',
+        '.booking-form-card',
+        '.order-tabs',
+        '.car-grid',
+        '.ctrl-wrap',
+        '.cc-wrap',
+        '.ctrl-table-wrap'
+    ];
+
+    let guardTimer = null;
+    let lastFingerprint = '';
+
+    function isVisibleElement(el) {
+        if (!el || !(el instanceof HTMLElement)) return false;
+        if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return false;
+        return true;
+    }
+
+    function collectOverflowNodes() {
+        const offenders = [];
+        const checked = new Set();
+
+        WATCH_SELECTORS.forEach(function(selector) {
+            document.querySelectorAll(selector).forEach(function(node) {
+                if (!(node instanceof HTMLElement) || checked.has(node) || !isVisibleElement(node)) {
+                    return;
+                }
+                checked.add(node);
+
+                const scrollDelta = node.scrollWidth - node.clientWidth;
+                if (scrollDelta > 2) {
+                    const classHint = node.className ? String(node.className).trim().split(/\s+/).slice(0, 2).join('.') : '';
+                    offenders.push((node.tagName.toLowerCase() + (classHint ? ('.' + classHint) : '')));
+                }
+            });
+        });
+
+        return offenders;
+    }
+
+    function detectHorizontalOverflow() {
+        const root = document.documentElement;
+        if (!root) return;
+
+        const pageOverflow = (root.scrollWidth - root.clientWidth) > 2;
+        const offenders = collectOverflowNodes();
+        const hasOverflow = pageOverflow || offenders.length > 0;
+        document.body.classList.toggle('has-horizontal-overflow', hasOverflow);
+
+        const fingerprint = String(hasOverflow) + '|' + offenders.slice(0, 6).join(',');
+        if (fingerprint !== lastFingerprint) {
+            lastFingerprint = fingerprint;
+            if (hasOverflow) {
+                console.warn('[US-32] Horizontal overflow detected:', {
+                    pageDelta: root.scrollWidth - root.clientWidth,
+                    nodes: offenders.slice(0, 6)
+                });
+            }
+        }
+    }
+
+    function scheduleOverflowCheck(delayMs) {
+        if (guardTimer) {
+            clearTimeout(guardTimer);
+        }
+        guardTimer = setTimeout(detectHorizontalOverflow, delayMs || 120);
+    }
+
+    window.addEventListener('resize', function() {
+        scheduleOverflowCheck(140);
+    });
+    window.addEventListener('orientationchange', function() {
+        scheduleOverflowCheck(80);
+        setTimeout(function() {
+            scheduleOverflowCheck(220);
+        }, 260);
+    });
+
+    if ('MutationObserver' in window) {
+        const observer = new MutationObserver(function() {
+            scheduleOverflowCheck(150);
+        });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class', 'style']
+        });
+    }
+
+    scheduleOverflowCheck(80);
+})();

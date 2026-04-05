@@ -7,6 +7,7 @@
   const isLoggedIn = window.isLoggedIn || false;
   const VEHICLES_API = '/api/vehicles.php';
   let allLoadedCars = [];
+  let carImageObserver = null;
 
   const USER_ROLE = window.USER_ROLE || 'user';
   const NORMALIZED_USER_ROLE = String(USER_ROLE || 'user').toLowerCase().replace(/[-_\s]/g, '');
@@ -336,6 +337,50 @@
     }
   }
 
+  function disposeCarImageObserver() {
+    if (carImageObserver) {
+      carImageObserver.disconnect();
+      carImageObserver = null;
+    }
+  }
+
+  function revealLazyCarImage(img) {
+    if (!img) return;
+    const nextSrc = img.getAttribute('data-src');
+    if (!nextSrc) return;
+    img.src = nextSrc;
+    img.removeAttribute('data-src');
+    img.classList.remove('is-lazy');
+  }
+
+  function initLazyCarImages() {
+    const lazyImages = document.querySelectorAll('#carGrid img.is-lazy[data-src]');
+    if (!lazyImages || lazyImages.length === 0) return;
+
+    disposeCarImageObserver();
+
+    if (!('IntersectionObserver' in window)) {
+      lazyImages.forEach(revealLazyCarImage);
+      return;
+    }
+
+    carImageObserver = new IntersectionObserver(function(entries, observer) {
+      entries.forEach(function(entry) {
+        if (!entry.isIntersecting) return;
+        revealLazyCarImage(entry.target);
+        observer.unobserve(entry.target);
+      });
+    }, {
+      root: null,
+      rootMargin: '320px 0px',
+      threshold: 0.01
+    });
+
+    lazyImages.forEach(function(img) {
+      carImageObserver.observe(img);
+    });
+  }
+
   function renderCarGrid(cars) {
     allLoadedCars = cars;
     const grid = document.getElementById('carGrid');
@@ -344,6 +389,7 @@
     if (!grid) return;
 
     if (cars.length === 0) {
+      disposeCarImageObserver();
       if (countText) countText.textContent = 'No cars available yet';
       grid.innerHTML =
         '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;">' +
@@ -373,8 +419,8 @@
       const displaySeats = normalizeSeatTier(car.seats);
       const plate = (car.license_plate || '').trim() || 'No plate';
       const imageHTML = hasValidImage
-        ? '<img src="' + images[0] + '" alt="' + escapeHtml(car.brand + ' ' + car.model) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.onerror=null;this.src=\'/resources/images/logo/logo.png\';"><div class="no-image-placeholder" style="display:none;">No Photo</div>'
-        : '<img src="/resources/images/logo/logo.png" alt="Vehicle" style="width:100%;height:100%;object-fit:cover;">';
+        ? '<img class="is-lazy" src="/resources/images/logo/logo.png" data-src="' + images[0] + '" alt="' + escapeHtml(car.brand + ' ' + car.model) + '" loading="lazy" decoding="async" fetchpriority="low" style="width:100%;height:100%;object-fit:cover;" onerror="this.onerror=null;this.src=\'/resources/images/logo/logo.png\';this.classList.remove(\'is-lazy\');"><div class="no-image-placeholder" style="display:none;">No Photo</div>'
+        : '<img src="/resources/images/logo/logo.png" alt="Vehicle" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">';
 
       const rating = parseFloat(car.avg_rating) || 0;
 
@@ -408,6 +454,8 @@
         '</div>' +
       '</div>';
     }).join('');
+
+    initLazyCarImages();
   }
 
   function normalizeSeatTier(seats) {
@@ -874,6 +922,8 @@
       }
     });
   });
+
+  window.addEventListener('beforeunload', disposeCarImageObserver);
 
   // Export public functions to global scope
   window.setActiveChip = setActiveChip;

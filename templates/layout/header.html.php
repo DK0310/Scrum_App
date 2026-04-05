@@ -24,7 +24,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?= $title ?? 'PrivateHire - Premium Car Rental Platform' ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -128,7 +128,7 @@ $currentUser = $currentUser ?? ($sessionData['full_name'] ?? $sessionData['usern
             </a>
             <?php if ($showMyOrders): ?>
             <a href="/orders.php" class="side-menu-item side-menu-mobile-only <?= ($currentPage ?? '') === 'orders' ? 'active' : '' ?>">
-                <span class="side-menu-icon">�</span> My Orders
+                <span class="side-menu-icon">📋</span> My Orders
             </a>
             <?php endif; ?>
             <?php endif; ?>

@@ -401,6 +401,116 @@
         .ctrl-grid {
             grid-template-columns: 1fr 1fr;
         }
+
+        .ctrl-table-wrap.ctrl-responsive-table {
+            border: none;
+            box-shadow: none;
+            overflow: visible;
+            padding: 0;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table table,
+        .ctrl-table-wrap.ctrl-responsive-table thead,
+        .ctrl-table-wrap.ctrl-responsive-table tbody,
+        .ctrl-table-wrap.ctrl-responsive-table th,
+        .ctrl-table-wrap.ctrl-responsive-table td,
+        .ctrl-table-wrap.ctrl-responsive-table tr {
+            display: block;
+            width: 100%;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table thead {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            border: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody tr {
+            background: #fff;
+            border: 1px solid var(--ctrl-line);
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 8px 18px rgba(0, 79, 69, 0.05);
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td {
+            border: none;
+            border-bottom: 1px dashed #e2e8f0;
+            padding: 8px 4px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.86rem;
+            text-align: right;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td:last-child {
+            border-bottom: none;
+            padding-bottom: 2px;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td::before {
+            content: attr(data-label);
+            color: #64748b;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-align: left;
+            flex: 0 0 auto;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[colspan] {
+            text-align: left;
+            justify-content: flex-start;
+            border-bottom: none;
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[colspan]::before {
+            content: '';
+            display: none;
+        }
+
+        .ctrl-order-actions,
+        .ctrl-order-status-wrap {
+            justify-content: flex-end;
+        }
+
+        .ctrl-order-actions-cell,
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Action"],
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Actions"] {
+            display: block;
+            text-align: left;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Action"]::before,
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Actions"]::before {
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Action"] .ctrl-order-actions,
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Actions"] .ctrl-order-actions {
+            justify-content: flex-start;
+        }
+
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Action"] button,
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Actions"] button,
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Action"] select,
+        .ctrl-table-wrap.ctrl-responsive-table tbody td[data-label="Actions"] select {
+            width: 100%;
+            max-width: none;
+        }
     }
 
     @media (max-width: 600px) {
@@ -473,7 +583,7 @@
             <div class="ctrl-status" id="ctrlOrderStatusMsg"></div>
         </div>
 
-        <div class="ctrl-card ctrl-table-wrap">
+        <div class="ctrl-card ctrl-table-wrap ctrl-responsive-table">
             <div class="ctrl-toolbar" style="padding:12px 12px 0;">
                 <div class="ctrl-search-wrap">
                     <span class="ctrl-search-icon">&#128269;</span>
@@ -514,7 +624,7 @@
             <div class="ctrl-status" id="ctrlDriverStatusMsg"></div>
         </div>
 
-        <div class="ctrl-card ctrl-table-wrap">
+        <div class="ctrl-card ctrl-table-wrap ctrl-responsive-table">
             <div class="ctrl-toolbar" style="padding:12px 12px 0;">
                 <div class="ctrl-search-wrap">
                     <span class="ctrl-search-icon">&#128269;</span>
@@ -578,7 +688,7 @@
             <div class="ctrl-status" id="ctrlVehicleStatusMsg"></div>
         </div>
 
-        <div class="ctrl-card ctrl-table-wrap">
+        <div class="ctrl-card ctrl-table-wrap ctrl-responsive-table">
             <div class="ctrl-toolbar" style="padding:12px 12px 0;">
                 <div class="ctrl-search-wrap">
                     <span class="ctrl-search-icon">&#128269;</span>

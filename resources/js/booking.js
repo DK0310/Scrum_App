@@ -81,6 +81,316 @@
   let scheduledAvailabilityTimer = null;
   let scheduledSlotRequestSeq = 0;
   const SLOT_INTERVAL_MINUTES = 30;
+  const BOOKING_DRAFT_STORAGE_PREFIX = 'drivenow_booking_draft_v2';
+  const BOOKING_DRAFT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+  let bookingDraftSaveTimer = null;
+  let bookingDraftPersistenceBound = false;
+  let isRestoringBookingDraft = false;
+
+  function getBookingDraftStorageKey() {
+    const modePart = BOOKING_MODE || 'default';
+    const carPart = CAR_ID || 'minicab';
+    return BOOKING_DRAFT_STORAGE_PREFIX + ':' + modePart + ':' + carPart;
+  }
+
+  function getCurrentBookingStep() {
+    const step2Content = document.getElementById('step2Content');
+    if (step2Content && step2Content.style.display !== 'none') {
+      return 2;
+    }
+    return 1;
+  }
+
+  function sanitizeAddressForDraft(address) {
+    if (!address || typeof address !== 'object') {
+      return null;
+    }
+
+    const lat = Number(address.lat);
+    const lon = Number(address.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return null;
+    }
+
+    return {
+      lat: lat,
+      lon: lon,
+      name: address.name ? String(address.name) : ''
+    };
+  }
+
+  function readElementValue(id) {
+    const el = document.getElementById(id);
+    return el ? String(el.value || '') : '';
+  }
+
+  function collectBookingDraftState() {
+    return {
+      version: 2,
+      savedAt: Date.now(),
+      step: getCurrentBookingStep(),
+      selectedBookingType: selectedBookingType,
+      selectedSeatCapacity: selectedSeatCapacity,
+      selectedRideTier: selectedRideTier || '',
+      selectedPaymentMethod: selectedPaymentMethod || 'cash',
+      serviceType: readElementValue('serviceType') || 'local',
+      pickupDate: readElementValue('pickupDate'),
+      returnDate: readElementValue('returnDate'),
+      scheduledDateOnly: readElementValue('scheduledDateOnly'),
+      scheduledTimeSlot: readElementValue('scheduledTimeSlot'),
+      scheduledDateTime: readElementValue('scheduledDateTime'),
+      pickupLocation: readElementValue('pickupLocation'),
+      returnLocation: readElementValue('returnLocation'),
+      specialRequests: readElementValue('specialRequests'),
+      airportSelect: readElementValue('airportSelect'),
+      hotelSelect: readElementValue('hotelSelect'),
+      promoCodeInput: readElementValue('promoCodeInput'),
+      appliedPromoCode: appliedPromo ? String(appliedPromo.code || '') : '',
+      selectedAddresses: {
+        pickup: sanitizeAddressForDraft(selectedAddresses.pickup),
+        return: sanitizeAddressForDraft(selectedAddresses['return'])
+      },
+      calculatedDistance: Number.isFinite(calculatedDistance) ? calculatedDistance : null,
+      rideFare: Number.isFinite(rideFare) ? rideFare : null
+    };
+  }
+
+  function saveBookingDraftState() {
+    if (isRestoringBookingDraft) {
+      return;
+    }
+
+    try {
+      const state = collectBookingDraftState();
+      sessionStorage.setItem(getBookingDraftStorageKey(), JSON.stringify(state));
+    } catch (err) {
+      console.warn('Unable to save booking draft state:', err);
+    }
+  }
+
+  function scheduleBookingDraftSave(delayMs) {
+    if (isRestoringBookingDraft) {
+      return;
+    }
+
+    if (bookingDraftSaveTimer) {
+      clearTimeout(bookingDraftSaveTimer);
+    }
+    bookingDraftSaveTimer = setTimeout(saveBookingDraftState, delayMs || 120);
+  }
+
+  function clearBookingDraftState() {
+    if (bookingDraftSaveTimer) {
+      clearTimeout(bookingDraftSaveTimer);
+      bookingDraftSaveTimer = null;
+    }
+
+    try {
+      sessionStorage.removeItem(getBookingDraftStorageKey());
+    } catch (err) {
+      console.warn('Unable to clear booking draft state:', err);
+    }
+  }
+
+  function bindBookingDraftPersistence() {
+    if (bookingDraftPersistenceBound) {
+      return;
+    }
+    bookingDraftPersistenceBound = true;
+
+    const trackIds = [
+      'pickupDate',
+      'returnDate',
+      'scheduledDateOnly',
+      'scheduledTimeSlot',
+      'pickupLocation',
+      'returnLocation',
+      'specialRequests',
+      'serviceType',
+      'airportSelect',
+      'hotelSelect',
+      'promoCodeInput'
+    ];
+
+    trackIds.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (!el) {
+        return;
+      }
+      el.addEventListener('input', function() {
+        scheduleBookingDraftSave(140);
+      });
+      el.addEventListener('change', function() {
+        scheduleBookingDraftSave(80);
+      });
+    });
+
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'hidden') {
+        saveBookingDraftState();
+      }
+    });
+    window.addEventListener('beforeunload', saveBookingDraftState);
+    window.addEventListener('pagehide', saveBookingDraftState);
+  }
+
+  function parseLocalDateTimeParts(datetimeLocal) {
+    const value = String(datetimeLocal || '');
+    if (!value || !value.includes('T')) {
+      return null;
+    }
+
+    const parts = value.split('T');
+    if (parts.length !== 2) {
+      return null;
+    }
+
+    const datePart = parts[0];
+    const timePart = parts[1].slice(0, 5);
+    if (!datePart || !timePart || !timePart.includes(':')) {
+      return null;
+    }
+
+    return { date: datePart, time: timePart };
+  }
+
+  function setElementValueIfPresent(id, value) {
+    const el = document.getElementById(id);
+    if (!el || value === undefined || value === null) {
+      return;
+    }
+    el.value = String(value);
+  }
+
+  function canRestoreStep2FromCurrentState() {
+    if (!isLoggedIn || selectedBookingType !== 'minicab') {
+      return false;
+    }
+
+    const pickupLoc = readElementValue('pickupLocation').trim();
+    const scheduledVal = readElementValue('scheduledDateTime').trim();
+    const returnLoc = readElementValue('returnLocation').trim();
+
+    return !!pickupLoc && !!scheduledVal && !!returnLoc && !!selectedRideTier && Number(rideFare) > 0;
+  }
+
+  function restoreBookingDraftState() {
+    const key = getBookingDraftStorageKey();
+    let draft = null;
+
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) {
+        return;
+      }
+      draft = JSON.parse(raw);
+    } catch (err) {
+      sessionStorage.removeItem(key);
+      return;
+    }
+
+    if (!draft || typeof draft !== 'object') {
+      sessionStorage.removeItem(key);
+      return;
+    }
+
+    const savedAt = Number(draft.savedAt || 0);
+    if (!savedAt || (Date.now() - savedAt) > BOOKING_DRAFT_MAX_AGE_MS) {
+      sessionStorage.removeItem(key);
+      return;
+    }
+
+    isRestoringBookingDraft = true;
+    try {
+      if (draft.selectedBookingType === 'minicab' || draft.selectedBookingType === 'with-driver') {
+        selectBookingType(draft.selectedBookingType);
+      }
+
+      if (draft.serviceType) {
+        const serviceTypeEl = document.getElementById('serviceType');
+        if (serviceTypeEl && serviceTypeEl.querySelector('option[value="' + String(draft.serviceType).replace(/"/g, '\\"') + '"]')) {
+          serviceTypeEl.value = String(draft.serviceType);
+        }
+        onServiceTypeChange();
+      }
+
+      const seatCapacityValue = Number(draft.selectedSeatCapacity);
+      if (seatCapacityValue === 4 || seatCapacityValue === 7) {
+        selectSeatCapacity(seatCapacityValue);
+      }
+
+      setElementValueIfPresent('pickupDate', draft.pickupDate || '');
+      setElementValueIfPresent('returnDate', draft.returnDate || '');
+      setElementValueIfPresent('scheduledDateOnly', draft.scheduledDateOnly || '');
+      setElementValueIfPresent('scheduledTimeSlot', draft.scheduledTimeSlot || '');
+
+      if ((!draft.scheduledDateOnly || !draft.scheduledTimeSlot) && draft.scheduledDateTime) {
+        const dtParts = parseLocalDateTimeParts(draft.scheduledDateTime);
+        if (dtParts) {
+          setElementValueIfPresent('scheduledDateOnly', dtParts.date);
+          setElementValueIfPresent('scheduledTimeSlot', dtParts.time);
+        }
+      }
+
+      syncScheduledDateTimeFromParts();
+
+      setElementValueIfPresent('pickupLocation', draft.pickupLocation || '');
+      setElementValueIfPresent('returnLocation', draft.returnLocation || '');
+      setElementValueIfPresent('specialRequests', draft.specialRequests || '');
+
+      const restoredPickupAddress = sanitizeAddressForDraft(draft.selectedAddresses && draft.selectedAddresses.pickup);
+      const restoredReturnAddress = sanitizeAddressForDraft(draft.selectedAddresses && draft.selectedAddresses['return']);
+      if (restoredPickupAddress) {
+        selectedAddresses.pickup = restoredPickupAddress;
+        if (!readElementValue('pickupLocation') && restoredPickupAddress.name) {
+          setElementValueIfPresent('pickupLocation', restoredPickupAddress.name);
+        }
+      }
+      if (restoredReturnAddress) {
+        selectedAddresses['return'] = restoredReturnAddress;
+        if (!readElementValue('returnLocation') && restoredReturnAddress.name) {
+          setElementValueIfPresent('returnLocation', restoredReturnAddress.name);
+        }
+      }
+
+      setElementValueIfPresent('airportSelect', draft.airportSelect || '');
+      setElementValueIfPresent('hotelSelect', draft.hotelSelect || '');
+
+      if (!INITIAL_PROMO) {
+        const promoRestoreCode = draft.appliedPromoCode || draft.promoCodeInput || '';
+        setElementValueIfPresent('promoCodeInput', promoRestoreCode);
+      }
+
+      calculateRouteDistance();
+      if (draft.selectedRideTier) {
+        const tier = String(draft.selectedRideTier);
+        const tierCard = document.querySelector('.ride-tier-card[data-tier="' + tier + '"]');
+        if (tierCard && tierCard.getAttribute('data-disabled') !== 'true') {
+          selectRideTier(tier);
+        }
+      }
+
+      if (draft.selectedPaymentMethod) {
+        selectPaymentMethod(String(draft.selectedPaymentMethod));
+      }
+
+      updateTripSummary();
+    } finally {
+      isRestoringBookingDraft = false;
+    }
+
+    if (Number(draft.step) === 2) {
+      setTimeout(function() {
+        if (canRestoreStep2FromCurrentState()) {
+          goToStep2().catch(function(err) {
+            console.warn('Unable to restore payment step from booking draft:', err);
+          });
+        }
+      }, 220);
+    }
+
+    scheduleBookingDraftSave(120);
+  }
 
   function getMinScheduledDateTimeValue() {
     const now = new Date();
@@ -447,6 +757,9 @@
       if (promoInput) promoInput.value = INITIAL_PROMO;
     }
     initLeafletAutocomplete();
+    bindBookingDraftPersistence();
+    restoreBookingDraftState();
+    scheduleBookingDraftSave(160);
   }
 
   if (document.readyState === 'loading') {
@@ -758,6 +1071,7 @@
 
     calculateRouteDistance();
     updateTripSummary();
+    scheduleBookingDraftSave(120);
   }
 
   // ===== SERVICE TYPE CHANGE =====
@@ -805,13 +1119,14 @@
     }
 
     if (returnLocation) {
-      returnLocation.required = !isDailyHire;
+      returnLocation.required = true;
     }
 
     updateRideTierVisibility();
 
     calculateRouteDistance();
     updateTripSummary();
+    scheduleBookingDraftSave(120);
   }
 
   function syncServiceTypeCards(activeType) {
@@ -840,6 +1155,7 @@
       selectedAddresses['return'] = null;
       updateRideTierVisibility();
       calculateRouteDistance();
+      scheduleBookingDraftSave(120);
       return;
     }
     
@@ -853,6 +1169,7 @@
       selectedAddresses['return'] = { lat: optionLat, lon: optionLon, name: selected };
       calculateRouteDistance();
       updateTripSummary();
+      scheduleBookingDraftSave(120);
       return;
     }
 
@@ -871,6 +1188,7 @@
       selectedAddresses['return'] = null;
       updateRideTierVisibility();
       calculateRouteDistance();
+      scheduleBookingDraftSave(120);
       return;
     }
 
@@ -884,6 +1202,7 @@
       selectedAddresses['return'] = { lat: optionLat, lon: optionLon, name: selected };
       calculateRouteDistance();
       updateTripSummary();
+      scheduleBookingDraftSave(120);
       return;
     }
 
@@ -929,6 +1248,7 @@
     updateSeatCapacityInfo();
     updateTripSummary();
     scheduleRealtimeSlotRefresh(120);
+    scheduleBookingDraftSave(120);
   }
 
   // ===== CHECK AVAILABLE TIERS =====
@@ -1232,7 +1552,7 @@
 
       const returnLocation = document.getElementById('returnLocation');
       const destLoc = returnLocation ? returnLocation.value.trim() : '';
-      if (!isDailyHire && !destLoc) {
+      if (!destLoc) {
         if (typeof showToast === 'function') showToast('Please enter a destination.', 'warning');
         return;
       }
@@ -1284,6 +1604,7 @@
     if (stepLine) stepLine.classList.add('active');
     
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    scheduleBookingDraftSave(80);
   }
 
   function goToStep1() {
@@ -1303,6 +1624,7 @@
     if (stepLine) stepLine.classList.remove('active');
     
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    scheduleBookingDraftSave(80);
   }
 
   // ===== POPULATE PAYMENT SUMMARY =====
@@ -1568,6 +1890,7 @@
     document.querySelectorAll('.payment-method-card').forEach(el => {
       el.classList.toggle('active', el.dataset.method === method);
     });
+    scheduleBookingDraftSave(80);
   }
 
   // ===== PROMO CODE =====
@@ -1609,6 +1932,7 @@
       btn.disabled = false;
       btn.textContent = 'Apply';
     }
+    scheduleBookingDraftSave(100);
   }
 
   function showPromoApplied() {
@@ -1639,6 +1963,7 @@
     
     updatePaymentTotal();
     if (typeof showToast === 'function') showToast('Promo code removed.', 'info');
+    scheduleBookingDraftSave(100);
   }
 
   // ===== SAVED PROMOS WALLET =====
@@ -1828,6 +2153,7 @@
     if (step2Content) step2Content.style.display = 'none';
     if (bookingSteps) bookingSteps.style.display = 'none';
     if (bookingSuccess) bookingSuccess.style.display = 'block';
+    clearBookingDraftState();
 
     const tl = { 'minicab': 'Minicab', 'with-driver': 'With Driver' };
     const bookingType = booking && booking.booking_type ? booking.booking_type : selectedBookingType;
@@ -1895,6 +2221,7 @@
     });
     updateTripSummary();
     scheduleRealtimeSlotRefresh(120);
+    scheduleBookingDraftSave(100);
   }
 
   function renderRideTierOptions() {
@@ -1949,6 +2276,7 @@
       }
       updateTripSummary();
       scheduleRealtimeSlotRefresh(120);
+      scheduleBookingDraftSave(120);
       return;
     }
 
@@ -1956,10 +2284,12 @@
       if (selectedBookingType === 'minicab') renderRideTierOptions();
       updateTripSummary();
       scheduleRealtimeSlotRefresh(150);
+      scheduleBookingDraftSave(120);
       return;
     }
     if (selectedBookingType === 'with-driver') {
       updateTripSummary();
+      scheduleBookingDraftSave(120);
       return;
     }
 
@@ -1976,6 +2306,7 @@
 
     updateTripSummary();
     scheduleRealtimeSlotRefresh(120);
+    scheduleBookingDraftSave(120);
   }
 
   function initLeafletAutocomplete() {
@@ -2146,6 +2477,27 @@
     }
   }
 
+  function invalidateExpandedMap(type, delayMs) {
+    const container = document.getElementById(type + 'MapContainer');
+    if (!container || !container.classList.contains('expanded')) {
+      return;
+    }
+
+    const map = type === 'pickup' ? pickupMapObj : returnMapObj;
+    if (!map) {
+      return;
+    }
+
+    setTimeout(function() {
+      map.invalidateSize();
+    }, delayMs || 180);
+  }
+
+  function refreshExpandedMapsOnViewportChange() {
+    invalidateExpandedMap('pickup', 180);
+    invalidateExpandedMap('return', 180);
+  }
+
   function toggleMapExpand(type) {
     const container = document.getElementById(type + 'MapContainer');
     if (container) {
@@ -2154,6 +2506,16 @@
       if (map) setTimeout(() => map.invalidateSize(), 300);
     }
   }
+
+  window.addEventListener('resize', refreshExpandedMapsOnViewportChange);
+  window.addEventListener('orientationchange', function() {
+    refreshExpandedMapsOnViewportChange();
+    setTimeout(refreshExpandedMapsOnViewportChange, 320);
+    scheduleBookingDraftSave(60);
+    setTimeout(function() {
+      scheduleBookingDraftSave(180);
+    }, 280);
+  });
 
   async function confirmMapLocation(type) {
     const marker = type === 'pickup' ? pickupMarker : returnMarker;
@@ -2165,6 +2527,7 @@
       closeMapPicker(type);
       if (typeof showToast === 'function') showToast('📍 Location confirmed!', 'success');
       calculateRouteDistance();
+      scheduleBookingDraftSave(80);
       return;
     }
 
@@ -2204,6 +2567,7 @@
     closeMapPicker(type);
     if (typeof showToast === 'function') showToast('📍 Location confirmed!', 'success');
     calculateRouteDistance();
+    scheduleBookingDraftSave(80);
   }
 
   // ===== EXPORT FUNCTIONS =====

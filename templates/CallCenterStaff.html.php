@@ -13,6 +13,11 @@
         background: var(--cc-surface);
     }
 
+    body.cc-modal-open {
+        overflow: hidden;
+        touch-action: none;
+    }
+
     .cc-wrap {
         max-width: 1560px;
         margin: 0 auto;
@@ -357,6 +362,30 @@
         overflow-y: auto;
     }
 
+    #ccReplyModal,
+    #ccRequestDetailModal {
+        padding: calc(12px + var(--safe-inset-top, 0px)) calc(12px + var(--safe-inset-right, 0px)) calc(12px + var(--safe-inset-bottom, 0px)) calc(12px + var(--safe-inset-left, 0px));
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        align-items: center;
+    }
+
+    #ccRequestDetailModal {
+        z-index: 10010;
+    }
+
+    #ccRequestDetailModal .modal {
+        width: min(700px, calc(100vw - 20px));
+        max-height: calc(100vh - 20px);
+        display: flex;
+        flex-direction: column;
+    }
+
+    #ccRequestDetailModal .modal-body {
+        overflow-y: auto;
+    }
+
     @media (max-width: 1180px) {
         .cc-grid { grid-template-columns: 1fr; }
     }
@@ -384,6 +413,40 @@
         .cc-request-row { grid-template-columns: 1fr; }
         .cc-enquiry-head { flex-direction: column; align-items: stretch; }
         .cc-enquiry-search { min-width: 0; width: 100%; }
+
+        #ccReplyModal,
+        #ccRequestDetailModal {
+            align-items: flex-end;
+            padding: calc(8px + var(--safe-inset-top, 0px)) calc(8px + var(--safe-inset-right, 0px)) calc(8px + var(--safe-inset-bottom, 0px)) calc(8px + var(--safe-inset-left, 0px));
+        }
+
+        #ccReplyModal .modal,
+        #ccRequestDetailModal .modal {
+            width: 100%;
+            max-width: none;
+            max-height: calc(100dvh - 8px - var(--safe-inset-top, 0px) - var(--safe-inset-bottom, 0px));
+            border-radius: 16px 16px 0 0;
+        }
+
+        #ccReplyModal .modal-header,
+        #ccRequestDetailModal .modal-header {
+            padding: 14px 14px 10px;
+        }
+
+        #ccReplyModal .modal-body,
+        #ccRequestDetailModal .modal-body {
+            padding: 14px;
+        }
+
+        #ccReplyModal .modal-footer,
+        #ccRequestDetailModal .modal-footer {
+            padding: 10px 14px 14px;
+            flex-wrap: wrap;
+        }
+
+        #ccRequestDetailBody > div {
+            grid-template-columns: 1fr !important;
+        }
     }
 
     @media (max-height: 820px) {
@@ -498,7 +561,7 @@
                                 <option value="long-distance">Long Distance Journey</option>
                                 <option value="airport-transfer">Airport Transfer</option>
                                 <option value="hotel-transfer">Hotel Transfer</option>
-                                <option value="daily-hire">Daily Hire (24 hours)</option>
+                                <option value="daily-hire">Daily Hire (multi-day)</option>
                             </select>
                         </div>
                         <div class="cc-form-field">

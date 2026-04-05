@@ -11,7 +11,7 @@
                 <p class="hero-description">
                     Book minicabs or hire cars with professional drivers. Local journeys, airport transfers, hotel pickups — your ride starts here.
                 </p>
-                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <div class="hero-actions">
                     <a href="/booking.php?mode=minicab" class="btn btn-lg" style="background:var(--primary);color:white;border:1px solid var(--primary-100);box-shadow:0 10px 30px rgba(15,118,110,0.35);">🚕 Book a Minicab</a>
                     <a href="#how-it-works" class="btn btn-outline btn-lg" style="border-color:rgba(255,255,255,0.3);color:white;">Learn More →</a>
                 </div>

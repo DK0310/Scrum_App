@@ -234,14 +234,14 @@
             }
 
             return '<tr>' +
-                '<td>' + id + '</td>' +
-                '<td>' + customer + '</td>' +
-                '<td>' + pickupDate + '</td>' +
-                '<td>$' + total + '</td>' +
-                '<td class="ctrl-order-status-cell">' +
+                '<td data-label="Order ID">' + id + '</td>' +
+                '<td data-label="Customer">' + customer + '</td>' +
+                '<td data-label="Pickup Date">' + pickupDate + '</td>' +
+                '<td data-label="Total">£' + total + '</td>' +
+                '<td data-label="Status" class="ctrl-order-status-cell">' +
                     '<span class="' + statusBadgeClass(status) + '">' + escapeHtml(status) + '</span>' +
                 '</td>' +
-                '<td class="ctrl-order-actions-cell">' +
+                '<td data-label="Actions" class="ctrl-order-actions-cell">' +
                     actionHtml +
                 '</td>' +
                 '</tr>';
@@ -596,13 +596,13 @@
                 : '<button class="ctrl-btn ctrl-btn-danger" data-role="delete-vehicle" data-id="' + id + '">Delete</button>';
 
             return '<tr>' +
-                '<td>' + vm + '</td>' +
-                '<td>' + plate + '</td>' +
-                '<td>' + seat + '</td>' +
-                '<td>' + cat + '</td>' +
-                '<td>' + tier + '</td>' +
-                '<td>' + status + '</td>' +
-                '<td>' +
+                '<td data-label="Vehicle">' + vm + '</td>' +
+                '<td data-label="Plate">' + plate + '</td>' +
+                '<td data-label="Seat">' + seat + '</td>' +
+                '<td data-label="Category">' + cat + '</td>' +
+                '<td data-label="Tier">' + tier + '</td>' +
+                '<td data-label="Status">' + status + '</td>' +
+                '<td data-label="Action">' +
                     editBtn + ' ' +
                     deleteBtn +
                 '</td>' +
@@ -825,12 +825,12 @@
             }
 
             return '<tr>' +
-                '<td>' + name + '</td>' +
-                '<td>' + email + '<br><small>' + phone + '</small></td>' +
-                '<td>' + assignedVehicle + '</td>' +
-                '<td><span class="' + driverStatusBadgeClass(status) + '">' + escapeHtml(status) + '</span></td>' +
-                '<td><span class="' + driverServiceStateBadgeClass(serviceState) + '">' + escapeHtml(serviceState.replace('_', ' ')) + '</span></td>' +
-                '<td>' + actionHtml + '</td>' +
+                '<td data-label="Driver">' + name + '</td>' +
+                '<td data-label="Contact">' + email + '<br><small>' + phone + '</small></td>' +
+                '<td data-label="Assigned Vehicle">' + assignedVehicle + '</td>' +
+                '<td data-label="Dispatch"><span class="' + driverStatusBadgeClass(status) + '">' + escapeHtml(status) + '</span></td>' +
+                '<td data-label="Service State"><span class="' + driverServiceStateBadgeClass(serviceState) + '">' + escapeHtml(serviceState.replace('_', ' ')) + '</span></td>' +
+                '<td data-label="Action">' + actionHtml + '</td>' +
                 '</tr>';
         }).join('');
 

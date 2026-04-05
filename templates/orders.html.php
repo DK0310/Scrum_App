@@ -449,7 +449,7 @@
                                 <span class="service-purpose-overlay"></span>
                                 <span class="service-purpose-content">
                                     <strong>Daily Hire</strong>
-                                    <small>24-hour package</small>
+                                    <small>Multi-day package</small>
                                 </span>
                             </button>
                         </div>
@@ -458,7 +458,7 @@
                             <option value="long-distance">Long Distance Journey</option>
                             <option value="airport-transfer">Airport Transfer</option>
                             <option value="hotel-transfer">Hotel Transfer</option>
-                            <option value="daily-hire">Daily Hire</option>
+                            <option value="daily-hire">Daily Hire (multi-day)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -561,16 +561,31 @@
     </script>
 
     <style>
+        body.orders-modal-open {
+            overflow: hidden;
+            touch-action: none;
+        }
         .review-modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000;
             background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
             display: flex; align-items: center; justify-content: center;
+            padding: calc(14px + var(--safe-inset-top, 0px)) calc(14px + var(--safe-inset-right, 0px)) calc(14px + var(--safe-inset-bottom, 0px)) calc(14px + var(--safe-inset-left, 0px));
+            min-height: 100dvh;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
             animation: reviewOverlayIn 0.25s ease;
         }
+        #tripDetailModalOverlay { z-index: 10000; }
+        #modifyBookingModalOverlay { z-index: 10020; }
+        #reviewModalOverlay { z-index: 10040; }
         @keyframes reviewOverlayIn { from { opacity: 0; } to { opacity: 1; } }
         .review-modal {
             background: white; border-radius: 20px; width: 95%; max-width: 460px;
             box-shadow: 0 25px 60px rgba(0,0,0,0.25); overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100dvh - 28px - var(--safe-inset-top, 0px) - var(--safe-inset-bottom, 0px));
             animation: reviewModalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
         @keyframes reviewModalIn { from { opacity: 0; transform: scale(0.85) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
@@ -579,8 +594,8 @@
             background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
             border-bottom: 1px solid #fcd34d;
         }
-        .review-modal-body { padding: 24px 28px; }
-        .review-modal-footer { display: flex; gap: 10px; padding: 16px 28px 28px; }
+        .review-modal-body { padding: 24px 28px; overflow-y: auto; }
+        .review-modal-footer { display: flex; gap: 10px; padding: 16px 28px 28px; flex-wrap: wrap; }
 
         .review-stars-input {
             display: flex; gap: 6px; justify-content: center;
@@ -679,33 +694,32 @@
         }
 
         #tripDetailModalOverlay {
-            padding: 12px;
             align-items: center;
         }
         #tripDetailModalOverlay .review-modal {
             width: min(96vw, 680px);
             max-width: 680px;
-            max-height: calc(100vh - 24px);
+            max-height: calc(100dvh - 28px - var(--safe-inset-top, 0px) - var(--safe-inset-bottom, 0px));
             display: flex;
             flex-direction: column;
         }
         #modifyBookingModalOverlay .review-modal {
             width: min(96vw, 980px);
             max-width: 980px;
-            max-height: calc(100vh - 24px);
+            max-height: calc(100dvh - 28px - var(--safe-inset-top, 0px) - var(--safe-inset-bottom, 0px));
             display: flex;
             flex-direction: column;
         }
         #modifyBookingModalOverlay .review-modal-body {
             overflow-y: auto;
-            max-height: calc(100vh - 220px);
+            max-height: calc(100dvh - 220px);
         }
         #modifyBookingModalOverlay .review-modal-footer {
             flex-wrap: wrap;
         }
         #tripDetailModalOverlay .review-modal-body {
             overflow-y: auto;
-            max-height: calc(100vh - 220px);
+            max-height: calc(100dvh - 220px);
         }
         .trip-detail-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -715,14 +729,22 @@
         }
 
         @media (max-width: 768px) {
+            .review-modal-overlay {
+                align-items: flex-end;
+                padding: calc(8px + var(--safe-inset-top, 0px)) calc(8px + var(--safe-inset-right, 0px)) calc(8px + var(--safe-inset-bottom, 0px)) calc(8px + var(--safe-inset-left, 0px));
+            }
+            .review-modal {
+                width: 100%;
+                max-width: none;
+                border-radius: 16px 16px 0 0;
+            }
             #tripDetailModalOverlay {
-                padding: 8px;
                 align-items: flex-end;
             }
             #tripDetailModalOverlay .review-modal {
                 width: 100%;
                 max-width: none;
-                max-height: calc(100vh - 12px);
+                max-height: calc(100dvh - 12px);
                 border-radius: 16px 16px 0 0;
             }
             #tripDetailModalOverlay .review-modal-header {
@@ -730,9 +752,25 @@
             }
             #tripDetailModalOverlay .review-modal-body {
                 padding: 16px;
-                max-height: calc(100vh - 180px);
+                max-height: calc(100dvh - 180px);
             }
             #tripDetailModalOverlay .review-modal-footer {
+                padding: 10px 16px 16px;
+            }
+            #modifyBookingModalOverlay .review-modal {
+                width: 100%;
+                max-width: none;
+                max-height: calc(100dvh - 12px);
+                border-radius: 16px 16px 0 0;
+            }
+            #modifyBookingModalOverlay .review-modal-header {
+                padding: 18px 16px 12px;
+            }
+            #modifyBookingModalOverlay .review-modal-body {
+                padding: 16px;
+                max-height: calc(100dvh - 180px);
+            }
+            #modifyBookingModalOverlay .review-modal-footer {
                 padding: 10px 16px 16px;
             }
             .trip-detail-grid {

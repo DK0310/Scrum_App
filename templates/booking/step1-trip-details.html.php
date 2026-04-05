@@ -112,7 +112,7 @@
                                     <span class="service-purpose-overlay"></span>
                                     <span class="service-purpose-content">
                                         <strong>Daily Hire</strong>
-                                        <small>24-hour package</small>
+                                        <small>Multi-day package</small>
                                     </span>
                                 </button>
                             </div>
@@ -121,7 +121,7 @@
                                 <option value="long-distance">🛣️ Long Distance Journey (over 30 miles)</option>
                                 <option value="airport-transfer">✈️ Airport Transfer</option>
                                 <option value="hotel-transfer">🏨 Hotel Transfer</option>
-                                <option value="daily-hire">📅 Daily Hire (24 hours)</option>
+                                <option value="daily-hire">📅 Daily Hire (multi-day)</option>
                             </select>
                             <small style="display:block;margin-top:8px;color:var(--gray-600);font-size:0.8rem;">Available seat classes for every service type: 4-seat and 7-seat.</small>
                         </div>

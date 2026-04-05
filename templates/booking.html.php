@@ -2,7 +2,7 @@
 <?php $isMinicabPage = isset($bookingMode) && $bookingMode === 'minicab'; ?>
 
     <!-- ===== BOOKING PAGE ===== -->
-    <section class="section booking-shell <?= $isMinicabPage ? 'booking-shell-minicab' : '' ?>" style="padding-top:100px;min-height:100vh;background:var(--gray-50);" id="booking">
+    <section class="section booking-shell <?= $isMinicabPage ? 'booking-shell-minicab' : '' ?>" style="padding-top:calc(96px + var(--safe-top, 0px));min-height:100svh;background:var(--gray-50);" id="booking">
         <div class="section-container" style="max-width:<?= $isMinicabPage ? '1240px' : '1100px' ?>;">
             
             <!-- Step Indicator -->
@@ -250,10 +250,13 @@
 
         @media (max-width: 900px) {
             .booking-grid-minicab { grid-template-columns: 1fr; }
-            .booking-grid-minicab .booking-form-card,
-            .booking-grid-minicab .booking-car-card { order: initial; }
+            .booking-grid-minicab .booking-form-card { order: 1; }
+            .booking-grid-minicab .booking-car-card { order: 2; }
             .booking-grid-minicab .booking-car-card { max-width: none; justify-self: stretch; }
             .minicab-summary-card { position: static; }
+            .booking-car-card,
+            .payment-summary-card,
+            .payment-summary-modern { position: static; top: auto; }
         }
         @media (max-width: 560px) {
             .service-purpose-grid { grid-template-columns: 1fr; }
@@ -378,6 +381,103 @@
             box-shadow: var(--shadow-sm); border: 1px solid var(--gray-200);
         }
 
+        /* Keep minicab layout stable on tablet/small desktop and avoid sticky overlap */
+        @media (max-width: 1100px) {
+            .booking-grid.booking-grid-minicab {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .booking-grid.booking-grid-minicab .booking-form-card { order: 1; }
+            .booking-grid.booking-grid-minicab .booking-car-card { order: 2; }
+
+            .booking-grid.booking-grid-minicab .booking-car-card {
+                max-width: none;
+                justify-self: stretch;
+                position: static;
+                top: auto;
+            }
+
+            .booking-grid.booking-grid-minicab .booking-car-card.minicab-summary-card {
+                position: static;
+                top: auto;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .booking-grid.booking-grid-minicab {
+                gap: 14px;
+            }
+
+            .minicab-summary-hero {
+                padding: 14px 14px 12px;
+            }
+
+            .minicab-summary-title {
+                font-size: 1rem;
+            }
+
+            .minicab-summary-sub {
+                font-size: 0.72rem;
+            }
+
+            .minicab-summary-body {
+                padding: 10px 14px 4px;
+            }
+
+            .minicab-summary-row {
+                padding: 7px 0;
+                font-size: 0.74rem;
+            }
+
+            .minicab-summary-row strong {
+                font-size: 0.78rem;
+                max-width: 58%;
+            }
+
+            .minicab-summary-footer {
+                gap: 5px;
+                padding: 8px 14px 10px;
+            }
+
+            .minicab-trust-pill {
+                font-size: 0.62rem;
+                padding: 4px 7px;
+            }
+
+            .minicab-summary-actions {
+                padding: 0 14px 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .booking-grid.booking-grid-minicab {
+                gap: 12px;
+            }
+
+            .booking-grid.booking-grid-minicab .booking-form-card {
+                padding: 12px;
+                border-radius: 12px;
+            }
+
+            .booking-grid.booking-grid-minicab .booking-car-card.minicab-summary-card {
+                border-radius: 14px;
+            }
+
+            .minicab-summary-title {
+                font-size: 0.95rem;
+            }
+
+            .minicab-summary-row strong {
+                max-width: 55%;
+            }
+
+            .minicab-summary-actions .btn {
+                font-size: 0.85rem;
+                padding: 10px 12px;
+            }
+        }
+
         .booking-type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
         .booking-type-option {
             display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -463,7 +563,11 @@
             transition: all 0.3s ease;
         }
         .map-picker-container.expanded {
-            position: fixed; top: 10px; left: 10px; right: 10px; bottom: 10px;
+            position: fixed;
+            top: calc(10px + var(--safe-top, 0px));
+            left: calc(10px + var(--safe-left, 0px));
+            right: calc(10px + var(--safe-right, 0px));
+            bottom: calc(10px + var(--safe-bottom, 0px));
             z-index: 9999; margin-top: 0; border-radius: var(--radius-lg);
             box-shadow: 0 25px 60px rgba(0,0,0,0.4);
         }
@@ -487,6 +591,70 @@
         .map-picker {
             width: 100%; height: 300px; position: relative; overflow: hidden;
             background: var(--gray-100);
+        }
+
+        @media (max-width: 768px) {
+            .booking-form-card { padding: 20px; }
+            .booking-car-details { padding: 16px; }
+            .booking-car-specs { grid-template-columns: repeat(2, 1fr); }
+            .payment-car-header { padding: 16px; }
+            .payment-details-list,
+            .payment-price-breakdown { padding: 14px 16px; }
+            .map-picker { height: 240px; }
+            .map-picker-footer {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+            .map-picker-footer .btn {
+                width: 100%;
+            }
+            .map-coords {
+                white-space: normal;
+                text-overflow: initial;
+                overflow: visible;
+                line-height: 1.35;
+            }
+            .map-picker-container.expanded {
+                top: calc(8px + var(--safe-top, 0px));
+                left: calc(8px + var(--safe-left, 0px));
+                right: calc(8px + var(--safe-right, 0px));
+                bottom: calc(8px + var(--safe-bottom, 0px));
+                border-radius: 12px;
+            }
+            .map-picker-container.expanded .map-picker {
+                height: calc(100% - 96px);
+            }
+        }
+
+        @media (max-width: 430px) {
+            .booking-form-card {
+                padding: 16px;
+                border-radius: 14px;
+            }
+            .payment-methods-grid,
+            .booking-type-grid,
+            .seat-capacity-grid {
+                grid-template-columns: 1fr;
+            }
+            .service-purpose-card {
+                aspect-ratio: 16 / 9;
+            }
+            .payment-car-thumb {
+                width: 86px;
+                height: 62px;
+            }
+        }
+
+        @media (max-width: 390px) {
+            .booking-step {
+                padding: 10px 12px;
+            }
+            .map-picker-wrapper .map-expand-btn,
+            .location-map-btn {
+                width: 44px;
+                height: 44px;
+            }
         }
 
         .trip-summary {
@@ -760,11 +928,13 @@
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000;
             background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
             display: flex; align-items: center; justify-content: center;
+            padding: calc(10px + var(--safe-top, 0px)) 10px calc(10px + var(--safe-bottom, 0px));
             animation: licenseOverlayIn 0.25s ease;
         }
         @keyframes licenseOverlayIn { from { opacity: 0; } to { opacity: 1; } }
         .license-modal {
             background: white; border-radius: 20px; width: 95%; max-width: 440px;
+            max-height: calc(100svh - 20px - var(--safe-top, 0px) - var(--safe-bottom, 0px));
             box-shadow: 0 25px 60px rgba(0,0,0,0.25); overflow: hidden;
             animation: licenseModalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
@@ -799,6 +969,19 @@
         .license-missing-item.expired .lmi-status { background: #ffedd5; color: #ea580c; }
         .license-modal-actions {
             display: flex; gap: 10px; padding: 16px 28px 28px;
+        }
+
+        @media (max-width: 480px) {
+            .license-modal-actions {
+                flex-direction: column;
+                padding: 14px 18px 18px;
+            }
+            .license-modal-body {
+                padding: 16px 18px;
+            }
+            .license-modal-header {
+                padding: 24px 18px 16px;
+            }
         }
     </style>
 

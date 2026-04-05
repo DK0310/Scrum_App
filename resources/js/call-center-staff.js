@@ -83,6 +83,8 @@
         requestDetailBody: document.getElementById('ccRequestDetailBody')
     };
 
+    const CC_MODAL_IDS = ['ccReplyModal', 'ccRequestDetailModal'];
+
     function setFormStatus(text, isError) {
         if (!el.formStatus) return;
         el.formStatus.textContent = text || '';
@@ -93,6 +95,46 @@
         if (!el.createAccountStatus) return;
         el.createAccountStatus.textContent = text || '';
         el.createAccountStatus.style.color = isError ? '#b91c1c' : '#334155';
+    }
+
+    function syncCcModalBodyLock() {
+        const hasOpenModal = CC_MODAL_IDS.some(function (id) {
+            const node = document.getElementById(id);
+            return !!(node && node.classList.contains('open'));
+        });
+        document.body.classList.toggle('cc-modal-open', hasOpenModal);
+    }
+
+    function setupCcModalInteractions() {
+        CC_MODAL_IDS.forEach(function (id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+
+            modal.addEventListener('click', function (event) {
+                if (event.target === modal) {
+                    modal.classList.remove('open');
+                    syncCcModalBodyLock();
+                }
+            });
+
+            const observer = new MutationObserver(function () {
+                syncCcModalBodyLock();
+            });
+            observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape') return;
+            for (let i = CC_MODAL_IDS.length - 1; i >= 0; i -= 1) {
+                const id = CC_MODAL_IDS[i];
+                const node = document.getElementById(id);
+                if (node && node.classList.contains('open')) {
+                    node.classList.remove('open');
+                    syncCcModalBodyLock();
+                    break;
+                }
+            }
+        });
     }
 
     async function apiGet(params) {
@@ -403,16 +445,16 @@
         }
 
         if (el.returnLocation) {
-            el.returnLocation.required = !isDailyHire;
+            el.returnLocation.required = true;
             if (isDailyHire) {
-                el.returnLocation.placeholder = 'Optional destination for Daily Hire';
+                el.returnLocation.placeholder = 'Enter drop off location';
             } else {
                 el.returnLocation.placeholder = 'Search destination';
             }
         }
 
         if (destinationLabel) {
-            destinationLabel.textContent = isDailyHire ? 'Destination (optional)' : 'Destination *';
+            destinationLabel.textContent = isDailyHire ? 'Drop Off *' : 'Destination *';
         }
 
         if (isAirport) {
@@ -839,6 +881,7 @@
 
         el.requestDetailBody.innerHTML = 'Loading details...';
         el.requestDetailModal.classList.add('open');
+        syncCcModalBodyLock();
 
         try {
             const data = await apiGet({ action: 'get_request_detail', booking_id: bookingId });
@@ -938,6 +981,7 @@
             el.replyMeta.textContent = 'Enquiry: ' + enquiryId.substring(0, 8) + ' | Type: ' + type + ' | Customer: ' + customer;
         }
         el.replyModal.classList.add('open');
+        syncCcModalBodyLock();
     }
 
     async function submitEnquiryReply() {
@@ -982,6 +1026,7 @@
             } else if (el.replyModal) {
                 el.replyModal.classList.remove('open');
             }
+            syncCcModalBodyLock();
             await loadEnquiries();
         } catch (err) {
             alert('Network error');
@@ -1168,10 +1213,10 @@
         await loadAvailabilityOptions();
 
         const serviceType = getCurrentServiceType();
-        const destinationRequired = serviceType !== 'daily-hire';
+        const destinationRequired = true;
         const destinationValue = String(el.returnLocation && el.returnLocation.value ? el.returnLocation.value : '').trim();
         if (destinationRequired && !destinationValue) {
-            setFormStatus('Destination is required for this service type.', true);
+            setFormStatus('Drop off destination is required.', true);
             return;
         }
 
@@ -1267,8 +1312,7 @@
             dropdown.style.display = 'block';
 
             Array.from(dropdown.querySelectorAll('.autocomplete-item')).forEach((item) => {
-                item.addEventListener('mousedown', function (e) {
-                    e.preventDefault();
+                const commitSelection = function () {
                     const lat = parseFloat(this.getAttribute('data-lat') || '0');
                     const lon = parseFloat(this.getAttribute('data-lon') || '0');
                     const name = this.getAttribute('data-name') || '';
@@ -1281,7 +1325,23 @@
                     updatePaymentMethodAvailability();
                     refreshBookingEstimatePreview();
                     scheduleRealtimeAvailabilityRefresh(150);
-                });
+                };
+
+                if (window.PointerEvent) {
+                    item.addEventListener('pointerdown', function (e) {
+                        e.preventDefault();
+                        commitSelection.call(this);
+                    }, { passive: false });
+                } else {
+                    item.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        commitSelection.call(this);
+                    });
+                    item.addEventListener('touchend', function (e) {
+                        e.preventDefault();
+                        commitSelection.call(this);
+                    }, { passive: false });
+                }
             });
         } catch (err) {
             dropdown.style.display = 'none';
@@ -1618,6 +1678,7 @@
     }
 
     async function init() {
+        setupCcModalInteractions();
         bindEvents();
         initLeafletAutocomplete();
         initPickupMinDateTime();
@@ -1631,6 +1692,7 @@
         await loadPickupTimeSlotAvailability();
         await loadRequests();
         await loadEnquiries();
+        syncCcModalBodyLock();
     }
 
     window.openMapPicker = openMapPicker;
