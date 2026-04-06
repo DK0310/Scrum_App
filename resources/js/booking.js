@@ -78,8 +78,7 @@
   };
 
   let availableTiersByPassengers = {};  // Track which tiers are available per passenger count
-  let scheduledAvailabilityTimer = null;
-  let scheduledSlotRequestSeq = 0;
+  let tierAvailabilityTimer = null;
   const SLOT_INTERVAL_MINUTES = 30;
   const BOOKING_DRAFT_STORAGE_PREFIX = 'drivenow_booking_draft_v2';
   const BOOKING_DRAFT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
@@ -459,7 +458,6 @@
     if (!dateEl || !timeEl) return;
 
     const settings = options && typeof options === 'object' ? options : {};
-    const isLoading = settings.loading === true;
     const hasLoadError = settings.loadError === true;
 
     const selectedDate = dateEl.value || '';
@@ -472,18 +470,6 @@
 
       if (hintEl) {
         hintEl.textContent = 'Choose a date to load available time slots.';
-      }
-      return;
-    }
-
-    if (isLoading) {
-      timeEl.disabled = true;
-      timeEl.innerHTML = '<option value="">Loading available slots...</option>';
-      timeEl.value = '';
-      syncScheduledDateTimeFromParts();
-
-      if (hintEl) {
-        hintEl.textContent = 'Loading available time slots...';
       }
       return;
     }
@@ -523,68 +509,18 @@
       if (enabledCount > 0) {
         hintEl.textContent = 'Available slots: ' + enabledCount + ' for selected date.';
       } else if (hasLoadError) {
-        hintEl.textContent = 'Unable to load slot availability right now. Please try again.';
+        hintEl.textContent = 'Unable to load slots right now. Please choose another date.';
       } else {
         hintEl.textContent = 'No available time slot for this date. Please choose another date.';
       }
     }
   }
 
-  async function refreshScheduledTimeSlotAvailability() {
-    const dateEl = document.getElementById('scheduledDateOnly');
-    if (!dateEl) return;
-    const requestId = ++scheduledSlotRequestSeq;
-    const selectedDate = dateEl.value || '';
-
-    if (!selectedDate) {
-      renderScheduledTimeSlots([]);
-      return;
-    }
-
-    renderScheduledTimeSlots([], { loading: true });
-
-    const payload = {
-      date: selectedDate,
-      service_type: (document.getElementById('serviceType') ? String(document.getElementById('serviceType').value || 'local').toLowerCase() : 'local'),
-      seat_capacity: selectedSeatCapacity,
-      ride_tier: selectedRideTier || '',
-    };
-    if (payload.service_type !== 'daily-hire' && Number.isFinite(calculatedDistance) && calculatedDistance > 0) {
-      payload.distance_km = calculatedDistance;
-    }
-
-    try {
-      const res = await fetch('/api/vehicles.php?action=unavailable-time-slots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (requestId !== scheduledSlotRequestSeq) {
-        return;
-      }
-
-      if (!data.success) {
-        renderScheduledTimeSlots([], { loadError: true });
-        return;
-      }
-
-      renderScheduledTimeSlots(data.unavailable_times || []);
-    } catch (err) {
-      if (requestId !== scheduledSlotRequestSeq) {
-        return;
-      }
-
-      renderScheduledTimeSlots([], { loadError: true });
-    }
-  }
-
   function scheduleRealtimeSlotRefresh(delayMs) {
-    if (scheduledAvailabilityTimer) {
-      clearTimeout(scheduledAvailabilityTimer);
+    if (tierAvailabilityTimer) {
+      clearTimeout(tierAvailabilityTimer);
     }
-    scheduledAvailabilityTimer = setTimeout(function() {
-      refreshScheduledTimeSlotAvailability();
+    tierAvailabilityTimer = setTimeout(function() {
       checkAvailableTiers(selectedSeatCapacity);
     }, delayMs || 150);
   }
@@ -718,6 +654,7 @@
 
       scheduledDateEl.addEventListener('change', function() {
         refreshScheduledDateTimeConstraint(false);
+        renderScheduledTimeSlots([]);
         syncScheduledDateTimeFromParts();
         validatePickupDateTime();
         updateTripSummary();
@@ -733,6 +670,7 @@
 
       scheduledDateEl.addEventListener('blur', function() {
         refreshScheduledDateTimeConstraint(true);
+        renderScheduledTimeSlots([]);
         scheduleRealtimeSlotRefresh(120);
       });
 
@@ -755,6 +693,10 @@
     if (INITIAL_PROMO) {
       const promoInput = document.getElementById('promoCodeInput');
       if (promoInput) promoInput.value = INITIAL_PROMO;
+      // Keep behavior consistent: prefilled promo from landing links should be validated immediately.
+      setTimeout(function() {
+        applyPromoCode();
+      }, 80);
     }
     initLeafletAutocomplete();
     bindBookingDraftPersistence();
@@ -1902,6 +1844,18 @@
       return;
     }
 
+    const isMinicab = selectedBookingType === 'minicab';
+    let totalDaysForPromo = 1;
+    if (!isMinicab) {
+      const pickup = document.getElementById('pickupDate');
+      const ret = document.getElementById('returnDate');
+      const pickupVal = pickup ? pickup.value : '';
+      const retVal = ret ? ret.value : '';
+      if (pickupVal && retVal) {
+        totalDaysForPromo = Math.max(1, Math.ceil((new Date(retVal) - new Date(pickupVal)) / 86400000));
+      }
+    }
+
     const btn = document.getElementById('promoApplyBtn');
     if (btn) {
       btn.disabled = true;
@@ -1912,7 +1866,7 @@
       const res = await fetch(BOOKINGS_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'validate-promo', code })
+        body: JSON.stringify({ action: 'validate-promo', code, total_days: totalDaysForPromo })
       });
       const data = await res.json();
       if (data.success) {
@@ -2076,7 +2030,11 @@
       pickup_date: document.getElementById('pickupDate').value || '',
       pickup_location: pickupLoc,
       special_requests: document.getElementById('specialRequests').value.trim(),
-      promo_code: appliedPromo ? appliedPromo.code : '',
+      promo_code: (function() {
+        const promoCodeInput = document.getElementById('promoCodeInput');
+        const typedPromoCode = promoCodeInput ? promoCodeInput.value.trim() : '';
+        return appliedPromo ? appliedPromo.code : typedPromoCode;
+      })(),
       payment_method: selectedPaymentMethod,
       distance_km: calculatedDistance
     };

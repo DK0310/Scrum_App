@@ -96,6 +96,27 @@
             .replace(/'/g, '&#039;');
     }
 
+    function asAmount(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function resolveOrderTotals(order) {
+        const subtotal = asAmount(order && order.subtotal);
+        const discount = Math.max(0, asAmount(order && order.discount_amount));
+        const hasBreakdown = subtotal > 0 || discount > 0;
+        const total = hasBreakdown
+            ? Math.max(0, subtotal - discount)
+            : asAmount(order && order.total_amount);
+
+        return {
+            subtotal,
+            discount,
+            total,
+            hasBreakdown,
+        };
+    }
+
     function normalizedQuery(value) {
         return String(value || '').trim().toLowerCase();
     }
@@ -219,7 +240,8 @@
             const id = escapeHtml(o.id || '');
             const customer = escapeHtml(o.customer_name || o.user_name || o.renter_name || 'Customer');
             const pickupDate = escapeHtml(formatPickupDatetime(o.pickup_date, o.pickup_time));
-            const total = Number(o.total_amount || 0).toFixed(2);
+            const totals = resolveOrderTotals(o);
+            const total = totals.total.toFixed(2);
             const status = normalizeDisplayStatus(o.status);
             let actionHtml = '<div class="ctrl-order-actions">' +
                 '<button class="ctrl-btn ctrl-btn-muted" data-role="detail-order" data-id="' + id + '">View</button>' +
@@ -447,7 +469,12 @@
         const pickupDateTime = formatPickupDatetime(order.pickup_date, order.pickup_time);
         const pickupText = pickupLocation + ' @ ' + pickupDateTime;
         const destinationText = escapeHtml(order.return_location || '-');
-        const amountText = '£' + Number(order.total_amount || 0).toFixed(2);
+        const totals = resolveOrderTotals(order);
+        const subtotalText = totals.hasBreakdown ? ('£' + totals.subtotal.toFixed(2)) : '-';
+        const discountText = totals.hasBreakdown ? ('-£' + totals.discount.toFixed(2)) : '-';
+        const amountText = '£' + totals.total.toFixed(2);
+        const promoCode = String(order.promo_code || '').trim();
+        const promoCodeText = promoCode ? escapeHtml(promoCode) : 'None';
         const requestedTier = order.ride_tier || order.service_tier || '';
         const serviceTier = escapeHtml(requestedTier ? toTitleCase(normalizeTier(requestedTier)) : '-');
         const bookedSeats = order.number_of_passengers || order.seat_capacity || order.seats || '-';
@@ -483,6 +510,9 @@
                 '<div class="ctrl-kv"><div class="ctrl-k">Vehicle</div><div class="ctrl-v">' + vehicleText + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Service Tier</div><div class="ctrl-v">' + serviceTier + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Seats</div><div class="ctrl-v">' + seatsText + '</div></div>' +
+                '<div class="ctrl-kv"><div class="ctrl-k">Subtotal</div><div class="ctrl-v">' + subtotalText + '</div></div>' +
+                '<div class="ctrl-kv"><div class="ctrl-k">Discount</div><div class="ctrl-v">' + discountText + '</div></div>' +
+                '<div class="ctrl-kv"><div class="ctrl-k">Promotion Code</div><div class="ctrl-v">' + promoCodeText + '</div></div>' +
                 '<div class="ctrl-kv"><div class="ctrl-k">Amount</div><div class="ctrl-v">' + amountText + '</div></div>' +
                 '<div class="ctrl-kv" style="grid-column:1/-1;"><div class="ctrl-k">Notes</div><div class="ctrl-v">' + escapeHtml(order.special_requests || '-') + '</div></div>' +
             '</div>';

@@ -478,6 +478,17 @@ final class UserRepository
     }
 
     /**
+     * Delete own customer account.
+     * @return bool True if deleted, false if not found/not a customer account
+     */
+    public function deleteOwnAccount(string $userId): bool
+    {
+        $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'user'");
+        $stmt->execute([$userId]);
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
      * Count active bookings for a user (as renter or owner)
      * @return int
      */

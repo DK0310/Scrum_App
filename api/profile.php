@@ -414,7 +414,7 @@ if ($action === 'delete-account') {
             'message' => 'Your account has been permanently deleted.',
             'redirect_to' => '/'
         ]);
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         echo json_encode(['success' => false, 'message' => 'Delete account failed: ' . $e->getMessage()]);
     }
     exit;

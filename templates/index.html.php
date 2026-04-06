@@ -522,33 +522,29 @@
                 <a href="/promotions.php" class="section-link">All Promotions →</a>
             </div>
             <div class="promo-grid promo-grid-redesign">
-                <div class="promo-card promo-card-redesign promo-weekend" onclick="applyPromo('WEEKEND20')">
-                    <div class="promo-overlay"></div>
-                    <div class="promo-content">
-                        <span class="promo-pill">Limited Offer</span>
-                        <h3 class="promo-title">20% OFF Weekend Special</h3>
-                        <p class="promo-description">Elevate your weekend escape with our curated performance collection.</p>
-                        <button class="btn btn-primary promo-btn">Claim Privilege</button>
+                <?php if (!empty($homePromotionCards)): ?>
+                    <?php foreach ($homePromotionCards as $promoCard): ?>
+                        <div class="promo-card promo-card-redesign <?= htmlspecialchars((string)($promoCard['card_class'] ?? 'promo-weekend')) ?>" onclick="applyPromo('<?= htmlspecialchars((string)$promoCard['code']) ?>')">
+                            <div class="promo-overlay"></div>
+                            <div class="promo-content">
+                                <span class="promo-pill<?= htmlspecialchars((string)($promoCard['pill_class'] ?? '')) ?>"><?= htmlspecialchars((string)($promoCard['badge'] ?? 'Limited Offer')) ?></span>
+                                <h3 class="promo-title"><?= htmlspecialchars((string)($promoCard['title'] ?? 'Special Offer')) ?></h3>
+                                <p class="promo-description"><?= htmlspecialchars((string)($promoCard['description'] ?? 'Discover current offers and save on your next booking.')) ?></p>
+                                <button class="btn btn-primary promo-btn">Claim Privilege</button>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="promo-card promo-card-redesign promo-weekend" onclick="window.location.href='/promotions.php'">
+                        <div class="promo-overlay"></div>
+                        <div class="promo-content">
+                            <span class="promo-pill">Live Offers</span>
+                            <h3 class="promo-title">Check Latest Promotions</h3>
+                            <p class="promo-description">Our current promotions are being refreshed. See all active offers on the promotions page.</p>
+                            <button class="btn btn-primary promo-btn">View Promotions</button>
+                        </div>
                     </div>
-                </div>
-                <div class="promo-card promo-card-redesign promo-welcome" onclick="applyPromo('FIRST50')">
-                    <div class="promo-overlay"></div>
-                    <div class="promo-content">
-                        <span class="promo-pill promo-pill-alt">Welcome Gift</span>
-                        <h3 class="promo-title">$50 OFF First Ride Bonus</h3>
-                        <p class="promo-description">A sophisticated introduction to EliteDrive. Applied at checkout.</p>
-                        <button class="btn btn-primary promo-btn">Unlock Bonus</button>
-                    </div>
-                </div>
-                <div class="promo-card promo-card-redesign promo-longterm" onclick="applyPromo('LONGTERM30')">
-                    <div class="promo-overlay"></div>
-                    <div class="promo-content">
-                        <span class="promo-pill promo-pill-neutral">Executive Tier</span>
-                        <h3 class="promo-title">30% OFF Long-term Rental</h3>
-                        <p class="promo-description">Extended excellence for journeys that require more than a moment.</p>
-                        <button class="btn btn-primary promo-btn">Inquire Now</button>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
     </section>

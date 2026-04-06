@@ -111,6 +111,7 @@ function privatehire_build_invoice_replacements(array $booking): array {
 
         'subtotal' => $fmtMoney($booking['subtotal'] ?? $booking['sub_total'] ?? ''),
         'discount' => $fmtMoney($discountRaw),
+        'promotion_code' => (string)($booking['promo_code'] ?? $booking['promo_applied'] ?? ''),
         'total_due' => $fmtMoney($booking['total_amount'] ?? $booking['total'] ?? ''),
 
         'payment_method' => (string)($booking['payment_method'] ?? ''),
@@ -181,6 +182,8 @@ function privatehire_render_invoice_html(array $r): string {
 
     $subtotal = $e((string)($r['subtotal'] ?? ''));
     $discount = $e((string)($r['discount'] ?? ''));
+    $promotionCode = $e((string)($r['promotion_code'] ?? ''));
+    $promotionCode = $promotionCode !== '' ? $promotionCode : '-';
     $totalDue = $e((string)($r['total_due'] ?? ''));
 
     $payMethod = $e((string)($r['payment_method'] ?? ''));
@@ -245,6 +248,7 @@ function privatehire_render_invoice_html(array $r): string {
       <tr><th>Description</th><th class="right">Amount</th></tr>
       <tr><td>Subtotal</td><td class="right">{$subtotal}</td></tr>
       <tr><td>Discount</td><td class="right">{$discount}</td></tr>
+      <tr><td>Promotion Code</td><td class="right">{$promotionCode}</td></tr>
       <tr><td><strong>Total</strong></td><td class="right"><strong>{$totalDue}</strong></td></tr>
     </table>
   </div>

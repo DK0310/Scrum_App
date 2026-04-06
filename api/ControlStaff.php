@@ -497,6 +497,7 @@ try {
                         'price_per_day' => $invoiceData['price_per_day'] ?? 0,
                         'subtotal' => $invoiceData['subtotal'] ?? 0,
                         'discount_amount' => $invoiceData['discount_amount'] ?? 0,
+                        'promo_code' => $invoiceData['promo_code'] ?? '',
                         'total_amount' => $invoiceData['total_amount'] ?? 0,
                         'payment_method' => $invoiceData['payment_method'] ?? 'cash',
                         'renter_name' => $invoiceData['renter_name'] ?? '',

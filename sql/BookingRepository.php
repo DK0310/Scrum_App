@@ -508,7 +508,7 @@ final class BookingRepository
         $params = [];
         $where = $this->buildHistoryWhereClause($filters, $params);
 
-        $stmt = $this->pdo->prepare("\n            SELECT\n                COUNT(*)::int AS total_bookings,\n                SUM(CASE WHEN a.status = 'completed'::booking_status THEN 1 ELSE 0 END)::int AS completed_bookings,\n                SUM(CASE WHEN a.status = 'cancelled'::booking_status THEN 1 ELSE 0 END)::int AS cancelled_bookings,\n                COALESCE(SUM(a.total_amount), 0)::numeric(12,2) AS total_revenue\n            FROM booking_archive a\n            WHERE {$where}\n        ");
+        $stmt = $this->pdo->prepare("\n            SELECT\n                COUNT(*)::int AS total_bookings,\n                SUM(CASE WHEN a.status = 'completed'::booking_status THEN 1 ELSE 0 END)::int AS completed_bookings,\n                SUM(CASE WHEN a.status = 'cancelled'::booking_status THEN 1 ELSE 0 END)::int AS cancelled_bookings,\n                COALESCE(SUM(CASE WHEN a.status = 'completed'::booking_status THEN COALESCE(a.total_amount, 0) ELSE 0 END), 0)::numeric(12,2) AS total_revenue\n            FROM booking_archive a\n            WHERE {$where}\n        ");
         $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
@@ -535,7 +535,7 @@ final class BookingRepository
         $params = [];
         $where = $this->buildHistoryWhereClause($filters, $params);
 
-        $sql = "\n            SELECT\n                TO_CHAR(DATE_TRUNC('{$bucket}', (COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')), '{$label}') AS period_label,\n                DATE_TRUNC('{$bucket}', (COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')) AS period_start,\n                COUNT(*)::int AS total_bookings,\n                SUM(CASE WHEN a.status = 'completed'::booking_status THEN 1 ELSE 0 END)::int AS completed_bookings,\n                SUM(CASE WHEN a.status = 'cancelled'::booking_status THEN 1 ELSE 0 END)::int AS cancelled_bookings,\n                COALESCE(SUM(a.total_amount), 0)::numeric(12,2) AS total_revenue\n            FROM booking_archive a\n            WHERE {$where}\n            GROUP BY period_label, period_start\n            ORDER BY period_start DESC\n            LIMIT {$limit}\n        ";
+        $sql = "\n            SELECT\n                TO_CHAR(DATE_TRUNC('{$bucket}', (COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')), '{$label}') AS period_label,\n                DATE_TRUNC('{$bucket}', (COALESCE(a.completed_at, a.cancelled_at, a.archived_at) AT TIME ZONE 'UTC')) AS period_start,\n                COUNT(*)::int AS total_bookings,\n                SUM(CASE WHEN a.status = 'completed'::booking_status THEN 1 ELSE 0 END)::int AS completed_bookings,\n                SUM(CASE WHEN a.status = 'cancelled'::booking_status THEN 1 ELSE 0 END)::int AS cancelled_bookings,\n                COALESCE(SUM(CASE WHEN a.status = 'completed'::booking_status THEN COALESCE(a.total_amount, 0) ELSE 0 END), 0)::numeric(12,2) AS total_revenue\n            FROM booking_archive a\n            WHERE {$where}\n            GROUP BY period_label, period_start\n            ORDER BY period_start DESC\n            LIMIT {$limit}\n        ";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
@@ -1073,6 +1073,9 @@ final class BookingRepository
         $pickupTimeExpr = $this->bookingHasColumn('pickup_time') ? 'b.pickup_time' : 'NULL::text AS pickup_time';
         $passengerExpr = $this->bookingHasColumn('number_of_passengers') ? 'b.number_of_passengers' : 'NULL::int AS number_of_passengers';
         $rideTierExpr = $this->bookingHasColumn('ride_tier') ? 'b.ride_tier' : 'NULL::text AS ride_tier';
+        $subtotalExpr = $this->bookingHasColumn('subtotal') ? 'b.subtotal' : 'NULL::numeric AS subtotal';
+        $discountExpr = $this->bookingHasColumn('discount_amount') ? 'b.discount_amount' : 'NULL::numeric AS discount_amount';
+        $promoCodeExpr = $this->bookingHasColumn('promo_code') ? 'b.promo_code' : 'NULL::text AS promo_code';
         $acceptedExpr = $this->bookingHasColumn('accepted_by_driver_at') ? 'b.accepted_by_driver_at' : 'NULL::timestamptz AS accepted_by_driver_at';
 
         $driverJoin = $this->bookingHasColumn('driver_id')
@@ -1087,7 +1090,8 @@ final class BookingRepository
             SELECT 
                 b.id, b.renter_id, {$driverIdExpr}, b.status, b.booking_type,
                 b.pickup_location, b.pickup_date, {$pickupTimeExpr}, {$serviceTypeExpr},
-                b.total_amount, {$passengerExpr}, {$rideTierExpr},
+                {$subtotalExpr}, {$discountExpr}, b.total_amount, {$promoCodeExpr},
+                {$passengerExpr}, {$rideTierExpr},
                 b.created_at, {$acceptedExpr},
                 u.full_name as user_name, u.phone as user_phone,
                 {$driverInfoExpr}
@@ -1111,6 +1115,9 @@ final class BookingRepository
         $serviceTypeExpr = $this->bookingHasColumn('service_type') ? 'b.service_type' : 'NULL::text AS service_type';
         $passengerExpr = $this->bookingHasColumn('number_of_passengers') ? 'b.number_of_passengers' : 'NULL::int AS number_of_passengers';
         $rideTierExpr = $this->bookingHasColumn('ride_tier') ? 'b.ride_tier' : 'NULL::text AS ride_tier';
+        $subtotalExpr = $this->bookingHasColumn('subtotal') ? 'b.subtotal' : 'NULL::numeric AS subtotal';
+        $discountExpr = $this->bookingHasColumn('discount_amount') ? 'b.discount_amount' : 'NULL::numeric AS discount_amount';
+        $promoCodeExpr = $this->bookingHasColumn('promo_code') ? 'b.promo_code' : 'NULL::text AS promo_code';
         $pickupTimeExpr = $this->bookingHasColumn('pickup_time') ? 'b.pickup_time' : 'NULL::text AS pickup_time';
         $acceptedExpr = $this->bookingHasColumn('accepted_by_driver_at') ? 'b.accepted_by_driver_at' : 'NULL::timestamptz AS accepted_by_driver_at';
         $completedExpr = $this->bookingHasColumn('ride_completed_at') ? 'b.ride_completed_at' : 'NULL::timestamptz AS ride_completed_at';
@@ -1142,7 +1149,8 @@ final class BookingRepository
             SELECT 
                 b.id, b.renter_id, b.owner_id, {$driverIdExpr}, b.vehicle_id, b.status, b.booking_type,
                 b.pickup_location, b.return_location, b.pickup_date, b.return_date,
-                {$serviceTypeExpr}, {$pickupTimeExpr}, b.total_amount, {$passengerExpr},
+                {$serviceTypeExpr}, {$pickupTimeExpr},
+                {$subtotalExpr}, {$discountExpr}, b.total_amount, {$promoCodeExpr}, {$passengerExpr},
                 {$rideTierExpr}, b.special_requests,
                 b.created_at, {$acceptedExpr}, {$completedExpr},
                 u.full_name as user_name, u.phone as user_phone, u.email,

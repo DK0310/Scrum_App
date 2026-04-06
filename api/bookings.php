@@ -82,6 +82,18 @@ if ($action === 'validate-promo') {
             exit;
         }
 
+        if (array_key_exists('total_days', $input)) {
+            $totalDays = max(1, (int)($input['total_days'] ?? 1));
+            $minDays = max(1, (int)($promo['min_booking_days'] ?? 1));
+            if ($totalDays < $minDays) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'This promo requires at least ' . $minDays . ' booking day(s).'
+                ]);
+                exit;
+            }
+        }
+
         echo json_encode([
             'success' => true,
             'promo' => [
@@ -155,7 +167,7 @@ if ($action === 'create') {
     $pickupLocation = $input['pickup_location'] ?? '';
     $returnLocation = $input['return_location'] ?? '';
     $specialRequests = $input['special_requests'] ?? '';
-    $promoCode = $input['promo_code'] ?? '';
+    $promoCode = strtoupper(trim((string)($input['promo_code'] ?? '')));
     $paymentMethod = $input['payment_method'] ?? 'cash';
     $distanceKm = isset($input['distance_km']) ? floatval($input['distance_km']) : null;
     $pickupCoords = isset($input['pickup_coords']) && is_array($input['pickup_coords']) ? $input['pickup_coords'] : [];
@@ -304,21 +316,36 @@ if ($action === 'create') {
         if (!empty($promoCode)) {
             $promo = $promotionRepo->findByCode($promoCode);
 
-            if ($promo) {
-                $minDays = (int)$promo['min_booking_days'];
-                // For minicab (single trip), always treat as 1 day
-                if ($totalDays >= $minDays || $minDays <= 1) {
-                    if ($promo['discount_type'] === 'percentage') {
-                        $discountAmount = round($subtotal * (float)$promo['discount_value'] / 100, 2);
-                    } else {
-                        $discountAmount = min((float)$promo['discount_value'], $subtotal);
-                    }
-                    $appliedPromo = $promo['code'];
-
-                    // Increment usage count
-                    $promotionRepo->incrementUsageCount($promo['id']);
-                }
+            if (!$promo) {
+                echo json_encode(['success' => false, 'message' => 'Invalid or expired promo code.']);
+                exit;
             }
+
+            if ($promo['expires_at'] && strtotime((string)$promo['expires_at']) < time()) {
+                echo json_encode(['success' => false, 'message' => 'This promo code has expired.']);
+                exit;
+            }
+
+            if ($promo['max_uses'] && (int)$promo['total_used'] >= (int)$promo['max_uses']) {
+                echo json_encode(['success' => false, 'message' => 'This promo code has reached its usage limit.']);
+                exit;
+            }
+
+            $minDays = max(1, (int)($promo['min_booking_days'] ?? 1));
+            if ($totalDays < $minDays) {
+                echo json_encode(['success' => false, 'message' => 'This promo requires at least ' . $minDays . ' booking day(s).']);
+                exit;
+            }
+
+            if ($promo['discount_type'] === 'percentage') {
+                $discountAmount = round($subtotal * (float)$promo['discount_value'] / 100, 2);
+            } else {
+                $discountAmount = min((float)$promo['discount_value'], $subtotal);
+            }
+            $appliedPromo = $promo['code'];
+
+            // Increment usage count
+            $promotionRepo->incrementUsageCount($promo['id']);
         }
 
         $totalAmount = max(0, $subtotal - $discountAmount);

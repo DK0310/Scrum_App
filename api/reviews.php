@@ -85,15 +85,38 @@ if ($action === 'submit-review') {
         }
 
         // Loyalty points are awarded only after review submission.
-        // Formula: points = distance_miles + amount_paid
-        $earningStmt = $pdo->prepare("SELECT COALESCE(distance_km, 0) AS distance_km, COALESCE(total_amount, 0) AS total_amount FROM bookings WHERE id = ? LIMIT 1");
+        // Daily Hire uses a fixed table (no distance), other services keep distance+amount formula.
+        $earningStmt = $pdo->prepare("\n            SELECT\n                COALESCE(distance_km, 0) AS distance_km,\n                COALESCE(total_amount, 0) AS total_amount,\n                LOWER(COALESCE(service_type, '')) AS service_type,\n                COALESCE(number_of_passengers, 0) AS number_of_passengers,\n                LOWER(COALESCE(ride_tier, '')) AS ride_tier\n            FROM bookings\n            WHERE id = ?\n            LIMIT 1\n        ");
         $earningStmt->execute([$bookingId]);
-        $earningRow = $earningStmt->fetch(PDO::FETCH_ASSOC) ?: ['distance_km' => 0, 'total_amount' => 0];
+        $earningRow = $earningStmt->fetch(PDO::FETCH_ASSOC) ?: [
+            'distance_km' => 0,
+            'total_amount' => 0,
+            'service_type' => '',
+            'number_of_passengers' => 0,
+            'ride_tier' => '',
+        ];
 
         $distanceKm = (float)($earningRow['distance_km'] ?? 0);
         $distanceMiles = $distanceKm * 0.621371;
         $amountPaid = (float)($earningRow['total_amount'] ?? 0);
-        $earnedPoints = (int)max(0, round($distanceMiles + $amountPaid));
+        $serviceType = strtolower(trim((string)($earningRow['service_type'] ?? '')));
+        $seatRaw = (int)($earningRow['number_of_passengers'] ?? 0);
+        $seatBucket = $seatRaw >= 7 ? 7 : 4;
+        $rideTier = strtolower(trim((string)($earningRow['ride_tier'] ?? '')));
+        if ($rideTier === 'premium') {
+            $rideTier = 'luxury';
+        }
+
+        $dailyHirePointTable = [
+            4 => ['eco' => 140, 'standard' => 180, 'luxury' => 280],
+            7 => ['eco' => 180, 'standard' => 220, 'luxury' => 340],
+        ];
+
+        if ($serviceType === 'daily-hire' && isset($dailyHirePointTable[$seatBucket][$rideTier])) {
+            $earnedPoints = (int)$dailyHirePointTable[$seatBucket][$rideTier];
+        } else {
+            $earnedPoints = (int)max(0, round($distanceMiles + $amountPaid));
+        }
 
         $updatedUser = $userRepo->addLoyaltyPoints($userId, $earnedPoints);
         $currentPoints = (int)($updatedUser['loyalty_point'] ?? $userRepo->getLoyaltyPoint($userId));
