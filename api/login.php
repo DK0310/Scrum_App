@@ -26,11 +26,30 @@ function getReturnTo(): string {
     return $returnTo;
 }
 
-function redirectBackWithFlash(string $type, string $message): void {
-    $_SESSION['login_flash'] = [
+function formatLockDuration(int $seconds): string {
+    $seconds = max(0, $seconds);
+    $units = [
+        86400 => 'day',
+        3600 => 'hour',
+        60 => 'minute',
+        1 => 'second',
+    ];
+
+    foreach ($units as $unitSeconds => $unitName) {
+        if ($seconds >= $unitSeconds) {
+            $value = (int)ceil($seconds / $unitSeconds);
+            return $value . ' ' . $unitName . ($value === 1 ? '' : 's');
+        }
+    }
+
+    return '0 seconds';
+}
+
+function redirectBackWithFlash(string $type, string $message, array $extra = []): void {
+    $_SESSION['login_flash'] = array_merge([
         'type' => $type,
         'message' => $message
-    ];
+    ], $extra);
 
     // Force session data to be written before redirecting.
     session_write_close();
@@ -80,14 +99,50 @@ try {
 
         // Find user by email or phone
         $user = $authRepo->findUserByEmailOrUsername($identifier);
+        $throttleKey = $authRepo->buildLoginThrottleKey($identifier, $user ?: null);
+
+        $throttleState = $authRepo->getLoginThrottleState($throttleKey);
+        if (!empty($throttleState['is_locked'])) {
+            $remainingSeconds = (int)($throttleState['remaining_seconds'] ?? 0);
+            $response['message'] = 'Too many failed login attempts. Please try again in ' . formatLockDuration($remainingSeconds) . '.';
+            $_SESSION['login_old_identifier'] = $identifier;
+            $response['locked'] = true;
+            $response['retry_after_seconds'] = $remainingSeconds;
+            $response['lock_expires_at'] = time() + $remainingSeconds;
+            if ($wantsJson) {
+                echo json_encode($response);
+            } else {
+                redirectBackWithFlash('error', $response['message'], [
+                    'locked' => true,
+                    'retry_after_seconds' => $remainingSeconds,
+                    'lock_expires_at' => time() + $remainingSeconds,
+                ]);
+            }
+            exit;
+        }
 
         if (!$user) {
-            $response['message'] = 'Invalid email/phone or password';
+            $failedState = $authRepo->recordFailedLoginAttempt($throttleKey);
+            if (!empty($failedState['is_locked'])) {
+                $lockSeconds = (int)($failedState['lock_applied_seconds'] ?? 0);
+                $response['message'] = 'Too many failed login attempts. Login is locked for ' . formatLockDuration($lockSeconds) . '.';
+                $response['locked'] = true;
+                $response['retry_after_seconds'] = (int)($failedState['remaining_seconds'] ?? $lockSeconds);
+                $response['lock_expires_at'] = time() + (int)$response['retry_after_seconds'];
+            } else {
+                $remainingAttempts = (int)($failedState['remaining_attempts_before_lock'] ?? 0);
+                $response['message'] = 'Invalid email/phone or password. ' . $remainingAttempts . ' attempt(s) left before temporary lock.';
+                $response['locked'] = false;
+            }
             $_SESSION['login_old_identifier'] = $identifier;
             if ($wantsJson) {
                 echo json_encode($response);
             } else {
-                redirectBackWithFlash('error', $response['message']);
+                redirectBackWithFlash('error', $response['message'], [
+                    'locked' => (bool)($response['locked'] ?? false),
+                    'retry_after_seconds' => (int)($response['retry_after_seconds'] ?? 0),
+                    'lock_expires_at' => (int)($response['lock_expires_at'] ?? 0),
+                ]);
             }
             exit;
         }
@@ -105,12 +160,27 @@ try {
 
         // Verify password
         if (!$authRepo->verifyPassword($password, $user['password_hash'])) {
-            $response['message'] = 'Invalid email/phone or password';
+            $failedState = $authRepo->recordFailedLoginAttempt($throttleKey);
+            if (!empty($failedState['is_locked'])) {
+                $lockSeconds = (int)($failedState['lock_applied_seconds'] ?? 0);
+                $response['message'] = 'Too many failed login attempts. Login is locked for ' . formatLockDuration($lockSeconds) . '.';
+                $response['locked'] = true;
+                $response['retry_after_seconds'] = (int)($failedState['remaining_seconds'] ?? $lockSeconds);
+                $response['lock_expires_at'] = time() + (int)$response['retry_after_seconds'];
+            } else {
+                $remainingAttempts = (int)($failedState['remaining_attempts_before_lock'] ?? 0);
+                $response['message'] = 'Invalid email/phone or password. ' . $remainingAttempts . ' attempt(s) left before temporary lock.';
+                $response['locked'] = false;
+            }
             $_SESSION['login_old_identifier'] = $identifier;
             if ($wantsJson) {
                 echo json_encode($response);
             } else {
-                redirectBackWithFlash('error', $response['message']);
+                redirectBackWithFlash('error', $response['message'], [
+                    'locked' => (bool)($response['locked'] ?? false),
+                    'retry_after_seconds' => (int)($response['retry_after_seconds'] ?? 0),
+                    'lock_expires_at' => (int)($response['lock_expires_at'] ?? 0),
+                ]);
             }
             exit;
         }
@@ -124,6 +194,9 @@ try {
         $_SESSION['role'] = $user['role'];
         $_SESSION['full_name'] = $user['full_name'] ?: $user['email'];
         unset($_SESSION['login_old_identifier'], $_SESSION['login_flash']);
+
+        // Successful login resets progressive lockout sequence.
+        $authRepo->resetLoginThrottle($throttleKey);
 
         // Update last login
         $authRepo->updateLastLogin($user['id']);

@@ -137,6 +137,77 @@ function appendVehicleCustomerFields(array &$vehicle): void {
     $vehicle['luggage_capacity_lbs'] = toOptionalCapacityLbs($vehicle['capacity'] ?? null);
 }
 
+/**
+ * @param array<int,string> $vehicleIds
+ * @return array<string,bool>
+ */
+function getOnServiceVehicleIdMap(PDO $pdo, array $vehicleIds): array {
+    $vehicleIds = array_values(array_unique(array_filter(array_map(static function ($id) {
+        return trim((string)$id);
+    }, $vehicleIds), static function ($id) {
+        return $id !== '';
+    })));
+
+    if (empty($vehicleIds)) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($vehicleIds), '?'));
+    $sql = "
+        SELECT DISTINCT b.vehicle_id::text AS vehicle_id
+        FROM bookings b
+        WHERE b.vehicle_id IS NOT NULL
+          AND b.vehicle_id::text IN ({$placeholders})
+          AND REPLACE(LOWER(COALESCE(b.status::text, '')), '-', '_') = 'in_progress'
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($vehicleIds);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $map = [];
+    foreach ($rows as $row) {
+        $id = trim((string)($row['vehicle_id'] ?? ''));
+        if ($id !== '') {
+            $map[$id] = true;
+        }
+    }
+
+    return $map;
+}
+
+/**
+ * Customer-facing normalization only (display status), DB data is unchanged.
+ * @param array<int,array<string,mixed>> $vehicles
+ */
+function applyCustomerOnServiceAvailability(PDO $pdo, array &$vehicles): void {
+    if (empty($vehicles)) {
+        return;
+    }
+
+    $ids = [];
+    foreach ($vehicles as $v) {
+        $ids[] = (string)($v['id'] ?? '');
+    }
+
+    $onServiceMap = getOnServiceVehicleIdMap($pdo, $ids);
+
+    foreach ($vehicles as &$vehicle) {
+        $vehicleId = trim((string)($vehicle['id'] ?? ''));
+        $isOnService = $vehicleId !== '' && isset($onServiceMap[$vehicleId]);
+        $vehicle['is_on_service'] = $isOnService;
+
+        if ($isOnService) {
+            $rawStatus = strtolower(trim((string)($vehicle['status'] ?? 'available')));
+            if ($rawStatus === '' || $rawStatus === 'available') {
+                // Keep customer UX consistent: on-service vehicles are not available now.
+                $vehicle['status'] = 'rented';
+            }
+        }
+    }
+    unset($vehicle);
+}
+
 function parseMinicabPickupDateTimeVehicles(?string $pickupDateRaw, ?string $pickupTimeRaw = null): ?DateTimeImmutable {
     $pickupDateRaw = trim((string)$pickupDateRaw);
     if ($pickupDateRaw === '') {
@@ -734,6 +805,7 @@ if ($action === 'public-list') {
 
     try {
         $vehicles = $vehicleRepo->listPublic(['brand' => (string)$brand, 'search' => (string)$search, 'limit' => (int)$limit]);
+        applyCustomerOnServiceAvailability($pdo, $vehicles);
 
         // Attach first image (thumbnail if present) as vehicle_image
         foreach ($vehicles as &$v) {
@@ -777,6 +849,7 @@ if ($action === 'list') {
         $res = $vehicleRepo->listAvailable($filters);
         $vehicles = $res['vehicles'];
         $total = $res['total'];
+        applyCustomerOnServiceAvailability($pdo, $vehicles);
 
         foreach ($vehicles as &$v) {
             $v['images'] = getVehicleImageUrls($pdo, $v['id']);
@@ -823,6 +896,10 @@ if ($action === 'get') {
             echo json_encode(['success' => false, 'message' => 'Vehicle not found.']);
             exit;
         }
+
+        $singleVehicle = [$vehicle];
+        applyCustomerOnServiceAvailability($pdo, $singleVehicle);
+        $vehicle = $singleVehicle[0];
 
         $vehicle['images'] = getVehicleImageUrls($pdo, $vehicle['id']);
         $vehicle['image_ids'] = getVehicleImageIds($pdo, $vehicle['id']);

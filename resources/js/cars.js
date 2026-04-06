@@ -872,8 +872,9 @@
     // Check if car is available
     const car = allLoadedCars.find(c => c.id === carId);
     if (car && !isVehicleAvailableForCustomer(car.status)) {
-      if (typeof showToast === 'function') showToast('This vehicle is not available for booking right now.', 'warning');
-      return;
+      if (typeof showToast === 'function') {
+        showToast('This vehicle is currently on service. You can still book another time slot.', 'warning');
+      }
     }
     window.location.href = '/booking.php?car_id=' + encodeURIComponent(carId);
   }

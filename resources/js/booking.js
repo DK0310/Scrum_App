@@ -138,6 +138,7 @@
       scheduledDateOnly: readElementValue('scheduledDateOnly'),
       scheduledTimeSlot: readElementValue('scheduledTimeSlot'),
       scheduledDateTime: readElementValue('scheduledDateTime'),
+      dailyHireReturnDateTime: readElementValue('dailyHireReturnDateTime'),
       pickupLocation: readElementValue('pickupLocation'),
       returnLocation: readElementValue('returnLocation'),
       specialRequests: readElementValue('specialRequests'),
@@ -202,6 +203,7 @@
       'returnDate',
       'scheduledDateOnly',
       'scheduledTimeSlot',
+      'dailyHireReturnDateTime',
       'pickupLocation',
       'returnLocation',
       'specialRequests',
@@ -269,8 +271,15 @@
     const pickupLoc = readElementValue('pickupLocation').trim();
     const scheduledVal = readElementValue('scheduledDateTime').trim();
     const returnLoc = readElementValue('returnLocation').trim();
+    const isDailyHire = isDailyHireServiceType(readElementValue('serviceType'));
+    const dailyHireReturnDateTime = readElementValue('dailyHireReturnDateTime').trim();
 
-    return !!pickupLoc && !!scheduledVal && !!returnLoc && !!selectedRideTier && Number(rideFare) > 0;
+    return !!pickupLoc
+      && !!scheduledVal
+      && !!returnLoc
+      && !!selectedRideTier
+      && Number(rideFare) > 0
+      && (!isDailyHire || !!dailyHireReturnDateTime);
   }
 
   function restoreBookingDraftState() {
@@ -322,6 +331,7 @@
       setElementValueIfPresent('returnDate', draft.returnDate || '');
       setElementValueIfPresent('scheduledDateOnly', draft.scheduledDateOnly || '');
       setElementValueIfPresent('scheduledTimeSlot', draft.scheduledTimeSlot || '');
+      setElementValueIfPresent('dailyHireReturnDateTime', draft.dailyHireReturnDateTime || '');
 
       if ((!draft.scheduledDateOnly || !draft.scheduledTimeSlot) && draft.scheduledDateTime) {
         const dtParts = parseLocalDateTimeParts(draft.scheduledDateTime);
@@ -332,6 +342,7 @@
       }
 
       syncScheduledDateTimeFromParts();
+      updateDailyHireReturnDateTimeState();
 
       setElementValueIfPresent('pickupLocation', draft.pickupLocation || '');
       setElementValueIfPresent('returnLocation', draft.returnLocation || '');
@@ -400,6 +411,130 @@
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  function parseDateTimeLocalValue(datetimeLocalValue) {
+    const value = String(datetimeLocalValue || '').trim();
+    if (!value || !value.includes('T')) {
+      return null;
+    }
+
+    const parts = value.split('T');
+    if (parts.length !== 2) {
+      return null;
+    }
+
+    const dateParts = parts[0].split('-');
+    const timeParts = parts[1].split(':');
+    if (dateParts.length !== 3 || timeParts.length < 2) {
+      return null;
+    }
+
+    const year = Number(dateParts[0]);
+    const month = Number(dateParts[1]);
+    const day = Number(dateParts[2]);
+    const hour = Number(timeParts[0]);
+    const minute = Number(timeParts[1]);
+
+    if (![year, month, day, hour, minute].every(Number.isFinite)) {
+      return null;
+    }
+
+    const dt = new Date(year, month - 1, day, hour, minute, 0, 0);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function formatDateTimeLocalDisplay(datetimeLocalValue) {
+    const dt = parseDateTimeLocalValue(datetimeLocalValue);
+    if (!dt) {
+      return '-';
+    }
+
+    return dt.toLocaleString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function calculateDailyHireDurationDays() {
+    const pickupVal = readElementValue('scheduledDateTime').trim();
+    const returnVal = readElementValue('dailyHireReturnDateTime').trim();
+    const pickup = parseDateTimeLocalValue(pickupVal);
+    const ret = parseDateTimeLocalValue(returnVal);
+
+    if (!pickup || !ret) {
+      return { valid: false, days: 1, reason: 'missing' };
+    }
+
+    const diffMs = ret.getTime() - pickup.getTime();
+    if (diffMs <= 0) {
+      return { valid: false, days: 1, reason: 'invalid_range' };
+    }
+
+    const pickupDayUtc = Date.UTC(pickup.getFullYear(), pickup.getMonth(), pickup.getDate());
+    const returnDayUtc = Date.UTC(ret.getFullYear(), ret.getMonth(), ret.getDate());
+    const calendarDayDiff = Math.max(0, Math.round((returnDayUtc - pickupDayUtc) / 86400000));
+
+    return {
+      valid: true,
+      days: Math.max(1, calendarDayDiff),
+      reason: ''
+    };
+  }
+
+  function normalizeLocationText(value) {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/[\.,;\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function isSamePickupAndDestinationLocation() {
+    const pickupText = normalizeLocationText(readElementValue('pickupLocation'));
+    const destinationText = normalizeLocationText(readElementValue('returnLocation'));
+
+    if (pickupText && destinationText && pickupText === destinationText) {
+      return true;
+    }
+
+    const pickupAddr = selectedAddresses && selectedAddresses.pickup ? selectedAddresses.pickup : null;
+    const returnAddr = selectedAddresses && selectedAddresses['return'] ? selectedAddresses['return'] : null;
+    if (!pickupAddr || !returnAddr) {
+      return false;
+    }
+
+    const pickupLat = Number(pickupAddr.lat);
+    const pickupLon = Number(pickupAddr.lon);
+    const returnLat = Number(returnAddr.lat);
+    const returnLon = Number(returnAddr.lon);
+    if (![pickupLat, pickupLon, returnLat, returnLon].every(Number.isFinite)) {
+      return false;
+    }
+
+    return haversineDistance(pickupLat, pickupLon, returnLat, returnLon) < 0.05;
+  }
+
+  function updateDailyHireReturnDateTimeState() {
+    const group = document.getElementById('dailyHireReturnDateTimeGroup');
+    const input = document.getElementById('dailyHireReturnDateTime');
+    if (!group || !input) {
+      return;
+    }
+
+    const isDailyHire = selectedBookingType === 'minicab' && isDailyHireServiceType(getCurrentMinicabServiceType());
+    group.style.display = isDailyHire ? 'block' : 'none';
+
+    if (!isDailyHire) {
+      return;
+    }
+
+    const scheduledVal = readElementValue('scheduledDateTime').trim();
+    input.min = scheduledVal || getMinScheduledDateTimeValue();
   }
 
   function formatTimeSlotLabel(timeValue) {
@@ -647,15 +782,18 @@
     if (scheduledDateEl && scheduledTimeEl) {
       refreshScheduledDateTimeConstraint(true);
       renderScheduledTimeSlots([]);
+      updateDailyHireReturnDateTimeState();
 
       scheduledDateEl.addEventListener('focus', function() {
         refreshScheduledDateTimeConstraint(true);
+        updateDailyHireReturnDateTimeState();
       });
 
       scheduledDateEl.addEventListener('change', function() {
         refreshScheduledDateTimeConstraint(false);
         renderScheduledTimeSlots([]);
         syncScheduledDateTimeFromParts();
+        updateDailyHireReturnDateTimeState();
         validatePickupDateTime();
         updateTripSummary();
         scheduleRealtimeSlotRefresh(100);
@@ -663,6 +801,7 @@
 
       scheduledTimeEl.addEventListener('change', function() {
         syncScheduledDateTimeFromParts();
+        updateDailyHireReturnDateTimeState();
         validatePickupDateTime();
         updateTripSummary();
         checkAvailableTiers(selectedSeatCapacity);
@@ -671,11 +810,23 @@
       scheduledDateEl.addEventListener('blur', function() {
         refreshScheduledDateTimeConstraint(true);
         renderScheduledTimeSlots([]);
+        updateDailyHireReturnDateTimeState();
         scheduleRealtimeSlotRefresh(120);
       });
 
       scheduledTimeEl.addEventListener('blur', function() {
         syncScheduledDateTimeFromParts();
+      });
+    }
+
+    const dailyHireReturnDateTimeEl = document.getElementById('dailyHireReturnDateTime');
+    if (dailyHireReturnDateTimeEl) {
+      dailyHireReturnDateTimeEl.min = getMinScheduledDateTimeValue();
+      dailyHireReturnDateTimeEl.addEventListener('change', function() {
+        updateTripSummary();
+      });
+      dailyHireReturnDateTimeEl.addEventListener('input', function() {
+        scheduleBookingDraftSave(120);
       });
     }
 
@@ -1012,6 +1163,7 @@
     }
 
     calculateRouteDistance();
+    updateDailyHireReturnDateTimeState();
     updateTripSummary();
     scheduleBookingDraftSave(120);
   }
@@ -1031,6 +1183,7 @@
     const hotelSelectWrapper = document.getElementById('hotelSelectWrapper');
     const returnLocation = document.getElementById('returnLocation');
     const returnLocationLabel = document.getElementById('returnLocationLabel');
+    const dailyHireReturnDateTime = document.getElementById('dailyHireReturnDateTime');
 
     if (isAirport) {
       if (returnInputWrapper) returnInputWrapper.style.display = 'none';
@@ -1060,11 +1213,16 @@
       if (returnLocation) returnLocation.placeholder = 'Where do you want to go?';
     }
 
+    if (!isDailyHire && dailyHireReturnDateTime) {
+      dailyHireReturnDateTime.value = '';
+    }
+
     if (returnLocation) {
       returnLocation.required = true;
     }
 
     updateRideTierVisibility();
+    updateDailyHireReturnDateTimeState();
 
     calculateRouteDistance();
     updateTripSummary();
@@ -1328,21 +1486,40 @@
       if (summaryDiv) summaryDiv.style.display = 'none';
 
       const hasPickupTime = !!document.getElementById('scheduledDateTime').value;
+      const dailyHireDuration = isDailyHire ? calculateDailyHireDurationDays() : { valid: true, days: 1, reason: '' };
       if (hasPickupTime) {
         if (summaryDiv) summaryDiv.style.display = 'block';
         const summaryDurationRow = document.getElementById('summaryDurationRow');
         const summaryRateRow = document.getElementById('summaryRateRow');
-        if (summaryDurationRow) summaryDurationRow.style.display = 'none';
-        if (summaryRateRow) summaryRateRow.style.display = 'none';
+        if (summaryDurationRow) summaryDurationRow.style.display = isDailyHire ? '' : 'none';
+        if (summaryRateRow) summaryRateRow.style.display = isDailyHire ? '' : 'none';
+
+        if (isDailyHire && !dailyHireDuration.valid) {
+          rideFare = null;
+          const summaryTotal = document.getElementById('summaryTotal');
+          if (summaryTotal) {
+            summaryTotal.textContent = dailyHireDuration.reason === 'invalid_range'
+              ? 'Return must be after pick-up'
+              : 'Select return date & time';
+          }
+          const miniTier = document.getElementById('miniSummaryTier');
+          if (miniTier) miniTier.textContent = selectedRideTier ? miniTier.textContent : 'Select tier';
+          const miniFare = document.getElementById('miniSummaryFare');
+          if (miniFare) miniFare.textContent = 'Select return date & time';
+          const miniDistance = document.getElementById('miniSummaryDistance');
+          if (miniDistance) miniDistance.textContent = 'Select return date & time';
+          return;
+        }
 
         if (selectedRideTier && (isDailyHire || calculatedDistance !== null)) {
           const tierLabels = { eco: '🌿 Eco', standard: '⭐ Standard', luxury: '👑 Luxury' };
           const rate = getOnlineRatePerMile(selectedRideTier, selectedSeatCapacity);
           const dailyRate = getDailyHireRate(selectedRideTier, selectedSeatCapacity);
           const distanceMiles = Number.isFinite(calculatedDistance) ? (calculatedDistance * 0.621371) : null;
+          const dailyHireDays = isDailyHire ? dailyHireDuration.days : 1;
 
           if (isDailyHire) {
-            rideFare = dailyRate;
+            rideFare = Math.round(dailyRate * dailyHireDays * 100) / 100;
           } else {
             rideFare = Math.round(distanceMiles * rate * 100) / 100;
           }
@@ -1354,6 +1531,13 @@
               ? ((tierLabels[selectedRideTier] || '') + ' · ' + selectedSeatCapacity + ' seats (£' + dailyRate.toFixed(2) + '/day)')
               : ((tierLabels[selectedRideTier] || '') + ' · ' + selectedSeatCapacity + ' seats (£' + rate.toFixed(2) + '/mile)');
           }
+
+          if (isDailyHire) {
+            const summaryDays = document.getElementById('summaryDays');
+            const summaryRate = document.getElementById('summaryRate');
+            if (summaryDays) summaryDays.textContent = dailyHireDays + ' day' + (dailyHireDays > 1 ? 's' : '');
+            if (summaryRate) summaryRate.textContent = '£' + dailyRate.toFixed(2) + '/day';
+          }
           
           if (summaryFareRow) summaryFareRow.style.display = '';
           const summaryFare = document.getElementById('summaryFare');
@@ -1364,7 +1548,11 @@
           const miniFare = document.getElementById('miniSummaryFare');
           if (miniFare) miniFare.textContent = '£' + rideFare.toFixed(2);
           const miniDistance = document.getElementById('miniSummaryDistance');
-          if (miniDistance) miniDistance.textContent = isDailyHire ? 'Not required for Daily Hire' : (distanceMiles.toFixed(1) + ' miles');
+          if (miniDistance) {
+            miniDistance.textContent = isDailyHire
+              ? (dailyHireDays + ' day' + (dailyHireDays > 1 ? 's' : ''))
+              : (distanceMiles.toFixed(1) + ' miles');
+          }
           
           const summaryTotal = document.getElementById('summaryTotal');
           if (summaryTotal) summaryTotal.textContent = '£' + rideFare.toFixed(2);
@@ -1381,7 +1569,9 @@
           const miniDistance = document.getElementById('miniSummaryDistance');
           if (miniDistance) {
             miniDistance.textContent = isDailyHire
-              ? 'Not required for Daily Hire'
+              ? (dailyHireDuration.valid
+                ? (dailyHireDuration.days + ' day' + (dailyHireDuration.days > 1 ? 's' : ''))
+                : 'Select return date & time')
               : (calculatedDistance !== null ? (calculatedDistance * 0.621371).toFixed(1) + ' miles' : 'Set locations first');
           }
         }
@@ -1392,7 +1582,7 @@
         const miniFare = document.getElementById('miniSummaryFare');
         if (miniFare) miniFare.textContent = 'Pick date & time first';
         const miniDistance = document.getElementById('miniSummaryDistance');
-        if (miniDistance) miniDistance.textContent = isDailyHire ? 'Not required for Daily Hire' : (calculatedDistance !== null ? (calculatedDistance * 0.621371).toFixed(1) + ' miles' : 'Set locations first');
+        if (miniDistance) miniDistance.textContent = isDailyHire ? 'Pick date/time first' : (calculatedDistance !== null ? (calculatedDistance * 0.621371).toFixed(1) + ' miles' : 'Set locations first');
       }
       return;
     }
@@ -1492,10 +1682,35 @@
       const serviceTypeVal = serviceType ? serviceType.value : '';
       const isDailyHire = isDailyHireServiceType(serviceTypeVal);
 
+      if (isDailyHire) {
+        const dailyHireReturnDateTime = readElementValue('dailyHireReturnDateTime').trim();
+        if (!dailyHireReturnDateTime) {
+          if (typeof showToast === 'function') showToast('Please select Daily Hire return date and time.', 'warning');
+          return;
+        }
+
+        const durationCheck = calculateDailyHireDurationDays();
+        if (!durationCheck.valid) {
+          if (typeof showToast === 'function') {
+            showToast(
+              durationCheck.reason === 'invalid_range'
+                ? 'Return date and time must be later than pickup date and time.'
+                : 'Please provide valid pickup and return date/time for Daily Hire.',
+              'warning'
+            );
+          }
+          return;
+        }
+      }
+
       const returnLocation = document.getElementById('returnLocation');
       const destLoc = returnLocation ? returnLocation.value.trim() : '';
       if (!destLoc) {
         if (typeof showToast === 'function') showToast('Please enter a destination.', 'warning');
+        return;
+      }
+      if (!isDailyHire && isSamePickupAndDestinationLocation()) {
+        if (typeof showToast === 'function') showToast('Pick-up and destination cannot be the same location. Please choose a different destination.', 'warning');
         return;
       }
       const latestTierAvailability = await checkAvailableTiers(selectedSeatCapacity);
@@ -1510,7 +1725,10 @@
       }
 
       if (isDailyHire && selectedRideTier) {
-        rideFare = getDailyHireRate(selectedRideTier, selectedSeatCapacity);
+        const duration = calculateDailyHireDurationDays();
+        rideFare = duration.valid
+          ? Math.round(getDailyHireRate(selectedRideTier, selectedSeatCapacity) * duration.days * 100) / 100
+          : null;
       }
 
       if (rideFare === null || rideFare <= 0) {
@@ -1587,8 +1805,17 @@
       const serviceType = document.getElementById('serviceType');
       const serviceTypeVal = serviceType ? serviceType.value : '';
       const isDailyHire = isDailyHireServiceType(serviceTypeVal);
+      const dailyHireDuration = isDailyHire ? calculateDailyHireDurationDays() : { valid: true, days: 1, reason: '' };
+      const dailyHireDays = (isDailyHire && dailyHireDuration.valid) ? dailyHireDuration.days : 1;
       const rate = getOnlineRatePerMile(selectedRideTier, selectedSeatCapacity);
       const dailyRate = getDailyHireRate(selectedRideTier, selectedSeatCapacity);
+      const minicabSubtotal = isDailyHire
+        ? Math.round(dailyRate * dailyHireDays * 100) / 100
+        : (rideFare || 0);
+
+      if (isDailyHire) {
+        rideFare = minicabSubtotal;
+      }
 
       const paymentCarTitle = document.getElementById('paymentCarTitle');
       if (paymentCarTitle) paymentCarTitle.textContent = tierLabels[selectedRideTier] || 'Minicab';
@@ -1615,7 +1842,13 @@
       }
 
       const paymentReturnRow = document.getElementById('paymentReturnRow');
-      if (paymentReturnRow) paymentReturnRow.style.display = 'none';
+      if (paymentReturnRow) paymentReturnRow.style.display = isDailyHire ? '' : 'none';
+
+      const paymentReturnDate = document.getElementById('paymentReturnDate');
+      if (paymentReturnDate) {
+        const returnDateTime = readElementValue('dailyHireReturnDateTime').trim();
+        paymentReturnDate.textContent = isDailyHire ? formatDateTimeLocalDisplay(returnDateTime) : '-';
+      }
       
       const paymentReturnLocRow = document.getElementById('paymentReturnLocRow');
       if (paymentReturnLocRow) paymentReturnLocRow.style.display = '';
@@ -1636,10 +1869,14 @@
       if (paymentDaysRow) paymentDaysRow.style.display = '';
       
       const paymentDaysLabel = document.getElementById('paymentDaysLabel');
-      if (paymentDaysLabel) paymentDaysLabel.textContent = isDailyHire ? '1 day package' : (calculatedDistance ? (calculatedDistance * 0.621371).toFixed(1) + ' miles' : '-');
+      if (paymentDaysLabel) {
+        paymentDaysLabel.textContent = isDailyHire
+          ? (dailyHireDays + ' day' + (dailyHireDays > 1 ? 's' : ''))
+          : (calculatedDistance ? (calculatedDistance * 0.621371).toFixed(1) + ' miles' : '-');
+      }
       
       const paymentSubtotal = document.getElementById('paymentSubtotal');
-      if (paymentSubtotal) paymentSubtotal.textContent = '£' + (rideFare || (isDailyHire ? dailyRate : 0)).toFixed(2);
+      if (paymentSubtotal) paymentSubtotal.textContent = '£' + minicabSubtotal.toFixed(2);
 
       const paymentDistanceRow = document.getElementById('paymentDistanceRow');
       if (paymentDistanceRow) paymentDistanceRow.style.display = isDailyHire ? 'none' : '';
@@ -1846,7 +2083,15 @@
 
     const isMinicab = selectedBookingType === 'minicab';
     let totalDaysForPromo = 1;
-    if (!isMinicab) {
+    if (isMinicab) {
+      const serviceTypeVal = getCurrentMinicabServiceType();
+      if (isDailyHireServiceType(serviceTypeVal)) {
+        const duration = calculateDailyHireDurationDays();
+        if (duration.valid) {
+          totalDaysForPromo = duration.days;
+        }
+      }
+    } else {
       const pickup = document.getElementById('pickupDate');
       const ret = document.getElementById('returnDate');
       const pickupVal = pickup ? pickup.value : '';
@@ -2044,18 +2289,32 @@
       const serviceType = document.getElementById('serviceType');
       const serviceTypeVal = serviceType ? serviceType.value : '';
       const isDailyHire = isDailyHireServiceType(serviceTypeVal);
+      const dailyHireDuration = isDailyHire ? calculateDailyHireDurationDays() : { valid: true, days: 1, reason: '' };
       payload.ride_tier = selectedRideTier;
       payload.seat_capacity = selectedSeatCapacity;
       payload.number_of_passengers = selectedSeatCapacity;
       payload.return_location = returnLocation ? returnLocation.value.trim() : '';
       payload.return_date = null;
-      payload.ride_fare = isDailyHire ? getDailyHireRate(selectedRideTier, selectedSeatCapacity) : rideFare;
+      payload.return_time = null;
+      payload.total_days = 1;
+      payload.ride_fare = isDailyHire
+        ? (dailyHireDuration.valid
+          ? Math.round(getDailyHireRate(selectedRideTier, selectedSeatCapacity) * dailyHireDuration.days * 100) / 100
+          : 0)
+        : rideFare;
       payload.service_type = serviceTypeVal;
       payload.ride_timing = 'schedule';
       payload.distance_km = isDailyHire ? null : calculatedDistance;
       const scheduledDateTime = document.getElementById('scheduledDateTime');
       payload.pickup_date = scheduledDateTime ? scheduledDateTime.value : '';
       payload.pickup_time = extractPickupTime(scheduledDateTime ? scheduledDateTime.value : '');
+
+      if (isDailyHire) {
+        const returnDateTimeValue = readElementValue('dailyHireReturnDateTime').trim();
+        payload.return_date = returnDateTimeValue || null;
+        payload.return_time = extractPickupTime(returnDateTimeValue);
+        payload.total_days = dailyHireDuration.valid ? dailyHireDuration.days : 1;
+      }
     } else {
       payload.vehicle_id = CAR_ID;
       const returnDate = document.getElementById('returnDate');

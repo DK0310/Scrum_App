@@ -52,6 +52,55 @@ function getAppBaseUrl(): string {
     return $scheme . '://' . $host;
 }
 
+function parseScheduledDateTimeForBooking(?string $dateRaw, ?string $timeRaw = null): ?DateTimeImmutable {
+    $dateRaw = trim((string)$dateRaw);
+    if ($dateRaw === '') {
+        return null;
+    }
+
+    $timezone = new DateTimeZone('UTC');
+
+    if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $dateRaw) === 1) {
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d\\TH:i', $dateRaw, $timezone);
+        if ($dt instanceof DateTimeImmutable) {
+            return $dt;
+        }
+    }
+
+    try {
+        $baseDate = new DateTimeImmutable($dateRaw, $timezone);
+    } catch (Throwable $e) {
+        return null;
+    }
+
+    $timeRaw = strtoupper(str_replace(' ', '', trim((string)$timeRaw)));
+    if ($timeRaw === '') {
+        return $baseDate;
+    }
+
+    $datePart = $baseDate->format('Y-m-d');
+    $formats = ['Y-m-d h:iA', 'Y-m-d H:i:s', 'Y-m-d H:i'];
+    foreach ($formats as $format) {
+        $candidate = DateTimeImmutable::createFromFormat($format, $datePart . ' ' . $timeRaw, $timezone);
+        if ($candidate instanceof DateTimeImmutable) {
+            return $candidate;
+        }
+    }
+
+    return null;
+}
+
+function normalizeLocationForComparison(?string $value): string {
+    $value = strtolower(trim((string)$value));
+    if ($value === '') {
+        return '';
+    }
+
+    $value = preg_replace('/[\.,;\-]+/', ' ', $value);
+    $value = preg_replace('/\s+/', ' ', $value);
+    return trim((string)$value);
+}
+
 // ==========================================================
 // VALIDATE PROMO CODE
 // ==========================================================
@@ -164,6 +213,7 @@ if ($action === 'create') {
     $pickupDate = $input['pickup_date'] ?? '';
     $pickupTime = $input['pickup_time'] ?? ''; // e.g., "08:00AM", "12:00PM"
     $returnDate = $input['return_date'] ?? null;
+    $returnTime = $input['return_time'] ?? '';
     $pickupLocation = $input['pickup_location'] ?? '';
     $returnLocation = $input['return_location'] ?? '';
     $specialRequests = $input['special_requests'] ?? '';
@@ -178,6 +228,9 @@ if ($action === 'create') {
     $serviceType = strtolower(trim((string)($input['service_type'] ?? 'local'))); // 'local', 'long-distance', 'airport-transfer', 'hotel-transfer', 'daily-hire'
     $rideTiming = strtolower(trim((string)($input['ride_timing'] ?? '')));
     $requestWindow = null;
+    $pickupLocationNormalized = normalizeLocationForComparison((string)$pickupLocation);
+    $returnLocationNormalized = normalizeLocationForComparison((string)$returnLocation);
+    $isSameNonDailyHireLocation = false;
 
     // Single workflow policy: minicab + schedule only
     if ($bookingType !== 'minicab') {
@@ -209,9 +262,24 @@ if ($action === 'create') {
             echo json_encode(['success' => false, 'message' => 'Please select a valid service type.']);
             exit;
         }
+        if ($serviceType === 'daily-hire' && empty($returnDate)) {
+            echo json_encode(['success' => false, 'message' => 'Return date and time are required for Daily Hire.']);
+            exit;
+        }
         if ($serviceType !== 'daily-hire' && empty($returnLocation)) {
             echo json_encode(['success' => false, 'message' => 'Destination location is required for minicab booking.']);
             exit;
+        }
+        if ($serviceType !== 'daily-hire') {
+            $isSameNonDailyHireLocation = (
+                $pickupLocationNormalized !== ''
+                && $returnLocationNormalized !== ''
+                && $pickupLocationNormalized === $returnLocationNormalized
+            );
+            if ($isSameNonDailyHireLocation) {
+                echo json_encode(['success' => false, 'message' => 'Pick-up and destination cannot be the same location. Please choose a different destination.']);
+                exit;
+            }
         }
 
         $requestWindow = $bookingRepo->buildMinicabRequestWindow($pickupDate, $pickupTime, $distanceKm, $serviceType);
@@ -285,11 +353,33 @@ if ($action === 'create') {
                     exit;
                 }
 
-                $subtotal = (float)$dailyHirePrice;
+                $returnAt = parseScheduledDateTimeForBooking((string)$returnDate, (string)$returnTime);
+                if (!$returnAt) {
+                    echo json_encode(['success' => false, 'message' => 'Invalid Daily Hire return date/time.']);
+                    exit;
+                }
+
+                if ($returnAt <= $requestWindow['pickup_at']) {
+                    echo json_encode(['success' => false, 'message' => 'Daily Hire return date/time must be later than pickup date/time.']);
+                    exit;
+                }
+
+                $pickupDateOnly = $requestWindow['pickup_at']->setTime(0, 0, 0);
+                $returnDateOnly = $returnAt->setTime(0, 0, 0);
+                $calendarDayDiff = (int)$pickupDateOnly->diff($returnDateOnly)->format('%a');
+                $totalDays = max(1, $calendarDayDiff);
+                $subtotal = round((float)$dailyHirePrice * $totalDays, 2);
                 $distanceKm = null;
+                $returnDate = $returnAt->format('Y-m-d');
+                $returnTime = strtoupper($returnAt->format('h:iA'));
             } else {
                 if ($ratePerMile <= 0) {
                     echo json_encode(['success' => false, 'message' => 'Unable to calculate fare for selected tier and seats.']);
+                    exit;
+                }
+
+                if (($distanceKm !== null && $distanceKm <= 0) || $isSameNonDailyHireLocation) {
+                    echo json_encode(['success' => false, 'message' => 'Pick-up and destination cannot be the same location. Please choose a different destination.']);
                     exit;
                 }
 
@@ -303,10 +393,11 @@ if ($action === 'create') {
                     echo json_encode(['success' => false, 'message' => 'Unable to calculate fare. Distance information is required.']);
                     exit;
                 }
-            }
 
-            $totalDays = 1; // single trip
-            $returnDate = null;
+                $totalDays = 1; // single trip
+                $returnDate = null;
+                $returnTime = null;
+            }
 
         }
 
@@ -390,6 +481,7 @@ if ($action === 'create') {
             'pickup_date' => $pickupDateForDB,
             'pickup_time' => $pickupTime,
             'return_date' => $returnDate,
+            'return_time' => $returnTime,
             'pickup_location' => $pickupLocation,
             'return_location' => $returnLocation,
             'total_days' => $totalDays,

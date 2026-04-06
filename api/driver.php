@@ -91,6 +91,72 @@ function driver_next_status(string $current): ?string
     };
 }
 
+function driver_parse_pickup_datetime(?string $pickupDateRaw, ?string $pickupTimeRaw = null): ?DateTimeImmutable
+{
+    $pickupDateRaw = trim((string)$pickupDateRaw);
+    if ($pickupDateRaw === '') {
+        return null;
+    }
+
+    $timezone = new DateTimeZone('UTC');
+
+    if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $pickupDateRaw) === 1) {
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d\\TH:i', $pickupDateRaw, $timezone);
+        if ($dt instanceof DateTimeImmutable) {
+            return $dt;
+        }
+    }
+
+    try {
+        $pickupAt = new DateTimeImmutable($pickupDateRaw, $timezone);
+    } catch (Exception $e) {
+        return null;
+    }
+
+    $pickupTimeRaw = strtoupper(str_replace(' ', '', trim((string)$pickupTimeRaw)));
+    if ($pickupTimeRaw === '') {
+        return $pickupAt;
+    }
+
+    $datePart = $pickupAt->format('Y-m-d');
+    $formats = ['Y-m-d h:iA', 'Y-m-d H:i:s', 'Y-m-d H:i'];
+    foreach ($formats as $format) {
+        $candidate = DateTimeImmutable::createFromFormat($format, $datePart . ' ' . $pickupTimeRaw, $timezone);
+        if ($candidate instanceof DateTimeImmutable) {
+            return $candidate;
+        }
+    }
+
+    return $pickupAt;
+}
+
+/**
+ * @return array{can_start:bool,wait_seconds:int,pickup_at_ts:int,start_allowed_at_ts:int}
+ */
+function driver_start_trip_window(?string $pickupDateRaw, ?string $pickupTimeRaw = null): array
+{
+    $pickupAt = driver_parse_pickup_datetime($pickupDateRaw, $pickupTimeRaw);
+    if (!$pickupAt) {
+        return [
+            'can_start' => true,
+            'wait_seconds' => 0,
+            'pickup_at_ts' => 0,
+            'start_allowed_at_ts' => 0,
+        ];
+    }
+
+    $startAllowedAt = $pickupAt->sub(new DateInterval('PT30M'));
+    $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $waitSeconds = max(0, $startAllowedAt->getTimestamp() - $nowUtc->getTimestamp());
+
+    return [
+        'can_start' => $waitSeconds <= 0,
+        'wait_seconds' => $waitSeconds,
+        'pickup_at_ts' => $pickupAt->getTimestamp(),
+        'start_allowed_at_ts' => $startAllowedAt->getTimestamp(),
+    ];
+}
+
 function driver_booking_has_column(PDO $pdo, string $columnName): bool
 {
     static $cache = null;
@@ -319,6 +385,20 @@ try {
                 'price' => (float)($row['total_amount'] ?? 0),
                 'status' => $canonicalStatus,
                 'next_status' => driver_next_status($canonicalStatus),
+                'can_start_trip' => (function () use ($canonicalStatus, $row): bool {
+                    if ($canonicalStatus !== 'on_route') {
+                        return false;
+                    }
+                    $window = driver_start_trip_window((string)($row['pickup_date'] ?? ''), (string)($row['pickup_time'] ?? ''));
+                    return $window['can_start'];
+                })(),
+                'start_trip_wait_seconds' => (function () use ($canonicalStatus, $row): int {
+                    if ($canonicalStatus !== 'on_route') {
+                        return 0;
+                    }
+                    $window = driver_start_trip_window((string)($row['pickup_date'] ?? ''), (string)($row['pickup_time'] ?? ''));
+                    return (int)$window['wait_seconds'];
+                })(),
             ];
         }
 
@@ -393,8 +473,17 @@ try {
             $params[':assigned_vehicle_id'] = $assignedVehicleId;
         }
 
+        $pickupTimeExpr = driver_booking_has_column($pdo, 'pickup_time')
+            ? 'b.pickup_time'
+            : 'NULL::text AS pickup_time';
+
+        $bookingTypeExpr = driver_booking_has_column($pdo, 'booking_type')
+            ? 'b.booking_type'
+            : 'NULL::text AS booking_type';
+
         $sql = "
-            SELECT b.id AS booking_id, b.status AS booking_status, b.vehicle_id, b.driver_id,
+                 SELECT b.id AS booking_id, b.status AS booking_status, b.vehicle_id, b.driver_id,
+                     b.pickup_date, {$pickupTimeExpr}, {$bookingTypeExpr},
                    b.ride_started_at, b.ride_completed_at, at.id AS trip_id, at.status AS trip_status
             FROM bookings b
             LEFT JOIN active_trips at ON at.booking_id = b.id
@@ -430,6 +519,17 @@ try {
 
         // Enforce one active started trip per driver at a time.
         if ($nextStatus === 'on_trip') {
+            $window = driver_start_trip_window((string)($row['pickup_date'] ?? ''), (string)($row['pickup_time'] ?? ''));
+            if (!$window['can_start']) {
+                $waitSeconds = (int)$window['wait_seconds'];
+                $waitMinutes = (int)ceil($waitSeconds / 60);
+                driver_json([
+                    'success' => false,
+                    'message' => 'Start Trip is available only within 30 minutes before pickup. Please try again in about ' . $waitMinutes . ' minute(s).',
+                    'retry_after_seconds' => $waitSeconds,
+                ], 409);
+            }
+
             $lockSql = "
                 SELECT b.id
                 FROM bookings b

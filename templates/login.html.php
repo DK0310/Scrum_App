@@ -10,6 +10,8 @@ if (isset($_SESSION['login_old_identifier'])) {
 }
 
 $showLoginModalOnLoad = $loginFlash && (($loginFlash['type'] ?? '') !== 'success');
+$loginRetryAfterSeconds = (int)($loginFlash['retry_after_seconds'] ?? 0);
+$loginIsLocked = !empty($loginFlash['locked']) && $loginRetryAfterSeconds > 0;
 
 $loginReturnTo = $_SERVER['REQUEST_URI'] ?? '/';
 ?>
@@ -66,10 +68,15 @@ $loginReturnTo = $_SERVER['REQUEST_URI'] ?? '/';
                 </div>
 
                 <!-- Status Message -->
-                <div id="loginStatus" style="display: <?= $loginFlash ? 'block' : 'none' ?>; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center; <?= $loginFlash ? (($loginFlash['type'] ?? '') === 'success' ? 'background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0;' : 'background:#fee2e2;color:#dc2626;border:1px solid #fecaca;') : '' ?>"><?= htmlspecialchars($loginFlash['message'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
+                <div id="loginStatus"
+                     data-retry-after="<?= $loginRetryAfterSeconds ?>"
+                     data-lock-message="<?= htmlspecialchars($loginFlash['message'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                     style="display: <?= $loginFlash ? 'block' : 'none' ?>; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; text-align: center; <?= $loginFlash ? (($loginFlash['type'] ?? '') === 'success' ? 'background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0;' : 'background:#fee2e2;color:#dc2626;border:1px solid #fecaca;') : '' ?>"><?= htmlspecialchars($loginFlash['message'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
 
                 <!-- Sign In Button -->
-                <button type="submit" 
+                <button type="submit"
+                    id="loginSubmitBtn"
+                    <?= $loginIsLocked ? 'disabled' : '' ?>
                         style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;"
                         onmouseover="this.style.filter = 'brightness(1.1)'"
                         onmouseout="this.style.filter = 'brightness(1)'">
@@ -165,6 +172,52 @@ $loginReturnTo = $_SERVER['REQUEST_URI'] ?? '/';
         if (overlay) overlay.style.display = 'flex';
         const identifierInput = document.getElementById('loginIdentifier');
         if (identifierInput) identifierInput.focus();
+
+        const statusEl = document.getElementById('loginStatus');
+        const submitBtn = document.getElementById('loginSubmitBtn');
+        if (!statusEl || !submitBtn) return;
+
+        let retryAfter = parseInt(statusEl.getAttribute('data-retry-after') || '0', 10);
+        const baseMessage = statusEl.getAttribute('data-lock-message') || 'Too many failed login attempts.';
+
+        function formatCountdown(seconds) {
+            const s = Math.max(0, seconds | 0);
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) {
+                return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(sec).padStart(2, '0') + 's';
+            }
+            if (m > 0) {
+                return m + 'm ' + String(sec).padStart(2, '0') + 's';
+            }
+            return sec + 's';
+        }
+
+        function setButtonLocked(locked) {
+            submitBtn.disabled = !!locked;
+            submitBtn.style.opacity = locked ? '0.65' : '1';
+            submitBtn.style.cursor = locked ? 'not-allowed' : 'pointer';
+        }
+
+        if (!Number.isFinite(retryAfter) || retryAfter <= 0) {
+            setButtonLocked(false);
+            return;
+        }
+
+        setButtonLocked(true);
+        statusEl.textContent = baseMessage + ' (' + formatCountdown(retryAfter) + ')';
+
+        const timer = setInterval(function() {
+            retryAfter -= 1;
+            if (retryAfter <= 0) {
+                clearInterval(timer);
+                setButtonLocked(false);
+                statusEl.textContent = 'You can try signing in again now.';
+                return;
+            }
+            statusEl.textContent = baseMessage + ' (' + formatCountdown(retryAfter) + ')';
+        }, 1000);
     });
 </script>
 <?php endif; ?>

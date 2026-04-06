@@ -6,9 +6,160 @@
 
 class AuthRepository {
     private $pdo;
+    private const LOGIN_LOCK_DURATIONS = [30, 60, 300, 900, 1800, 3600, 21600, 64800, 86400];
 
     public function __construct($pdo) {
         $this->pdo = $pdo;
+        $this->ensureLoginThrottleTableExists();
+    }
+
+    /**
+     * Create login throttle table when missing.
+     */
+    public function ensureLoginThrottleTableExists() {
+        $this->pdo->exec("CREATE TABLE IF NOT EXISTS login_throttle (
+            subject_key TEXT PRIMARY KEY,
+            fail_count INT NOT NULL DEFAULT 0,
+            lock_step INT NOT NULL DEFAULT 0,
+            locked_until TIMESTAMPTZ,
+            last_failed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )");
+
+        $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_login_throttle_locked_until ON login_throttle(locked_until)");
+    }
+
+    /**
+     * Normalize login identifier so lockout works consistently.
+     */
+    public function normalizeLoginIdentifier($identifier) {
+        $identifier = trim((string)$identifier);
+        if ($identifier === '') {
+            return '';
+        }
+
+        if (strpos($identifier, '@') !== false) {
+            return strtolower($identifier);
+        }
+
+        return preg_replace('/[^0-9+]/', '', $identifier);
+    }
+
+    /**
+     * Build throttle key for login attempt (account-based when user exists).
+     */
+    public function buildLoginThrottleKey($identifier, $user = null) {
+        if (is_array($user) && !empty($user['id'])) {
+            return 'u:' . (string)$user['id'];
+        }
+
+        $normalized = $this->normalizeLoginIdentifier($identifier);
+        if ($normalized === '') {
+            return 'i:unknown';
+        }
+
+        return 'i:' . $normalized;
+    }
+
+    /**
+     * Read current lock state.
+     * @return array<string,mixed>
+     */
+    public function getLoginThrottleState($subjectKey) {
+        $query = "SELECT
+                    fail_count,
+                    lock_step,
+                    EXTRACT(EPOCH FROM locked_until)::bigint AS locked_until_epoch
+                  FROM login_throttle
+                  WHERE subject_key = :subject_key
+                  LIMIT 1";
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([':subject_key' => (string)$subjectKey]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $failCount = (int)($row['fail_count'] ?? 0);
+        $lockStep = (int)($row['lock_step'] ?? 0);
+        $lockedUntilTs = (int)($row['locked_until_epoch'] ?? 0);
+
+        $now = time();
+        $remaining = max(0, $lockedUntilTs - $now);
+
+        return [
+            'subject_key' => (string)$subjectKey,
+            'fail_count' => max(0, $failCount),
+            'lock_step' => max(0, $lockStep),
+            'locked_until_ts' => $lockedUntilTs,
+            'is_locked' => $remaining > 0,
+            'remaining_seconds' => $remaining,
+        ];
+    }
+
+    /**
+     * Record one failed login and return updated lock state.
+     * @return array<string,mixed>
+     */
+    public function recordFailedLoginAttempt($subjectKey) {
+        $state = $this->getLoginThrottleState($subjectKey);
+
+        $failCount = (int)$state['fail_count'] + 1;
+        $lockStep = (int)$state['lock_step'];
+        $lockedUntilTs = 0;
+        $appliedLockSeconds = 0;
+
+        if ($failCount >= 5) {
+            $maxIndex = count(self::LOGIN_LOCK_DURATIONS) - 1;
+            $durationIndex = min(max(0, $lockStep), $maxIndex);
+            $appliedLockSeconds = (int)self::LOGIN_LOCK_DURATIONS[$durationIndex];
+            $lockedUntilTs = time() + $appliedLockSeconds;
+            $lockStep = min($durationIndex + 1, $maxIndex);
+        }
+
+        $query = "INSERT INTO login_throttle (subject_key, fail_count, lock_step, locked_until, last_failed_at, updated_at)
+                  VALUES (
+                      :subject_key,
+                      :fail_count,
+                      :lock_step,
+                      CASE WHEN :lock_seconds > 0 THEN NOW() + (:lock_seconds * INTERVAL '1 second') ELSE NULL END,
+                      NOW(),
+                      NOW()
+                  )
+                  ON CONFLICT (subject_key)
+                  DO UPDATE SET
+                      fail_count = EXCLUDED.fail_count,
+                      lock_step = EXCLUDED.lock_step,
+                      locked_until = EXCLUDED.locked_until,
+                      last_failed_at = NOW(),
+                      updated_at = NOW()";
+
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute([
+            ':subject_key' => (string)$subjectKey,
+            ':fail_count' => $failCount,
+            ':lock_step' => $lockStep,
+            ':lock_seconds' => $appliedLockSeconds,
+        ]);
+
+        $remainingAttempts = max(0, 5 - $failCount);
+
+        return [
+            'subject_key' => (string)$subjectKey,
+            'fail_count' => $failCount,
+            'lock_step' => $lockStep,
+            'is_locked' => $lockedUntilTs > time(),
+            'locked_until_ts' => $lockedUntilTs,
+            'remaining_seconds' => max(0, $lockedUntilTs - time()),
+            'lock_applied_seconds' => $appliedLockSeconds,
+            'remaining_attempts_before_lock' => $remainingAttempts,
+        ];
+    }
+
+    /**
+     * Reset failed login state after successful login.
+     */
+    public function resetLoginThrottle($subjectKey) {
+        $stmt = $this->pdo->prepare("DELETE FROM login_throttle WHERE subject_key = :subject_key");
+        $stmt->execute([':subject_key' => (string)$subjectKey]);
     }
 
     /**

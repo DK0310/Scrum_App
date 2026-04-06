@@ -137,6 +137,7 @@ final class BookingRepository
     {
         $columns = [
             'pickup_time VARCHAR(20) DEFAULT NULL',
+            'return_time VARCHAR(20) DEFAULT NULL',
             'service_type VARCHAR(50) DEFAULT \'local\'',
             'distance_km DECIMAL(10,2) DEFAULT NULL',
             'transfer_cost DECIMAL(10,2) DEFAULT NULL',
@@ -773,6 +774,7 @@ final class BookingRepository
                 ? (float)$data['price_per_day']
                 : round(((float)($data['subtotal'] ?? 0)) / max(1, (int)($data['total_days'] ?? 1)), 2),
             'pickup_time' => $data['pickup_time'] ?? null,
+            'return_time' => $data['return_time'] ?? null,
             'return_date' => $data['return_date'] ?? null,
             'return_location' => $data['return_location'] ?? null,
             'promo_code' => $data['promo_code'] ?? null,

@@ -52,6 +52,19 @@ function formatDateTime(pickupDate, pickupTime) {
     return dateText;
 }
 
+function formatWaitDuration(seconds) {
+    const total = Math.max(0, Number(seconds) || 0);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.ceil((total % 3600) / 60);
+    if (hours > 0) {
+        if (minutes > 0) {
+            return hours + 'h ' + minutes + 'm';
+        }
+        return hours + 'h';
+    }
+    return Math.max(1, minutes) + 'm';
+}
+
 function formatMoney(value) {
     const n = Number(value || 0);
     return '$' + n.toFixed(2);
@@ -236,7 +249,14 @@ function renderCurrentOrders() {
         if (status === 'on_trip' && bookingId === activeOnTripBookingId) {
             actionBtn = '<button class="order-action-btn" data-booking-id="' + escapeHtml(order.booking_id) + '" data-target-status="completed">Complete Trip</button>';
         } else if (status === 'on_route' && !activeOnTripBookingId) {
-            actionBtn = '<button class="order-action-btn" data-booking-id="' + escapeHtml(order.booking_id) + '" data-target-status="on_trip">Start Trip</button>';
+            const canStartTrip = !!order.can_start_trip;
+            const waitSeconds = Number(order.start_trip_wait_seconds || 0);
+            if (canStartTrip) {
+                actionBtn = '<button class="order-action-btn" data-booking-id="' + escapeHtml(order.booking_id) + '" data-target-status="on_trip">Start Trip</button>';
+            } else {
+                const waitText = formatWaitDuration(waitSeconds);
+                actionBtn = '<button class="order-action-btn" disabled title="Available 30 minutes before pickup">Start in ' + escapeHtml(waitText) + '</button>';
+            }
         }
 
         return '<tr>' +
