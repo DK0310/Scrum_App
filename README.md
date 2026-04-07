@@ -1,6 +1,6 @@
-# 🚗 Private Hire — Premium Car Rental Platform
+# 🚗 Private Hire — Premium Car Rental & Transportation Platform
 
-> Full-stack premium car rental and transportation platform built with PHP 8.2 + PostgreSQL (Supabase). This document provides comprehensive architecture context for developers and team members working on the platform
+> Full-stack premium car rental and transportation platform built with PHP 8.2 + PostgreSQL (Supabase). This document provides comprehensive architecture context for developers and team members working on the platform.
 
 ---
 
@@ -15,42 +15,52 @@
 7. [User Roles & Permissions](#7-user-roles--permissions)
 8. [Core Business Flows](#8-core-business-flows)
 9. [Real-time Notifications](#9-real-time-notifications)
-10. [Image Storage (BYTEA/BLOB)](#10-image-storage)
-11. [AI Chatbot Integration](#11-ai-chatbot-integration)
-12. [Environment Configuration](#12-environment-configuration)
-13. [Running the Web App Locally](#13-running-locally)
-14. [Mobile App Integration Guide](#14-mobile-app-integration-guide)
-15. [Entity Relationship Diagram](#15-erd)
+10. [Image Storage (Supabase Storage)](#10-image-storage)
+11. [Payments & Invoicing](#11-payments--invoicing)
+12. [AI Chatbot Integration](#12-ai-chatbot-integration)
+13. [Environment Configuration](#13-environment-configuration)
+14. [Running the Web App Locally](#14-running-locally)
+15. [Mobile App Integration Guide](#15-mobile-app-integration-guide)
+16. [Entity Relationship Diagram](#16-erd)
 
 ---
 
-## 📋 Recent Updates (March 2026)
+## 📋 Recent Updates (April 2026)
 
 ### Latest Changes
 
-✅ **Updated README to reflect current codebase**
-- Project renamed from "DriveNow" to "Private Hire"
-- Updated folder layout to include `/pages` controllers and thin root route files
-- Repository pattern standardized under `/sql` (11+ PDO repositories)
-- API endpoints documented under `/api` (JSON action routing)
-- Templates and JS modules aligned with current routes and page list
+✅ **5-Role System Implemented**
+- Roles upgraded from 4 to 5: `user`, `driver`, `callcenterstaff`, `controlstaff`, `admin`
+- Call Center Staff: creates booking requests for customers, manages customer accounts
+- Control Staff: approves/rejects requests, dispatches drivers, manages fleet vehicles
 
-🔧 **Recent API Fixes**
-- Vehicles API (`/api/vehicles.php`) now loads repositories from `/sql` and parses input consistently
-- Bookings API (`/api/bookings.php`) now loads repositories from `/sql`, parses input fallback, and avoids undefined variable warnings
+🔧 **New Features Since March 2026**
+- **PayPal Payment Gateway** (`lib/payments/PayPalGateway.php`) with sandbox/mock support
+- **Invoice PDF Generation** via mPDF (`Invoice/invoice_mpdf.php`) with email attachment
+- **Password Reset Flow** (`api/password-change.php`) with token-based email link
+- **Dedicated Reviews API** (`api/reviews.php`) with loyalty points system
+- **Booking Modification** (`api/orders.php` → `modify-booking`) for cash minicab orders
+- **Booking Archive System** (DB trigger auto-archives completed/cancelled bookings)
+- **Vehicle Availability Subscriptions** (notify users when a vehicle becomes available)
+- **Account Balance** for refunds and payments
+- **Driver Dispatch Email** (automated dispatch notification via PHPMailer)
+- **API Bootstrap Layer** (`api/bootstrap.php`) — shared `api_init()`, `api_action()`, `api_require_auth()`, `api_json()`
+- **Loyalty Points** awarded after review submission (tier-based for Daily Hire)
 
 📁 **Project Structure**
 - Root route stubs in `/` (e.g., `cars.php`, `booking.php`) require `/pages/*` controllers
 - Page controllers in `/pages/` handle SSR setup (session, role, etc.)
-- Data repositories in `/sql/` (Repository Pattern)
-- API endpoints in `/api/` for JSON actions
+- Data repositories in `/sql/` (Repository Pattern — 12 repositories)
+- API endpoints in `/api/` for JSON actions (29 files)
 - HTML templates in `/templates/` with shared layout components
+- Invoice generation in `/Invoice/` (mPDF + mailer)
+- Payment gateways in `/lib/payments/` (PayPal)
 
 ---
 
 ## 1. System Overview
 
-**Private Hire** is a full-stack car rental and premium transportation platform that connects vehicle owners with renters. The system supports with-driver bookings and minicab rides, fleet management, real-time notifications, community enquiries, and AI-powered assistance.
+**Private Hire** is a full-stack car rental and premium transportation platform that connects vehicle owners with renters. The system supports minicab rides, daily hire, airport/hotel transfers, fleet management, real-time notifications, community engagement, AI-powered assistance, and staff-managed phone bookings.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -58,7 +68,7 @@
 │  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
 │  │  Web Browser  │  │  Mobile App (TBD) │  │  Driver App      │  │
 │  │  (PHP SSR +   │  │  (iOS/Android/    │  │  (Mobile -      │  │
-│  │   vanilla JS) │  │   Flutter/RN)     │  │   driver role   │  │
+│  │   vanilla JS) │  │   Flutter/RN)     │  │   driver role)  │  │
 │  └──────┬───────┘  └────────┬──────────┘  └────────┬─────────┘  │
 │         │                   │                      │             │
 └─────────┼───────────────────┼──────────────────────┼─────────────┘
@@ -73,12 +83,12 @@
 │  │          │ │  php     │ │  php     │ │                   │  │
 │  └──────────┘ └──────────┘ └──────────┘ └───────────────────┘  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐  │
-│  │admin.php │ │community │ │my-      │ │ driver.php |       │  │
-│  │          │ │  .php    │ │vehicles. │ │ (driver API)      │  │
-│  └──────────┘ └──────────┘ │  php     │ └───────────────────┘  │
-│  ┌──────────┐ ┌──────────┐ └──────────┘ ┌───────────────────┐  │
-│  │CallCenter│ │ support  │ ┌──────────┐ │ chatbot-with-     │  │
-│  │Staff.php │ │  .php    │ │orders.php│ │   memory.php      │  │
+│  │admin.php │ │CallCenter│ │Control   │ │ driver.php        │  │
+│  │          │ │Staff.php │ │Staff.php │ │ (driver API)      │  │
+│  └──────────┘ └──────────┘ └──────────┘ └───────────────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐  │
+│  │orders.php│ │reviews.  │ │password- │ │ chatbot-with-     │  │
+│  │          │ │  php     │ │change.php│ │   memory.php      │  │
 │  └──────────┘ └──────────┘ └──────────┘ └───────────────────┘  │
 └─────────────────────────┬───────────────────────────────────────┘
                           │
@@ -90,11 +100,12 @@
 │  │   Supabase PostgreSQL     │  │   External Services        │  │
 │  │   (aws-ap-southeast-1)    │  │                            │  │
 │  │                           │  │  • n8n (AI Agent/Chatbot)  │  │
-│  │  • 17+ tables             │  │  • Gmail SMTP (OTP email)  │  │
+│  │  • 25+ tables             │  │  • Gmail SMTP (OTP/email)  │  │
 │  │  • UUID primary keys      │  │  • Supabase Storage        │  │
-│  │  • BYTEA/Storage images   │  │  • Google OAuth            │  │
+│  │  • Booking archive system │  │  • Google OAuth            │  │
 │  │  • RLS enabled            │  │  • Face.js (Face ID)       │  │
-│  │  • Enum types             │  │  • SMS provider (OTP)      │  │
+│  │  • Enum types             │  │  • PayPal (sandbox/live)   │  │
+│  │  • DB triggers            │  │  • mPDF (invoice gen)      │  │
 │  └───────────────────────────┘  └────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -109,13 +120,13 @@
 | **Backend API** | PHP 8.2 | REST API with action-based routing (`?action=xxx` or `{action: "xxx"}`) |
 | **Database** | PostgreSQL 15 (Supabase) | Hosted on Supabase (AWS ap-southeast-1), PDO connection with SSL |
 | **Storage** | Supabase Storage | Vehicle images, avatars stored in Supabase Storage bucket `DriveNow` |
-| **Image Format** | BYTEA or Storage | Legacy BYTEA in DB or modern Supabase Storage URLs |
 | **Authentication** | PHP Sessions + Multi-method | Email/password, Google OAuth, Phone OTP, Email OTP, Face ID |
-| **Styling** | Custom CSS | CSS variables, responsive design in `base.css` and included templates |
-| **API Security** | CORS enabled | `Access-Control-Allow-Origin: *` for mobile app access |
+| **Payments** | PayPal + Account Balance + Cash | PayPal sandbox/live, account balance refunds, cash at pickup |
+| **Invoice** | mPDF | PDF invoice generation emailed on order confirmation |
+| **Styling** | Custom CSS | CSS variables, responsive design in `base.css` |
+| **API Security** | CORS enabled + Bootstrap layer | `api_init()` → CORS, session, input parsing |
 | **AI Chatbot** | n8n AI Agent | Webhook-based AI agent integration with PostgreSQL chat memory |
-| **Email Delivery** | PHPMailer + Gmail SMTP | OTP delivery, booking confirmations |
-| **Async/Notifications** | Polling + N8N | Client-side polling for notifications, N8N for workflow automation |
+| **Email Delivery** | PHPMailer + Gmail SMTP | OTP delivery, booking confirmations, dispatch emails, invoice emails |
 | **Deployment Target** | PHP 8.2+ server | Apache, Nginx, or PHP built-in server (`php -S`) |
 
 ---
@@ -124,45 +135,51 @@
 
 ```
 Scrum/                           # Project root
-├── .env                          # Environment variables (DB, SMTP, API keys)
+├── .env                          # Environment variables (DB, SMTP, PayPal, API keys)
 ├── .env.example                  # Template for .env
-├── .git/                         # Git repository
-├── .gitignore                    # Git ignore rules
-├── composer.json                 # PHP dependencies (PHPMailer, etc.)
+├── composer.json                 # PHP deps (PHPMailer, Guzzle, mPDF, Google API Client)
 ├── composer.lock                 # Locked dependency versions
 │
 ├── config/                       # Configuration & loaders
-│   └── env.php                   # EnvLoader class — reads .env file
+│   ├── env.php                  # EnvLoader class — reads .env file
+│   └── chatbot-system-prompt.md # AI chatbot system prompt (placeholder)
 │
 ├── Database/                     # Database setup and utilities
-│   ├── db.php                    # PDO connection to Supabase PostgreSQL
-│   ├── schema.sql                # Full database schema (17+ tables + RLS)
-│   ├── migration_storage.sql     # Migration: BYTEA → Supabase Storage
-│   ├── chat_memory.sql           # Chat history table reference
-│   └── drop_all.sql              # Reset script
+│   ├── db.php                   # PDO connection to Supabase PostgreSQL
+│   ├── schema.sql               # Full database schema (25+ tables + RLS + triggers)
+│   ├── migration_storage.sql    # Migration: BYTEA → Supabase Storage
+│   ├── migrate_roles_and_trips.sql          # Role migration + active_trips
+│   ├── migrate_roles_to_callcenter_control.sql  # 5-role migration
+│   ├── migrate_vehicle_service_tier.sql     # Vehicle service tier migration
+│   ├── chat_memory.sql          # Chat history table reference
+│   ├── fix_test_roles.sql       # Test role fixes
+│   └── drop_all.sql             # Reset script
 │
-├── sql/                          # ★ Data access layer (Repository pattern)
-│   ├── AuthRepository.php        # Auth + password verification
-│   ├── UserRepository.php        # User CRUD operations
-│   ├── VehicleRepository.php     # Vehicle listing, search, filtering
+├── sql/                          # ★ Data access layer (Repository pattern — 12 files)
+│   ├── AuthRepository.php        # Auth, password verification, reset tokens
+│   ├── UserRepository.php        # User CRUD, loyalty points, account balance
+│   ├── VehicleRepository.php     # Vehicle listing, search, filtering, assignments
 │   ├── VehicleImageRepository.php# Vehicle image metadata
-│   ├── BookingRepository.php     # Booking CRUD & status management
+│   ├── BookingRepository.php     # Booking CRUD, status, payments, reviews, archive
 │   ├── PromotionRepository.php   # Promo codes & discounts
-│   ├── NotificationRepository.php# User notifications
+│   ├── NotificationRepository.php# User & driver notifications
 │   ├── CommunityRepository.php   # Community posts/comments
 │   ├── HeroSlideRepository.php   # Homepage hero slides
-│   ├── TripRepository.php        # Driver trips
-│   ├── StaffBookingRepository.php# Staff booking management
+│   ├── TripRepository.php        # Driver trips & active trips
+│   ├── StaffBookingRepository.php# Staff phone booking management
 │   └── EnquiryRepository.php     # Customer enquiry records
 │
-├── api/                          # ★ REST API endpoints (JSON)
-│   ├── admin.php                 # Admin operations (slides, promos, users, vehicles)
+├── api/                          # ★ REST API endpoints (JSON) — 29 files
+│   ├── bootstrap.php             # Shared: api_init(), api_action(), api_require_auth(), api_json()
+│   ├── admin.php                 # Admin operations (slides, promos, users, vehicles, bookings)
 │   ├── auth.php                  # Legacy composite auth API (kept for compatibility)
 │   ├── login.php                 # Login endpoint (email/phone + password)
 │   ├── register.php              # Register endpoint (email + password + OTP)
 │   ├── session.php               # Session management (check-session, logout)
 │   ├── profile.php               # Profile CRUD + avatar
-│   ├── bookings.php              # Booking creation, promo validation, orders
+│   ├── bookings.php              # Booking creation, promo validation, PayPal flow
+│   ├── orders.php                # Order management (my-orders, modify-booking, update-status)
+│   ├── reviews.php               # Reviews + loyalty points (get-reviews, submit-review)
 │   ├── vehicles.php              # Vehicle CRUD, search, filtering, images
 │   ├── notifications.php         # Notification CRUD + polling
 │   ├── community.php             # Community posts/comments
@@ -170,9 +187,11 @@ Scrum/                           # Project root
 │   ├── membership.php            # Membership endpoints
 │   ├── support.php               # Support/contact endpoints
 │   ├── customer-enquiry.php      # Customer enquiry endpoints
-│   ├── driver.php                # Driver operations
+│   ├── driver.php                # Driver dashboard (orders, trips, notifications)
 │   ├── my-vehicles.php           # Owner vehicle management
-│   ├── orders.php                # Order history endpoints
+│   ├── CallCenterStaff.php       # Call center: phone bookings, customer accounts
+│   ├── ControlStaff.php          # Control staff: approve orders, dispatch, fleet management
+│   ├── password-change.php       # Password reset (send-reset-link, verify-token, reset-password)
 │   ├── face-auth.php             # Face ID registration/login
 │   ├── faceid.php                # Face descriptor handling
 │   ├── email-security.php        # Email change verification
@@ -181,10 +200,15 @@ Scrum/                           # Project root
 │   ├── supabase-storage.php      # Supabase Storage helper
 │   └── notification-helpers.php  # Shared notification utilities
 │
-├── templates/                    # ★ PHP HTML templates (SSR)
+├── templates/                    # ★ PHP HTML templates (SSR) — 18 files + partials
 │   ├── layout/
 │   │   ├── header.html.php       # Navigation bar, header
 │   │   └── footer.html.php       # Footer, chatbot widget
+│   ├── partials/
+│   │   └── vehicle-detail-modal.html.php  # Vehicle detail modal
+│   ├── booking/
+│   │   ├── step1-trip-details.html.php    # Booking step 1: trip details
+│   │   └── step2-payment.html.php         # Booking step 2: payment
 │   ├── index.html.php            # Homepage template
 │   ├── cars.html.php             # Cars listing template
 │   ├── booking.html.php          # Booking form template
@@ -194,32 +218,44 @@ Scrum/                           # Project root
 │   ├── admin.html.php            # Admin dashboard template
 │   ├── login.html.php            # Login page template
 │   ├── register.html.php         # Registration page template
-│   ├── community.html.php        # Community forum template
+│   ├── community.html.php        # Community forum template (removed)
 │   ├── promotions.html.php       # Promotions display template
 │   ├── membership.html.php       # Membership tiers template
 │   ├── support.html.php          # Support page template
 │   ├── reviews.html.php          # Reviews page template
 │   ├── driver.html.php           # Driver dashboard template
+│   ├── password-change.html.php  # Password change page
 │   ├── CallCenterStaff.html.php  # Call center staff interface
 │   ├── ControlStaff.html.php     # Control staff interface
-│   ├── customer-enquiry.html.php # Customer enquiry page
-│   └── ... (additional templates)
+│   └── customer-enquiry.html.php # Customer enquiry page
 │
 ├── resources/                    # Frontend resources
-│   ├── js/                       # Client-side JavaScript
-│   │   ├── booking.js            # Booking form logic
-│   │   ├── cars.js               # Cars listing logic
-│   │   ├── home.js               # Homepage car grid + hero slides
+│   ├── js/                       # Client-side JavaScript (20 files)
+│   │   ├── app-init.js           # Global app initialization
 │   │   ├── auth.js               # Authentication logic (login/register modals)
 │   │   ├── auth-state.js         # Navbar auth sync module
+│   │   ├── navbar.js             # Navigation bar logic
+│   │   ├── header.js             # Header interactions
+│   │   ├── home.js               # Homepage car grid + hero slides
+│   │   ├── cars.js               # Cars listing logic
+│   │   ├── booking.js            # Booking form logic (multi-step)
+│   │   ├── orders.js             # Orders management (modify, cancel, status)
+│   │   ├── profile.js            # Profile management
+│   │   ├── admin.js              # Admin dashboard logic
+│   │   ├── driver.js             # Driver dashboard logic
+│   │   ├── call-center-staff.js  # Call center staff UI logic
+│   │   ├── control-staff.js      # Control staff UI logic
 │   │   ├── notifications.js      # Notification polling
-│   │   ├── community.js          # Community interactions
+│   │   ├── reviews.js            # Reviews display/submission
 │   │   ├── customer-enquiry.js   # Customer enquiry UI
-│   │   └── ... (additional JS)   │
-│   └── css/                      # Stylesheets
-│       └── base.css              # Main stylesheet
+│   │   ├── chatbot.js            # Chatbot widget logic
+│   │   ├── pass.js               # Password change logic
+│   │   └── utils.js              # Shared utility functions
+│   ├── css/
+│   │   └── base.css              # Main stylesheet (56KB)
+│   └── images/                   # Static images (cars, logos, CSV data)
 │
-├── pages/                        # Page controllers (SSR logic)
+├── pages/                        # Page controllers (SSR logic) — 15 files
 │   ├── admin.php                 # Admin page controller
 │   ├── booking.php               # Booking page controller
 │   ├── call-center-staff.php     # Call center staff page
@@ -233,21 +269,33 @@ Scrum/                           # Project root
 │   ├── password-change.php       # Password change page
 │   ├── profile.php               # Profile page
 │   ├── promotions.php            # Promotions page
+│   ├── reviews.php               # Reviews page
 │   └── support.php               # Support page
 │
 ├── lib/                          # Additional libraries
-│   ├── invoice_mpdf.php          # PDF invoice generation
-│   ├── invoice_google_docs.php   # Google Docs invoice export
-│   └── mailer.php                # Email helpers
+│   └── payments/
+│       └── PayPalGateway.php     # PayPal REST API gateway (sandbox + live)
 │
-├── logs/                         # Application logs
+├── Invoice/                      # Invoice generation
+│   ├── invoice_mpdf.php          # PDF invoice generation (mPDF)
+│   └── mailer.php                # Email helper (PHPMailer + PDF attachment)
 │
-├── Invoice/                      # Invoice generation storage
+├── tests/                        # Test scripts (9 files)
+│   ├── test_api_flow.php
+│   ├── test_auth_flow.php
+│   ├── test_db.php
+│   ├── test_debug_orders.php
+│   ├── test_debug_vehicles.php
+│   ├── test_full_api.php
+│   ├── test_full_login_flow.php
+│   ├── test_login_api.php
+│   └── test_login_debug.php
 │
+├── ReferenceUI/                  # UI reference designs
 ├── vendor/                       # Composer dependencies
 │
 # Root level route stubs (URL routing)
-├── index.php                     # Homepage controller (routes /auth)
+├── index.php                     # Homepage controller (routes /auth, loads promotions)
 ├── cars.php                      # Cars route → pages/cars.php
 ├── booking.php                   # Booking route → pages/booking.php
 ├── orders.php                    # Orders route → pages/orders.php
@@ -255,27 +303,19 @@ Scrum/                           # Project root
 ├── promotions.php                # Promotions route → pages/promotions.php
 ├── membership.php                # Membership route → pages/membership.php
 ├── support.php                   # Support route → pages/support.php
-├── customer-enquiry.php          # Customer enquiry route → pages/customer-enquiry.php
+├── customer-enquiry.php          # Customer enquiry route
 ├── admin.php                     # Admin route → pages/admin.php
 ├── driver.php                    # Driver route → pages/driver.php
 ├── call-center-staff.php         # Call center staff route
 ├── control-staff.php             # Control staff route
 ├── my-vehicles.php               # Owner vehicles route
 ├── password-change.php           # Password change route
-│
-# Base stylesheet at root
-├── base.css                      # Root copy of stylesheet
+├── reviews.php                   # Reviews route
 │
 # Documentation
 ├── README.md                     # This file
 ├── TIMEZONE_FIX.md               # Timezone configuration guide
-├── VEHICLE_STATUS_UPDATE.md      # Vehicle status update documentation
-├── check_statuses.sql            # SQL utility script
-│
-# Testing & Development
-├── test_*.php                    # Various API test scripts
-├── run_chat_sql.php              # Chat SQL runner
-└── cookie.txt                    # Cookie storage for testing
+└── VEHICLE_STATUS_UPDATE.md      # Vehicle status update documentation
 ```
 
 ---
@@ -293,35 +333,43 @@ Scrum/                           # Project root
 | **Timestamps** | `TIMESTAMPTZ` with `NOW()` defaults, auto-`updated_at` triggers |
 | **ORM Pattern** | Repository Pattern (Data Access Layer in `/sql/` directory) |
 
-### Database Tables Overview
-
-Core tables managed by the application:
+### Database Tables Overview (25+ tables)
 
 | Table | Purpose |
 |-------|---------|
-| `users` | User accounts, roles (renter/owner/admin/driver/staff), profile data |
-| `vehicles` | Vehicle listings with specifications, pricing, status, owner reference |
-| `vehicle_images` | Vehicle photos and images with Supabase Storage paths or BYTEA |
-| `bookings` | Rental bookings with status, dates, pricing, promo code tracking |
-| `payments` | Payment records for bookings with status and method tracking |
+| `users` | User accounts, 5 roles (user/driver/callcenterstaff/controlstaff/admin), profile, account balance, loyalty points, driver dispatch assignment |
+| `vehicles` | Vehicle listings with specs, pricing, service tier (eco/standard/luxury), status, luggage capacity |
+| `vehicle_images` | Vehicle photos with Supabase Storage paths or BYTEA fallback |
+| `vehicle_assignments` | Driver ↔ vehicle dispatch history (staff/driver/vehicle/dates) |
+| `bookings` | Rental bookings with status, dates, pricing, driver assignment, ride tracking timestamps |
+| `active_trips` | Real-time minicab trip tracking (driver location, status progression) |
+| `booking_archive` | Auto-archived completed/cancelled bookings (DB trigger) |
+| `booking_regions` | Normalized pickup regions for archive analytics |
+| `booking_deletion_audit` | Audit log for deleted bookings |
+| `payments` | Payment records with PayPal/cash/account_balance, `payment_details` JSONB |
 | `reviews` | Vehicle ratings (1-5) and text reviews from renters |
 | `community_posts` | User-created blog/forum posts |
 | `community_comments` | Comments on community posts |
 | `community_likes` | Likes/favorites on community posts (UNIQUE per user+post) |
-| `notifications` | User notifications (booking, payment, promo, system events) |
+| `notifications` | User notifications (booking, payment, promo, system, alert) |
+| `driver_notifications` | Driver-specific notifications with booking reference |
+| `vehicle_availability_subscriptions` | Notify users when a vehicle becomes available |
 | `promotions` | Promo codes with discount logic (percentage or fixed amount) |
 | `memberships` | User membership tiers (free/basic/premium/corporate) |
 | `hero_slides` | Admin-managed homepage banner images |
 | `favorites` | Saved/favorited vehicles (UNIQUE per user+vehicle) |
 | `gps_tracking` | Real-time vehicle GPS coordinates and trip tracking |
 | `auth_sessions` | Session tokens for stateless authentication |
-| `n8n_chat_histories` | AI chatbot conversation memory (auto-created by n8n) |
+| `password_reset_tokens` | Time-limited password reset tokens (5-min expiry) |
+| `customer_enquiries` | Customer enquiry submissions |
+| `enquiry_replies` | Staff replies to customer enquiries |
 | `trip_enquiries` | Support/contact form submissions |
+| `n8n_chat_histories` | AI chatbot conversation memory (auto-created by n8n) |
 
 ### Key Enum Types
 
 ```sql
-user_role:         'user' | 'driver' | 'staff' | 'admin'
+user_role_v2:      'user' | 'driver' | 'callcenterstaff' | 'controlstaff' | 'admin'
 auth_provider:     'google' | 'phone' | 'faceid' | 'email'
 booking_status:    'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
 payment_status:    'pending' | 'paid' | 'refunded' | 'failed'
@@ -341,24 +389,19 @@ vehicles (1) ────────── (N) vehicle_images        # Vehicle 
 vehicles (1) ────────── (N) reviews               # Vehicle has many reviews
 users (1) ──────────── (N) reviews                # User writes many reviews
 bookings (1) ────────── (N) payments              # Booking has many payments
+bookings (1) ────────── (1) active_trips          # Booking has one active trip
+bookings (1) ────────── (1) booking_archive       # Booking archived on completion
 users (1) ──────────── (N) notifications          # User has many notifications
+users (1) ──────────── (N) driver_notifications   # Driver has dispatch notifications
+users (1) ──────────── (N) vehicle_assignments    # Driver assigned vehicles
 users (1) ──────────── (N) community_posts        # User writes many posts
 community_posts (1) ────(N) community_comments    # Post has many comments
 community_posts (1) ────(N) community_likes       # Post has many likes
 users (1) ──────────── (N) favorites              # User has many favorites
 users (1) ──────────── (N) memberships            # User has membership history
 vehicles (1) ────────── (N) gps_tracking          # Vehicle has GPS history
+users (1) ──────────── (N) vehicle_availability_subscriptions
 ```
-
-### Access Control
-
-**Row Level Security (RLS)** is configured on sensitive tables:
-- **Vehicles**: Public `SELECT` where `status = 'available'`; owner-only modifications
-- **Bookings**: Users can only see their own bookings
-- **Users**: Limited public profile fields only
-- **All other tables**: Require authenticated user role checks
-
-> **Note for Mobile Development**: The web app uses server-side PDO connections (not Supabase client SDK). Mobile apps can either call these same PHP APIs or implement direct Supabase client library access with appropriate RLS policies.
 
 ---
 
@@ -366,37 +409,13 @@ vehicles (1) ────────── (N) gps_tracking          # Vehicle 
 
 All APIs return JSON. Base URL: `http://localhost:8000/api/`
 
-**Action Routing**: Actions can be specified as:
-- **GET parameter**: `GET /api/vehicles.php?action=list`
-- **POST body**: `POST /api/vehicles.php` with `{ "action": "list", ... }`
-
-### Response Format (Standard Across All Endpoints)
-
-**Success Response:**
-```json
-{ "success": true, "message": "Action completed", "data": {...} }
-```
-
-**Error Response:**
-```json
-{ "success": false, "message": "Error description" }
-```
-
-**Authentication Required:**
-```json
-{ "success": false, "message": "Authentication required.", "require_login": true }
-```
+**Shared Bootstrap** (`api/bootstrap.php`):
+- `api_init()` — Sets CORS headers, starts session, parses JSON/POST input
+- `api_action($input)` — Gets action from POST body or GET param
+- `api_require_auth()` — Guards authenticated endpoints
+- `api_json($payload, $status)` — Sends JSON response
 
 ### 5.1 Auth APIs
-
-Primary endpoints:
-- `/api/login.php` (email/phone + password)
-- `/api/register.php` (email + password + OTP)
-- `/api/session.php` (check-session, logout)
-
-Legacy composite endpoint (kept for compatibility): `/api/auth.php`
-
-Handles user authentication via multiple methods: email/password, Google OAuth, SMS OTP, Email OTP, and Face ID.
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
@@ -407,10 +426,17 @@ Handles user authentication via multiple methods: email/password, Google OAuth, 
 | `/api/email-security.php` | POST | Yes | Email change OTP flow |
 | `/api/faceid.php` | POST | Yes | Face descriptor update |
 | `/api/face-auth.php` | POST | No | Face ID login/registration |
+| `/api/password-change.php` | POST | No* | Password reset flow |
+
+**Password Reset Actions** (`/api/password-change.php`):
+| Action | Auth | Description |
+|--------|------|-------------|
+| `send-reset-link` | No | Send reset email (generic response for privacy) |
+| `send-reset-link-current-user` | Yes | Send reset link to logged-in user's email |
+| `verify-token` | No | Verify reset token validity |
+| `reset-password` | No | Reset password with token + new password |
 
 ### 5.2 Vehicles API (`/api/vehicles.php`)
-
-Vehicle browsing, search, filtering, and owner management.
 
 | Action | Method | Auth | Description |
 |--------|--------|------|-------------|
@@ -423,126 +449,109 @@ Vehicle browsing, search, filtering, and owner management.
 | `update` | POST | Yes (staff/admin) | Update vehicle details |
 | `delete` | POST | Yes (staff/admin) | Delete vehicle |
 | `upload-image` | POST (multipart) | Yes (owner) | Upload vehicle image to Supabase Storage |
-| `get-image` | GET | No | Get vehicle image: `?action=get-image&id={imageId}` → Redirects to Supabase URL |
+| `get-image` | GET | No | Get vehicle image → redirects to Supabase URL |
 | `delete-image` | POST | Yes (owner) | Delete vehicle image |
-| `public-list` | GET | No | Get public vehicle listing (available vehicles only) |
-
-**Example: List Vehicles**
-```json
-POST /api/vehicles.php
-{
-  "action": "list",
-  "search": "BMW",           // Full-text search
-  "brand": "",               // Exact brand filter
-  "category": "suv",         // sedan|suv|luxury|sports|van
-  "transmission": "automatic",
-  "fuel": "petrol",
-  "max_price": 200,
-  "location": "HCMC",
-  "limit": 50,
-  "offset": 0
-}
-```
+| `public-list` | GET | No | Get public available vehicles |
 
 ### 5.3 Bookings API (`/api/bookings.php`)
 
-Booking creation, promotion validation, and order management.
-
 | Action | Method | Auth | Description |
 |--------|--------|------|-------------|
-| `create` | POST | Yes | Create new booking |
+| `create` | POST | Yes | Create new booking (with PayPal/cash/account_balance) |
 | `validate-promo` | POST | No | Validate promotion code |
 | `active-promos` | GET | No | List all active promotions |
-| `my-orders` | POST | Yes | Get user's bookings (as renter or owner) |
-| `update-status` | POST | Yes | Update booking status |
-| `submit-review` | POST | Yes | Submit review for booking |
-| `get-reviews` | GET | No | Get reviews for a vehicle/booking |
 | `confirm-payment` | POST | Yes | Confirm payment for booking |
 
-### 5.4 Notifications API (`/api/notifications.php`)
-
-Real-time notification management and polling.
+### 5.4 Orders API (`/api/orders.php`)
 
 | Action | Method | Auth | Description |
 |--------|--------|------|-------------|
-| `list` | GET | Yes | Get notifications: `?action=list&limit=20&offset=0` |
+| `my-orders` | POST | Yes | Get user's bookings (renter or owner view) |
+| `modify-booking` | POST | Yes | Modify pending cash minicab booking (pickup, destination, tier, seats, date) |
+| `update-status` | POST | Yes | Update booking status (confirm, in_progress, complete, cancel) with auto-refund |
+
+### 5.5 Reviews API (`/api/reviews.php`)
+
+| Action | Method | Auth | Description |
+|--------|--------|------|-------------|
+| `get-reviews` | GET/POST | No | Get reviews (optionally by vehicle_id) with stats |
+| `submit-review` | POST | Yes | Submit review for completed booking + earn loyalty points |
+
+### 5.6 Notifications API (`/api/notifications.php`)
+
+| Action | Method | Auth | Description |
+|--------|--------|------|-------------|
+| `list` | GET | Yes | Get notifications (paginated) |
 | `unread-count` | GET | Yes | Get unread notification count |
 | `mark-read` | POST | Yes | Mark notification as read |
 | `mark-all-read` | POST | Yes | Mark all as read |
 | `delete` | POST | Yes | Delete notification |
 | `clear-all` | POST | Yes | Delete all notifications |
 
-### 5.5 Admin API (`/api/admin.php`)
+### 5.7 Admin API (`/api/admin.php`)
 
-Requires `role = 'admin'`. Full platform management.
+Requires `role = 'admin'`. Full platform management: hero slides CRUD, promotions CRUD, user management (list/update/delete), vehicle management, booking management.
 
-| Action | Method | Auth | Description |
-|--------|--------|------|-------------|
-| `hero-slides-list` | POST | Admin | List all hero slides |
-| `hero-slide-upload` | POST (multipart) | Admin | Upload hero slide image |
-| `hero-slide-update` | POST | Admin | Update hero slide |
-| `hero-slide-delete` | POST | Admin | Delete hero slide |
-| `promotions-list` | POST | Admin | List all promotions |
-| `promotion-add` | POST | Admin | Create promo code |
-| `promotion-update` | POST | Admin | Update promotion |
-| `promotion-delete` | POST | Admin | Delete promotion |
-| `admin-list-users` | POST | Admin | List all users (paginated) |
-| `admin-update-user` | POST | Admin | Update user role/status |
-| `admin-delete-user` | POST | Admin | Delete user account |
-| `admin-list-vehicles` | POST | Admin | List all vehicles |
-| `admin-delete-vehicle` | POST | Admin | Delete any vehicle |
-| `admin-list-bookings` | POST | Admin | List all bookings |
-| `admin-delete-booking` | POST | Admin | Delete booking |
+### 5.8 Driver API (`/api/driver.php`)
 
-### 5.6 Community API (`/api/community.php`)
+Requires `role = 'driver'`.
 
-Community posts, comments, and user engagement.
+| Action | Description |
+|--------|-------------|
+| `get_assigned_vehicle` | Get driver's currently assigned vehicle |
+| `get_current_orders` | Get active orders for driver |
+| `get_past_orders` | Get completed orders history |
+| `get_passenger_orders` | Get orders for a specific passenger |
+| `advance_order_status` | Progress trip: on_route → on_trip → completed (with dispatch email) |
+| `get_notifications` | Get driver notifications |
+| `mark_notification_read` | Mark driver notification as read |
 
-| Action | Method | Auth | Description |
-|--------|--------|------|-------------|
-| `list-posts` | GET/POST | No | List community posts (paginated) |
-| `create-post` | POST (multipart) | Yes | Create post with optional image |
-| `delete-post` | POST | Yes (owner/admin) | Delete own post |
-| `toggle-like` | POST | Yes | Like/unlike a post |
-| `list-comments` | GET/POST | No | Get post comments |
-| `add-comment` | POST | Yes | Add comment to post |
-| `delete-comment` | POST | Yes (owner/admin) | Delete own comment |
-| `get-user-public` | GET | No | Get public user profile |
-| `get-post-image` | GET | No | Get post image: `?action=get-post-image&id={postId}` |
+### 5.9 Call Center Staff API (`/api/CallCenterStaff.php`)
 
-### 5.7 Additional APIs
+Requires `role = 'callcenterstaff'` or `'admin'`.
+
+| Action | Description |
+|--------|-------------|
+| `search_customers` | Search customers by name/email/phone |
+| `get_vehicles` | List available vehicles |
+| `get_my_requests` | List staff's own booking requests |
+| `get_request_detail` | Get detailed booking request info |
+| `create_customer_account` | Create customer account (email with credentials) |
+| `booking_by_request` | Create phone booking request for customer |
+| `cancel_request` | Cancel own booking request (with auto-refund) |
+| `delete_request` | Delete own pending/cancelled request |
+
+### 5.10 Control Staff API (`/api/ControlStaff.php`)
+
+Requires `role = 'controlstaff'` or `'admin'`.
+
+| Action | Description |
+|--------|-------------|
+| `get_orders` | List all bookings (filterable by status) |
+| `get_order` | Get single order details |
+| `update_order_status` | Confirm order: pending → in_progress (auto-assigns driver+vehicle, sends invoice) |
+| `reject_order` | Reject pending order (with auto-refund) |
+| `get_vehicles` | List all fleet vehicles |
+| `get_drivers` | List drivers with dispatch status (pending/dispatched) |
+| `get_available_vehicles` | List unassigned available vehicles |
+| `dispatch_driver` | Assign vehicle to driver |
+| `unassign_driver` | Remove vehicle assignment from driver |
+| `add_vehicle` | Add new vehicle to fleet |
+| `edit_vehicle` | Edit vehicle details |
+| `delete_vehicle` | Delete vehicle from fleet |
+
+### 5.11 Additional APIs
 
 | Endpoint | Description |
 |----------|-------------|
-| `/api/orders.php` | Orders API (history, status updates) |
-| `/api/my-vehicles.php` | Staff/admin vehicle management |
-| `/api/driver.php` | Driver-specific operations (trips, earnings) |
+| `/api/community.php` | Community posts/comments CRUD |
 | `/api/support.php` | Support/contact form submissions |
-| `/api/membership.php` | Membership tiers |
+| `/api/membership.php` | Membership tier management |
 | `/api/promotions.php` | Promotion endpoints |
-| `/api/customer-enquiry.php` | Customer enquiry endpoints |
-| `/api/CallCenterStaff.php` | Call center staff operations |
-| `/api/ControlStaff.php` | Control staff operations |
-| `/api/chatbot-with-memory.php` | AI chatbot proxy |
+| `/api/customer-enquiry.php` | Customer enquiry CRUD |
+| `/api/my-vehicles.php` | Owner vehicle management |
+| `/api/chatbot-with-memory.php` | AI chatbot proxy (n8n) |
 | `/api/supabase-storage.php` | Supabase Storage operations |
-
-### Error Handling
-
-All API endpoints follow consistent error handling:
-
-```json
-// Client error (invalid input)
-{ "success": false, "message": "Description of validation error", "errors": {...} }
-
-// Not authenticated
-{ "success": false, "message": "Authentication required.", "require_login": true }
-
-// Not authorized (insufficient permissions)
-{ "success": false, "message": "Access denied", "error_code": "unauthorized" }
-
-// Server error
-{ "success": false, "message": "Database error" }
-```
 
 ---
 
@@ -550,17 +559,13 @@ All API endpoints follow consistent error handling:
 
 ### Session-Based Auth (Web)
 
-The web app uses PHP server-side sessions with native session storage. After successful authentication:
-
 ```php
-// Session variables set after login
 $_SESSION['logged_in']  = true;
 $_SESSION['user_id']    = $user['id'];           // UUID
 $_SESSION['username']   = $user['full_name'] ?? $user['email'];
 $_SESSION['full_name']  = $user['full_name'];
 $_SESSION['email']      = $user['email'];
-$_SESSION['role']       = $user['role'];         // 'user' | 'driver' | 'staff' | 'admin'
-// Optional fields
+$_SESSION['role']       = $user['role'];         // 5-role enum
 $_SESSION['phone']      = $user['phone'] ?? null;
 $_SESSION['avatar_url'] = $user['avatar_url'] ?? null;
 $_SESSION['membership'] = $user['membership'] ?? 'free';
@@ -568,244 +573,118 @@ $_SESSION['membership'] = $user['membership'] ?? 'free';
 
 ### Authentication Methods
 
-The system supports multiple authentication pathways:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│              AUTHENTICATION METHODS                           │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  1. EMAIL + PASSWORD                                          │
-│     User registers → email-password stored (hashed)           │
-│     User logs in with credentials → session created           │
-│                                                               │
-│  2. EMAIL OTP (One-Time Password)                             │
-│     email-send-otp → 6-digit code to email (Gmail SMTP)      │
-│     email-verify-otp with code → session → auto-register     │
-│                                                               │
-│  3. PHONE OTP                                                 │
-│     phone-send-otp → 6-digit code via SMS provider           │
-│     phone-verify-otp with code → session → auto-register    │
-│                                                               │
-│  4. GOOGLE OAUTH 2.0                                          │
-│     google-login with Google token → session                 │
-│     Auto-creates user if first login                         │
-│                                                               │
-│  5. FACE ID (Optional - Register after Email/Phone login)     │
-│     enable-faceid → capture & store face descriptor          │
-│     faceid-login → real-time face matching → session         │
-│                                                               │
-│  6. MULTI-FACTOR SECONDARY VERIFICATION (future)            │
-│     Additional security layer for sensitive operations       │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### Login Flow Diagram
-
-```
-Entry Point: /api/auth.php
-                │
-                ▼
-      ┌─────────────────────┐
-      │  Check action       │
-      └──────────┬──────────┘
-                 │
-        ┌────────┼────────┬────────┬──────────┬──────────┐
-        │        │        │        │          │          │
-        ▼        ▼        ▼        ▼          ▼          ▼
-    register  login   google   phone-otp email-otp faceid
-      │        │      login     verify    verify    login
-      │        │        │        │         │         │
-      ▼        ▼        ▼        ▼         ▼         ▼
-    Validate Validate Verify  Verify    Verify   Match
-    Email    Creds   Token   SMS Code  Email    Face
-    exists   match                      Code    Descriptor
-      │        │        │        │         │         │
-      ▼        ▼        ▼        ▼         ▼         ▼
-   Create  Find    Create    Create   Create   Find
-   User    User    User      User     User     User
-   Record          if New    if New   if New
-      │        │        │        │         │         │
-      └────────┼────────┼────────┼─────────┼─────────┘
-               │        │        │        │
-               ▼        ▼        ▼        ▼
-           Set $_SESSION variables
-           session_id() cookie sent to browser
-                 │
-                 ▼
-         Return { success: true, user: {...} }
-```
+1. **EMAIL + PASSWORD** — Standard registration/login with hashed passwords
+2. **EMAIL OTP** — 6-digit code via Gmail SMTP → auto-register if new
+3. **PHONE OTP** — 6-digit code via SMS → auto-register if new
+4. **GOOGLE OAUTH 2.0** — Google token → auto-create user if first login
+5. **FACE ID** — Register face descriptor after login, then use for subsequent logins
+6. **PASSWORD RESET** — Token-based email link (5-minute expiry, single use)
 
 ---
 
 ## 7. User Roles & Permissions
 
-The system supports roles aligned to the current schema:
+The system supports 5 roles aligned to the current `user_role_v2` enum:
 
 | Role | Primary Use Case | Key Capabilities |
 |------|------------------|------------------|
-| **user** | Regular customer | Browse vehicles, create bookings, manage own bookings, write reviews, community posts |
-| **driver** | Professional driver | Accept ride requests, manage active trips, view driver dashboard |
-| **admin** | Platform administrator | Full platform access: manage users, vehicles, bookings, promotions, hero slides |
-| **staff** | Staff (control/call-center) | Handle enquiries, manage bookings, assist customers |
-
-### Role Assignment
-
-- **user**: Default role for email/phone registration
-- **driver**: Vetted through admin dashboard (background check, license verification)
-- **admin**: Assigned only by existing admin via database or `/api/admin.php`
-- **staff**: Assigned by admin (suitable for team members with limited access)
+| **user** | Regular customer | Browse vehicles, create bookings, manage orders, write reviews, community posts, earn loyalty points |
+| **driver** | Professional driver | View assigned vehicle, manage active trips, advance trip status, receive dispatch notifications |
+| **callcenterstaff** | Call center operator | Search/create customers, create phone booking requests, cancel/delete own requests |
+| **controlstaff** | Operations staff | Approve/reject booking requests, dispatch drivers to vehicles, manage fleet, send invoices |
+| **admin** | Platform administrator | Full platform access: all staff capabilities + manage users, promotions, hero slides |
 
 ### Permission Matrix
 
-| Feature | Renter | Owner | Driver | Admin | Staff |
-|---------|--------|-------|--------|-------|-------|
-| Browse vehicles | ✅ | ✅ | ✅ | ❌ |
-| Create booking | ✅ | ❌ | ✅ | ✅ |
-| Add vehicle | ❌ | ❌ | ✅ | ✅ |
-| Accept ride request | ❌ | ❌ | ✅ | ❌ | ❌ |
-| Manage own bookings | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Manage all bookings | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Create/manage promos | ❌ | ❌ | ❌ | ✅ | ❌ |
-| View platform analytics | ❌ | ⚠️ (own vehicle stats) | ⚠️ (earnings) | ✅ | ❌ |
-| Manage users | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Feature | User | Driver | CallCenter | Control | Admin |
+|---------|------|--------|------------|---------|-------|
+| Browse vehicles | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Create booking (web) | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Create phone booking | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Create customer account | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Accept/advance trips | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Approve booking requests | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Dispatch drivers | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Manage fleet vehicles | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Manage users | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Manage promotions/slides | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Community access | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Modify own orders | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Write reviews | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ---
 
 ## 8. Core Business Flows
 
-### 8.1 Vehicle Owner Onboarding
+### 8.1 Minicab Booking Flow (Web — Customer)
 
 ```
-Step 1: User Registration
-  • Register as "renter" with email/phone or OAuth
-  
-Step 2: Upgrade to Owner
-  • New API route: /api/vehicles.php (action: "become-owner")
-  • Provide identity verification details
-  • Add payment method for receiving rental income
-  • Account status: "pending_verification" → "verified"
-  
-Step 3: Add First Vehicle
-  • POST /api/vehicles.php {action: "add", ...specs...}
-  • Upload vehicle images (Supabase Storage)
-  • Set daily/weekly/monthly prices
-  • Set vehicle status: "available"
-  
-Step 4: Vehicle Appears in Listings
-  • Vehicle shows in public listings filters
-  • Appears in search results for matching criteria
+Step 1: Select service type (Local, Long-distance, Airport, Hotel, Daily Hire)
+Step 2: Choose ride tier (Eco, Standard, Luxury) + seats (4 or 7)
+Step 3: Enter pickup/destination, date/time, distance
+Step 4: Apply promo code (optional) → calculate fare
+Step 5: Select payment (Cash, PayPal, Account Balance)
+Step 6: Submit → booking created (status: pending)
+Step 7: Control Staff approves → auto-assigns driver+vehicle → invoice emailed
+Step 8: Driver advances: on_route → on_trip (dispatch email sent) → completed
+Step 9: Customer reviews → loyalty points awarded
 ```
 
-### 8.2 Renter Booking Flow
+### 8.2 Phone Booking Flow (Call Center Staff)
 
 ```
-Step 1: Browse & Search
-  • GET /api/vehicles.php {action: "list", search: "BMW", ...filters...}
-  • Display results with images from Supabase Storage
-  • Show vehicle details: specs, availability, owner rating
-  
-Step 2: Select & View Details
-  • POST /api/vehicles.php {action: "get", id: "vehicle_id"}
-  • Display: full specs, reviews, image gallery, owner profile
-  • Check availability calendar
-  
-Step 3: Create Booking
-  POST /api/bookings.php {
-    action: "create",
-    vehicle_id: "uuid",
-    booking_type: "self-drive"|"with-driver"|"airport",
-    pickup_date: "2026-04-01",
-    return_date: "2026-04-05",
-    promo_code: optional,
-    payment_method: "credit_card"|"cash"|"bank_transfer"
-  }
-  
-  Backend processing:
-  • Validate vehicle availability for date range
-  • Check promo code if provided (POST /api/bookings.php {action: "validate-promo"})
-  • Calculate price: rate × days - discount
-  • Create booking record (status: 'pending')
-  • Create payment record
-  • Send notifications to renter & owner
-  • If with-driver: Find available driver matching preferences
-  
-Step 4: Payment & Confirmation
-  • Owner receives notification, reviews booking
-  • Owner confirms (POST /api/bookings.php {action: "update-status", status: "confirmed"})
-  • Renter receives confirmation notification
-  • Payment processed (status: 'paid' or 'pending' based on payment method)
-  
-Step 5: Trip Execution
-  • Pickup: Renter/Driver picks up vehicle (status: "in_progress")
-  • Trip: Driver provides live GPS tracking (for with-driver bookings)
-  • Return: Vehicle returned (status: "completed")
-  
-Step 6: Post-Trip
-  • Renter can write review (/api/bookings.php {action: "submit-review"})
-  • Review rating affects vehicle's avg_rating
-  • Driver can accept new bookings
-  • Owner receives payment minus commission
+Step 1: Customer calls → staff searches/creates customer account
+Step 2: Staff fills booking form (tier, seats, pickup, destination, service type)
+Step 3: System checks vehicle availability (time-window conflict detection)
+Step 4: Booking created as "pending" → sent to Control Staff queue
+Step 5: Control Staff reviews and approves/rejects
+Step 6: On approval: driver+vehicle assigned, invoice emailed, trip starts
 ```
 
-### 8.3 Driver Assignment Flow
+### 8.3 Driver Trip Lifecycle
 
 ```
-If booking_type = "minicab":
-  POST /api/bookings.php {action: "create", ride_tier: "eco"|"standard"|"premium"}
-  
-  System finds:
-  1. Available driver by tier preference
-  2. Driver location vs pickup location
-  3. Driver acceptance rate & rating
-  
-  Driver receives:
-  • Push notification (or polling for web)
-  • Booking details: pickup location, destination, fare
-  
-  Driver can:
-  • Accept booking → navigation + passenger rating
-  • Decline booking → system finds next driver
-  
-  Active Trip:
-  • GPS tracking live-streamed to renter
-  • Driver navigation to pickup → passenger pickup → destination
-  • Real-time notifications for both parties
+Control Staff dispatches driver → assigns vehicle
+Order approved → driver receives notification
+Driver: on_route → (30-min before pickup window) → Start Trip
+Driver: on_trip → dispatch email sent to customer
+Driver: completed → vehicle released, booking archived
 ```
 
-### 8.4 Booking Types
+### 8.4 Fare Calculation
 
-| Type | Description | Price Calculation | Use Case |
-|------|-------------|-------------------|----------|
-| **with-driver** | Professional driver provided | `price_per_day × total_days - discount` | Chauffeur hire |
-| **minicab** | Ride-hailing (auto-assign vehicle) | `distance × tier_rate - discount` | Instant rides |
+**Minicab (per mile):**
+| Seats | Eco | Standard | Luxury |
+|-------|-----|----------|--------|
+| 4 | £2.00/mi | £2.50/mi | £3.50/mi |
+| 7 | £3.00/mi | £3.50/mi | £4.50/mi |
 
-### 8.5 Promotion System
+**Phone Booking (per mile + £2.00 booking fee):**
+| Seats | Eco | Standard | Premium |
+|-------|-----|----------|---------|
+| 4 | £2.50/mi | £3.00/mi | £4.00/mi |
+| 7 | £3.00/mi | £3.50/mi | £5.00/mi |
 
-Admin creates promotions via `/api/admin.php`:
+**Daily Hire (flat rate):**
+| Seats | Eco | Standard | Luxury |
+|-------|-----|----------|--------|
+| 4 | £180 | £220 | £300 |
+| 7 | £220 | £270 | £400 |
 
-```json
-{
-  "code": "WEEKEND20",
-  "description": "20% off for weekend bookings",
-  "discount_type": "percentage",      // or "fixed"
-  "discount_value": 20,               // 20% off, or $20 off
-  "min_booking_days": 2,              // Minimum days required
-  "min_booking_amount": 100,          // Minimum booking value
-  "max_uses": 100,                    // Total usage limit
-  "max_uses_per_user": 1,             // Per user limit
-  "applies_to": "all",                // or specific vehicle IDs
-  "is_active": true,
-  "created_at": "2026-02-28T10:00:00Z",
-  "expires_at": "2026-03-31T23:59:59Z"
-}
-```
+### 8.5 Booking Modification Rules
 
-**Promotion Validation:**
-- POST `/api/bookings.php` {action: "validate-promo", code: "WEEKEND20"}
-- Returns: `{success, discount_amount, total_after_discount}`
+- Only **pending** + **cash** + **minicab** bookings can be modified
+- Must be **24+ hours before pickup**
+- Editable fields: pickup, destination, service type, date/time, tier, seats
+- Pickup date can only move within **±7 days** from original
+- Fare auto-recalculates on distance/tier/seats changes
+
+### 8.6 Cancellation & Refund
+
+- Online payments (PayPal, Account Balance) → auto-refund to account balance
+- PayPal payments → refund via PayPal Capture Refund API
+- Cash bookings → no refund needed
+- Renters must cancel **24+ hours before pickup**
 
 ---
 
@@ -816,111 +695,49 @@ Admin creates promotions via `/api/admin.php`:
 ```
 Application Event (Booking created, Payment processed, etc.)
          │
-         ▼
-   createNotification()  [in api/notification-helpers.php]
+         ├─→ createNotification()  [api/notification-helpers.php]
+         │     → INSERT into notifications table
          │
-         ├─→ INSERT into PostgreSQL notifications table
+         ├─→ notifyVehicleAvailabilitySubscribers()
+         │     → Notify users subscribed to vehicle availability
          │
-         ├─→ Increment unread_count for user
-         │
-         └─→ (Optional) Send email / SMS
+         └─→ createDriverNotification()  [BookingRepository]
+               → INSERT into driver_notifications table
          
-         ▼
 Frontend Polling: GET /api/notifications.php?action=unread-count (every 15s)
-         │
-         ▼
-JavaScript updates UI: Badge with unread count, notification list
 ```
 
 ### Notification Types
 
 | Type | Trigger | Recipient |
 |------|---------|-----------|
-| `booking` | New booking created, status changed (pending/confirmed/in_progress/completed) | Renter & Owner |
+| `booking` | New booking, status change, trip confirmed by staff | Renter & Owner |
 | `payment` | Payment confirmation, refund processed | Renter |
-| `promo` | New promotion available, ending soon | All users (broadcast) |
-| `system` | Password changed, profile updated, account alerts | User |
-| `alert` | Important alerts, booking at risk, driver nearby | User |
-| `driver_request` | Driver assignment request, driver accepted/declined | Renter & Driver |
-
-### Notification Management
-
-**Endpoints:**
-- `GET /api/notifications.php?action=list&limit=20&offset=0` — List notifications
-- `GET /api/notifications.php?action=unread-count` — Get unread notification count
-- `POST /api/notifications.php` {action: "mark-read", id: "notification_id"} — Mark as read
-- `POST /api/notifications.php` {action: "mark-all-read"} — Mark all as read
-- `POST /api/notifications.php` {action: "delete", id: "notification_id"} — Delete notification
-- `POST /api/notifications.php` {action: "clear-all"} — Clear all notifications
-
-### Future: Push Notifications
-
-Currently the system uses polling. For production, extend with:
-1. Add `push_token` column to `users` table (for Firebase Cloud Messaging)
-2. After `createNotification()`, also send FCM push
-3. Or subscribe to PostgreSQL LISTEN/NOTIFY for real-time updates
+| `promo` | Loyalty points earned | User |
+| `system` | Password changed, profile updated | User |
+| `alert` | Booking cancelled, driver nearby | User |
+| `dispatch` | Driver dispatched, order assigned | Driver |
+| `dispatch_assignment` | New order assigned to driver | Driver |
+| `order_status_update` | Order status changed by staff | Driver |
 
 ---
 
 ## 10. Image Storage & Delivery
 
-### Architecture
-
-Images are stored in **Supabase Storage** (recommended) or database BYTEA (legacy):
+Images are stored in **Supabase Storage** bucket `DriveNow`:
 
 ```
-Supabase Storage Bucket: "DriveNow"
-                     │
-                     ├── vehicles/{vehicle_id}/
-                     │   ├── abc123.jpg
-                     │   ├── def456.png
-                     │   └── ...
-                     │
-                     ├── avatars/
-                     │   ├── user_uuid.jpg
-                     │   └── ...
-                     │
-                     ├── hero-slides/
-                     │   ├── slide_001.jpg
-                     │   └── ...
-                     │
-                     └── community/
-                         ├── post_uuid.jpg
-                         └── ...
+DriveNow/
+├── vehicles/{vehicle_id}/      # Vehicle images
+├── avatars/                     # User avatars
+├── hero-slides/                 # Homepage banners
+└── community/                   # Community post images
 ```
 
 **CDN URL Format:**
 ```
 https://{project_id}.supabase.co/storage/v1/object/public/DriveNow/vehicles/{vehicle_id}/image.jpg
 ```
-
-### Image Upload & Serving
-
-**Upload vehicle image:**
-```
-POST /api/vehicles.php
-Content-Type: multipart/form-data
-  action: "upload-image"
-  vehicle_id: "uuid"
-  image: <binary file>
-  
-Response:
-{
-  "success": true,
-  "image_id": "uuid",
-  "storage_path": "vehicles/vehicle-uuid/image-uuid.jpg",
-  "public_url": "https://xxx.supabase.co/storage/v1/object/public/DriveNow/vehicles/..."
-}
-```
-
-**Serve image:**
-```
-GET /api/vehicles.php?action=get-image&id={image_id}
-  → Redirects (302) to Supabase Storage public URL
-  → Browser downloads directly from Supabase CDN (no PHP overhead)
-```
-
-### Storage Limits
 
 | File Type | Max Size | Format |
 |-----------|----------|--------|
@@ -929,212 +746,50 @@ GET /api/vehicles.php?action=get-image&id={image_id}
 | Hero slides | 10 MB | JPEG, PNG, WebP |
 | Community posts | 5 MB | JPEG, PNG, WebP, GIF |
 
-> **Note**: Images are served directly from Supabase CDN. Mobile apps can use image URLs directly as `<img>` or `Image.network()` without session cookies needed.
-    └── abc123def456.jpg
-```
+---
 
-```
-┌──────────────┐        ┌─────────────────────┐       ┌──────────────────┐
-│  Client       │  POST  │ vehicles.php         │       │ Supabase Storage │
-│  (multipart)  │──────→ │ action=upload-image  │──────→│ Bucket: DriveNow │
-│               │        │                      │       │ PUT /object/...  │
-│               │        │ 1. Validate file     │       │                  │
-│               │        │ 2. Upload to Storage  │       │ Returns public   │
-│               │        │ 3. Save path to DB   │       │ URL              │
-│               │        │ 4. Return public URL │       │                  │
-└──────────────┘        └─────────────────────┘       └──────────────────┘
+## 11. Payments & Invoicing
 
-┌──────────────┐        ┌──────────────────────────────────────────────────┐
-│  Client       │  GET   │ Supabase Storage CDN                            │
-│  <img src=.>  │──────→ │ https://{project}.supabase.co/storage/v1/       │
-│               │        │   object/public/DriveNow/vehicles/{id}/img.jpg  │
-│               │        │                                                  │
-│               │        │ Direct CDN access — no PHP proxy needed         │
-└──────────────┘        └──────────────────────────────────────────────────┘
-```
+### Payment Methods
 
-### Image Endpoints
+| Method | Flow | Refund |
+|--------|------|--------|
+| **Cash** | Pay at pickup, marked paid on completion | No refund needed |
+| **PayPal** | Create order → redirect to PayPal → capture on return | Refund via PayPal Capture Refund API |
+| **Account Balance** | Deduct from `users.account_balance` | Credit back to account balance |
 
-| Endpoint | Storage Folder | Notes |
-|----------|---------------|-------|
-| Upload: `POST /api/vehicles.php` `{action: "upload-image"}` | `vehicles/{vehicle_id}/` | Returns Supabase public URL |
-| Upload: `POST /api/auth.php` (multipart, avatar) | `avatars/` | Upsert (overwrites previous) |
-| Upload: `POST /api/admin.php` (multipart, hero slide) | `hero-slides/` | Returns public URL |
-| Upload: `POST /api/community.php` (multipart, post image) | `community/` | Returns public URL |
+### PayPal Integration (`lib/payments/PayPalGateway.php`)
 
-### Image URLs
+- Supports **sandbox** and **live** mode via `PAYPAL_MODE` env var
+- **Mock mode** (`PAYPAL_MOCK_ENABLED=true`) for development without PayPal credentials
+- Operations: `createOrder()`, `captureOrder()`, `markCancelled()`, `refundCapture()`
 
-All API responses now return **direct Supabase Storage public URLs**:
+### Invoice Generation (`Invoice/`)
 
-```
-https://zydpdyoinxnrlsqkeobd.supabase.co/storage/v1/object/public/DriveNow/vehicles/{vehicle_id}/image.jpg
-```
-
-Legacy `/api/vehicles.php?action=get-image&id=X` endpoints still work — they redirect (302) to the Supabase public URL.
-
-### Image Upload Limits
-
-- Vehicle images: **5 MB** max per image
-- Avatars: **3 MB** max
-- Hero slides: **10 MB** max
-- Community posts: **5 MB** max
-- Accepted formats: JPEG, PNG, WebP, GIF
-
-> **Mobile Note**: Images are now served via Supabase Storage CDN, so mobile apps can use the public URLs directly as `<img src>` or `Image.network()` — no cookie/session needed for image loading.
+- **mPDF** generates A4 PDF invoices with booking details
+- Automatically emailed when Control Staff confirms an order (pending → in_progress)
+- Contains: customer info, vehicle details, pickup/destination, pricing summary
 
 ---
 
-## 11. AI Chatbot Integration
+## 12. AI Chatbot Integration
 
 ```
-┌─────────────┐     ┌──────────────────────┐     ┌──────────────┐
-│  Client      │     │ chatbot-with-        │     │  n8n Server   │
-│  (JS/Mobile) │────→│ memory.php (proxy)   │────→│  (localhost:  │
-│              │     │                      │     │   5678)       │
-│              │     │ Adds sessionId:      │     │              │
-│              │     │  user_{userId} or    │     │ AI Agent:    │
-│              │     │  anon_{sessionToken} │     │ • LLM call   │
-│              │     │                      │     │ • Chat memory│
-│              │◄────│ Returns {response}   │◄────│ • Context    │
-└─────────────┘     └──────────────────────┘     └──────────────┘
-                                                        │
-                                                        ▼
-                                                ┌──────────────┐
-                                                │ PostgreSQL    │
-                                                │ Table:        │
-                                                │ n8n_chat_     │
-                                                │ histories     │
-                                                └──────────────┘
+Client (JS) → chatbot-with-memory.php (proxy) → n8n Server (AI Agent)
+                                                         │
+                                                         ▼
+                                                 PostgreSQL table:
+                                                 n8n_chat_histories
 ```
 
-### n8n Workflow Setup
-
-1. Create an n8n webhook trigger node
-2. Add PostgreSQL Chat Memory node (table: `n8n_chat_histories`)
-3. Connect to AI Agent node (OpenAI/Anthropic)
-4. Return `{ output: "response text" }`
-5. Set the webhook URL in `.env` as `N8N_WEBHOOK_URL`
+Set `N8N_WEBHOOK_URL` in `.env` to connect to your n8n AI Agent webhook.
 
 ---
 
-## 12. Environment Configuration
+## 13. Environment Configuration
 
 ### `.env` File Template
 
-```bash
-# ============================================================
-# DATABASE CONFIGURATION (Supabase PostgreSQL)
-# ============================================================
-DB_HOST=aws-0-ap-southeast-1.pooler.supabase.com
-DB_PORT=6543
-DB_NAME=postgres
-DB_USER=postgres.your_project_ref
-DB_PASSWORD=your_password
-DB_SSL_MODE=require
-
-# ============================================================
-# SUPABASE STORAGE
-# ============================================================
-SUPABASE_URL=https://your_project_ref.supabase.co
-SUPABASE_SERVICE_KEY=your_supabase_service_role_key
-
-# ============================================================
-# N8N AI CHATBOT & AUTOMATION
-# ============================================================
-N8N_BASE_URL=http://localhost:5678
-N8N_WEBHOOK_URL=http://localhost:5678/webhook/your-webhook-id
-
-# ============================================================
-# EMAIL DELIVERY (Gmail SMTP for OTP)
-# ============================================================
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your@gmail.com
-SMTP_PASSWORD=your_app_password
-SMTP_FROM_EMAIL=your@gmail.com
-SMTP_FROM_NAME=Private Hire
-
-# ============================================================
-# AUTHENTICATION PROVIDERS (Optional)
-# ============================================================
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-
-# ============================================================
-# APPLICATION CONFIGURATION
-# ============================================================
-APP_ENV=development       # 'development' or 'production'
-APP_DEBUG=true           # Enable error details in development
-APP_URL=http://localhost:8000
-
-# ============================================================
-# OPTIONAL: EXTERNAL SERVICES
-# ============================================================
-# GOOGLE_MAPS_API_KEY=your_maps_key
-# SENTRY_DSN=your_sentry_dsn (for error tracking)
-```
-
-### Environment Variables Reference
-
-| Variable | Required | Example | Usage |
-|----------|----------|---------|-------|
-| `DB_HOST` | Yes | `aws-0-ap-southeast-1.pooler.supabase.com` | PostgreSQL host |
-| `DB_PORT` | Yes | `6543` | PostgreSQL port (Supabase uses 6543) |
-| `DB_NAME` | Yes | `postgres` | Database name |
-| `DB_USER` | Yes | `postgres.project_ref` | Database user (format: `postgres.project_ref`) |
-| `DB_PASSWORD` | Yes | (your password) | Database password |
-| `DB_SSL_MODE` | Yes | `require` | PostgreSQL SSL mode (always use `require` for Supabase) |
-| `SUPABASE_URL` | Yes | `https://xxx.supabase.co` | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Yes | (service role key) | Service role API key (for file uploads) |
-| `N8N_BASE_URL` | No | `http://localhost:5678` | N8N server URL (for local AI agent) |
-| `N8N_WEBHOOK_URL` | No | `http://localhost:5678/webhook/xxx` | N8N webhook for chatbot |
-| `SMTP_HOST` | Yes | `smtp.gmail.com` | Email SMTP server |
-| `SMTP_PORT` | Yes | `587` | SMTP port (Gmail uses 587) |
-| `SMTP_USERNAME` | Yes | `your@gmail.com` | Email address for sending OTPs |
-| `SMTP_PASSWORD` | Yes | (app password) | Gmail app-specific password |
-| `SMTP_FROM_EMAIL` | Yes | `hello@privatehire.com` | Sender email for notifications |
-| `SMTP_FROM_NAME` | Yes | `Private Hire` | Sender name in emails |
-| `APP_ENV` | No | `development` | Application environment mode |
-| `APP_DEBUG` | No | `true` | Enable debug output (disable in production) |
-
----
-
-## 13. Running Locally
-
-### Prerequisites
-
-- **PHP 8.2+** with extensions: `pdo_pgsql`, `mbstring`, `openssl`, `json`, `curl`
-- **Composer** (for PHP dependencies like PHPMailer)
-- **PostgreSQL database** (Supabase account recommended, or local PostgreSQL 13+)
-- **Git** (for cloning repository)
-
-### Setup Steps
-
-#### 1. Clone the Repository
-```bash
-git clone https://github.com/DK0310/Scrum_App.git
-cd Scrum_App
-```
-
-#### 2. Install PHP Dependencies
-```bash
-composer install
-```
-
-#### 3. Configure Environment Variables
-```bash
-# Copy the example environment file
-cp .env.example .env
-
-# Edit .env with your Supabase credentials:
-# DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SSL_MODE
-# SUPABASE_URL, SUPABASE_SERVICE_KEY (for storage)
-# SMTP settings (for Gmail OTP delivery)
-# N8N_BASE_URL (for AI chatbot)
-nano .env
-```
-
-**Minimal .env Configuration:**
 ```bash
 # Database (Supabase PostgreSQL)
 DB_HOST=aws-0-ap-southeast-1.pooler.supabase.com
@@ -1144,175 +799,95 @@ DB_USER=postgres.your_project
 DB_PASSWORD=your_password
 DB_SSL_MODE=require
 
-# Supabase Storage (for images)
+# Supabase Storage
 SUPABASE_URL=https://your_project.supabase.co
 SUPABASE_SERVICE_KEY=your_service_role_key
 
-# Email (Gmail SMTP for OTP)
+# Email (Gmail SMTP)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=your@gmail.com
 SMTP_PASSWORD=your_app_password
 SMTP_FROM_EMAIL=your@gmail.com
-SMTP_FROM_NAME=Private Hire
+SMTP_FROM_NAME=PrivateHire
 
 # N8N (AI Chatbot - optional)
-N8N_BASE_URL=http://localhost:5678
 N8N_WEBHOOK_URL=http://localhost:5678/webhook/your-webhook-id
+
+# Mem0 (optional)
+MEM0_API_KEY=your_mem0_api_key
+
+# PayPal (Sandbox)
+PAYPAL_CLIENT_ID=your_paypal_sandbox_client_id
+PAYPAL_SECRET=your_paypal_sandbox_secret
+PAYPAL_MODE=sandbox
+PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
+PAYPAL_MOCK_ENABLED=true
+
+# Google Maps (optional)
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 
 # App configuration
 APP_ENV=development
 APP_DEBUG=true
 ```
 
-#### 4. Initialize Database
+---
+
+## 14. Running Locally
+
+### Prerequisites
+
+- **PHP 8.2+** with extensions: `pdo_pgsql`, `mbstring`, `openssl`, `json`, `curl`
+- **Composer** (for PHP dependencies)
+- **PostgreSQL database** (Supabase account recommended)
+
+### Setup Steps
+
 ```bash
-# Run the database schema against your Supabase PostgreSQL
-# Option A: Use psql CLI
+# 1. Clone the repository
+git clone https://github.com/DK0310/Scrum_App.git
+cd Scrum_App
+
+# 2. Install PHP dependencies
+composer install
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env with your credentials
+
+# 4. Initialize database
 psql -h your_host -p 6543 -U postgres.your_project -d postgres -f Database/schema.sql
 
-# Option B: Import via Supabase Console
-# 1. Open Supabase Dashboard
-# 2. Go to SQL Editor
-# 3. Copy contents of Database/schema.sql and execute
-```
-
-#### 5. Start Development Server
-```bash
-# Using PHP's built-in server (port 8000)
+# 5. Start development server
 php -S localhost:8000
 
-# OR using your local Apache/Nginx (depending on your setup)
+# 6. Open browser
+# http://localhost:8000
 ```
 
-#### 6. Access the Application
-```
-Open browser: http://localhost:8000
-```
+### Default Accounts (from seed data)
 
-### API Testing (cURL Examples)
-
-**Check Session Status:**
-```bash
-curl -X POST http://localhost:8000/api/auth.php \
-  -H "Content-Type: application/json" \
-  -d '{"action": "check-session"}'
-```
-
-**Search Vehicles:**
-```bash
-curl "http://localhost:8000/api/vehicles.php?action=search-suggestions&q=bmw"
-```
-
-**List Vehicles:**
-```bash
-curl -X POST http://localhost:8000/api/vehicles.php \
-  -H "Content-Type: application/json" \
-  -d '{"action": "list", "limit": 10, "max_price": 200}'
-```
-
-**Get Active Promotions:**
-```bash
-curl "http://localhost:8000/api/bookings.php?action=active-promos"
-```
-
-### Troubleshooting
-
-**Connection Failed Error:**
-- Verify `.env` credentials match your Supabase project
-- Ensure firewall allows connection to Supabase DB port
-- Check SSL certificate access: `ssl_mode=require`
-
-**Session Not Working:**
-- Ensure `session_start()` is called at beginning of PHP files
-- Check browser cookies are enabled
-- Verify `$_SESSION` variables are being set during login
-
-**Emails Not Sending:**
-- Verify Gmail app-specific password (not regular password)
-- Ensure "Less secure apps" is enabled in Gmail settings
-- Check SMTP credentials in `.env`
-- Review PHP error logs for mail errors
+| Email | Password | Role |
+|-------|----------|------|
+| `admin1@drivenow.local` | `admin123` | admin |
+| `controlstaff1@drivenow.local` | `staff123` | controlstaff |
+| `callcenterstaff1@drivenow.local` | `staff123` | callcenterstaff |
 
 ---
 
-## 14. Mobile App Integration Guide
+## 15. Mobile App Integration Guide
 
-### Recommended Architecture for Mobile
-
+All PHP REST APIs are accessible from mobile apps with CORS headers:
 ```
-┌─────────────────────────────────┐
-│        Mobile App               │
-│   (Flutter / React Native)      │
-│                                 │
-│  ┌────────────────────────────┐ │
-│  │    API Service Layer       │ │
-│  │    (HTTP Client + Cookies) │ │
-│  └────────────┬───────────────┘ │
-│               │                 │
-│  ┌────────────▼───────────────┐ │
-│  │    Same PHP REST APIs      │ │
-│  │    /api/auth.php           │ │
-│  │    /api/vehicles.php       │ │
-│  │    /api/bookings.php       │ │
-│  │    /api/notifications.php  │ │
-│  │    /api/community.php      │ │
-│  └────────────────────────────┘ │
-└─────────────────────────────────┘
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: POST, GET, OPTIONS
+Access-Control-Allow-Headers: Content-Type
 ```
 
-### Key Integration Points
-
-#### 1. Authentication
-```dart
-// Use cookie jar for session management
-// After login, all subsequent requests include session cookie
-POST /api/auth.php { "action": "login", "email": "...", "password": "..." }
-// Store the session cookie and send with all requests
-```
-
-#### 2. Vehicle Browsing
-```dart
-// List with filters
-POST /api/vehicles.php { "action": "list", "search": "BMW", "category": "suv" }
-
-// Autocomplete
-GET /api/vehicles.php?action=search-suggestions&q=mer
-
-// Display images — direct Supabase Storage CDN URLs
-Image.network(vehicle['images'][0])  // Already a full public URL
-```
-
-#### 3. Booking
-```dart
-// Validate promo
-POST /api/bookings.php { "action": "validate-promo", "code": "WEEKEND20" }
-
-// Create booking
-POST /api/bookings.php { "action": "create", "vehicle_id": "...", ... }
-
-// Get my orders
-POST /api/bookings.php { "action": "my-orders" }
-```
-
-#### 4. Notifications
-```dart
-// Poll every 15s (or implement FCM push)
-GET /api/notifications.php?action=unread-count
-
-// List notifications
-GET /api/notifications.php?action=list&limit=20
-```
-
-#### 5. Face ID
-For mobile Face ID, you can:
-- Use device-native biometrics (iOS Face ID / Android BiometricPrompt) instead of face-api.js
-- The face descriptor approach works cross-platform but face-api.js is browser-only
-- Consider storing a device token + biometric flag on the server instead
+Use cookie jar for session management. Images are served via Supabase CDN (no session needed).
 
 ### API Response Conventions
-
-All endpoints follow this pattern:
 
 ```json
 // Success
@@ -1324,24 +899,13 @@ All endpoints follow this pattern:
 // Auth required
 { "success": false, "message": "Authentication required.", "require_login": true }
 
-// Force logout (role changed by admin)
+// Force logout
 { "success": false, "message": "...", "force_logout": true }
 ```
 
-### CORS Headers
-
-All API files include:
-```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: POST, GET, OPTIONS
-Access-Control-Allow-Headers: Content-Type
-```
-
-This means mobile apps can call the APIs directly without CORS issues.
-
 ---
 
-## 15. ERD
+## 16. ERD
 
 ```
 ┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
@@ -1349,32 +913,43 @@ This means mobile apps can call the APIs directly without CORS issues.
 ├──────────────────┤       ├──────────────────┤       ├──────────────────┤
 │ id (UUID) PK     │──┐    │ id (UUID) PK     │──┐    │ id (UUID) PK     │
 │ email            │  │    │ owner_id (FK)  ───┼──┘    │ vehicle_id (FK)──┤
-│ phone            │  │    │ brand, model      │       │ image_data BYTEA │
-│ username         │  │    │ year, category    │       │ mime_type        │
-│ password_hash    │  │    │ transmission      │       │ file_size        │
-│ role (enum)      │  │    │ fuel_type, seats  │       │ sort_order       │
-│ full_name        │  │    │ price_per_day     │       └──────────────────┘
-│ face_descriptor  │  │    │ location_city     │
-│ membership       │  │    │ status (enum)     │       ┌──────────────────┐
-│ avatar_data      │  │    │ avg_rating        │       │    bookings      │
-│ created_at       │  │    │ total_bookings    │       ├──────────────────┤
-└──────────────────┘  │    └──────────────────┘       │ id (UUID) PK     │
-                      │                                │ renter_id (FK)───┤
+│ phone            │  │    │ brand, model      │       │ storage_path     │
+│ role (5 roles)   │  │    │ year, category    │       │ mime_type        │
+│ full_name        │  │    │ service_tier      │       │ file_size        │
+│ password_hash    │  │    │ seats, capacity   │       │ sort_order       │
+│ face_descriptor  │  │    │ price_per_day     │       └──────────────────┘
+│ membership       │  │    │ location_city     │
+│ account_balance  │  │    │ status (enum)     │       ┌──────────────────┐
+│ assigned_vehicle │  │    │ avg_rating        │       │    bookings      │
+│ loyalty_point    │  │    │ total_bookings    │       ├──────────────────┤
+│ createdbystaff   │  │    └──────────────────┘       │ id (UUID) PK     │
+└──────────────────┘  │                                │ renter_id (FK)───┤
                       ├───────────────────────────────→│ vehicle_id (FK)  │
                       │                                │ owner_id (FK)    │
-                      │    ┌──────────────────┐       │ booking_type     │
-                      │    │    payments       │       │ pickup_date      │
-                      │    ├──────────────────┤       │ return_date      │
-                      │    │ id (UUID) PK     │       │ total_amount     │
-                      │    │ booking_id (FK)──┼──────→│ status (enum)    │
-                      ├───→│ user_id (FK)     │       │ promo_code       │
-                      │    │ amount, method   │       └──────────────────┘
-                      │    │ status (enum)    │
+                      │    ┌──────────────────┐       │ driver_id (FK)   │
+                      │    │    payments       │       │ booking_type     │
+                      │    ├──────────────────┤       │ service_type     │
+                      │    │ id (UUID) PK     │       │ ride_tier        │
+                      │    │ booking_id (FK)──┼──────→│ pickup_date/time │
+                      ├───→│ user_id (FK)     │       │ total_amount     │
+                      │    │ amount, method   │       │ status (enum)    │
+                      │    │ payment_details  │       │ ride_started_at  │
+                      │    │ status (enum)    │       │ ride_completed_at│
+                      │    └──────────────────┘       └──────────────────┘
+                      │                                        │
+                      │    ┌──────────────────┐       ┌────────┴─────────┐
+                      │    │  active_trips    │       │ booking_archive  │
+                      │    ├──────────────────┤       ├──────────────────┤
+                      ├───→│ driver_id (FK)   │       │ booking_id (UQ)  │
+                      │    │ booking_id (FK)──┼──────→│ status, region   │
+                      │    │ vehicle_id (FK)  │       │ booking_payload  │
+                      │    │ status           │       │ archived_at      │
+                      │    │ pickup/dest lat  │       └──────────────────┘
+                      │    │ driver lat/lng   │
                       │    └──────────────────┘       ┌──────────────────┐
                       │                                │   reviews        │
                       │    ┌──────────────────┐       ├──────────────────┤
-                      │    │  notifications   │       │ id (UUID) PK     │
-                      │    ├──────────────────┤       │ user_id (FK)─────┤
+                      │    │  notifications   │       │ user_id (FK)─────┤
                       ├───→│ user_id (FK)     │       │ vehicle_id (FK)  │
                       │    │ type (enum)      │       │ booking_id (FK)  │
                       │    │ title, message   │       │ rating (1-5)     │
@@ -1382,49 +957,39 @@ This means mobile apps can call the APIs directly without CORS issues.
                       │    └──────────────────┘       └──────────────────┘
                       │
                       │    ┌──────────────────┐       ┌──────────────────┐
-                      │    │ community_posts  │       │ community_likes  │
+                      │    │ driver_notifs    │       │vehicle_assignments│
                       │    ├──────────────────┤       ├──────────────────┤
-                      ├───→│ user_id (FK)     │◄──────│ post_id (FK)     │
-                      │    │ title, content   │       │ user_id (FK)     │
-                      │    │ category         │       │ UNIQUE(post,user)│
-                      │    │ likes_count      │       └──────────────────┘
-                      │    └──────────────────┘
-                      │            │                   ┌──────────────────┐
-                      │            └──────────────────→│community_comments│
-                      │                                ├──────────────────┤
-                      │    ┌──────────────────┐       │ post_id (FK)     │
-                      │    │   favorites      │       │ user_id (FK)     │
-                      │    ├──────────────────┤       │ content          │
-                      ├───→│ user_id (FK)     │       └──────────────────┘
-                      │    │ vehicle_id (FK)  │
-                      │    │ UNIQUE(user,veh) │       ┌──────────────────┐
-                      │    └──────────────────┘       │   promotions     │
-                      │                                ├──────────────────┤
-                      │    ┌──────────────────┐       │ code UNIQUE      │
-                      │    │  memberships     │       │ discount_type    │
-                      │    ├──────────────────┤       │ discount_value   │
-                      ├───→│ user_id (FK)     │       │ min_booking_days │
-                      │    │ tier (enum)      │       │ max_uses         │
-                      │    │ starts_at        │       │ expires_at       │
-                      │    │ expires_at       │       └──────────────────┘
-                      │    └──────────────────┘
-                      │                                ┌──────────────────┐
-                      │    ┌──────────────────┐       │  hero_slides     │
-                      │    │  gps_tracking    │       ├──────────────────┤
-                      │    ├──────────────────┤       │ image_data BYTEA │
-                      │    │ vehicle_id (FK)  │       │ title, subtitle  │
-                      │    │ booking_id (FK)  │       │ sort_order       │
-                      │    │ lat, lng, speed  │       │ is_active        │
-                      │    │ recorded_at      │       │ created_by (FK)  │
+                      ├───→│ driver_id (FK)   │       │ staff_id (FK)    │
+                      │    │ booking_id (FK)  │       │ driver_id (FK)   │
+                      │    │ title, message   │       │ vehicle_id (FK)  │
+                      │    │ notif_type       │       │ assigned_date    │
                       │    └──────────────────┘       └──────────────────┘
                       │
-                      │    ┌──────────────────┐
-                      │    │ trip_enquiries   │
+                      │    ┌──────────────────┐       ┌──────────────────┐
+                      │    │ community_posts  │       │   promotions     │
+                      │    ├──────────────────┤       ├──────────────────┤
+                      ├───→│ user_id (FK)     │       │ code UNIQUE      │
+                      │    │ title, content   │       │ discount_type    │
+                      │    │ category         │       │ discount_value   │
+                      │    │ likes_count      │       │ min_booking_days │
+                      │    └──────────────────┘       │ max_uses         │
+                      │                                │ expires_at       │
+                      │    ┌──────────────────┐       └──────────────────┘
+                      │    │password_reset    │
+                      │    │  _tokens         │       ┌──────────────────┐
+                      │    ├──────────────────┤       │  hero_slides     │
+                      ├───→│ user_id (FK)     │       ├──────────────────┤
+                      │    │ token_hash       │       │ storage_path     │
+                      │    │ expires_at       │       │ title, subtitle  │
+                      │    │ is_used          │       │ sort_order       │
+                      │    └──────────────────┘       │ is_active        │
+                      │                                │ created_by (FK)  │
+                      │    ┌──────────────────┐       └──────────────────┘
+                      │    │customer_enquiries│
                       │    ├──────────────────┤
-                      └───→│ user_id (FK)     │
-                           │ name, email      │
-                           │ trip_details     │
-                           │ status           │
+                      └───→│ customer_id (FK) │
+                           │ enquiry_type     │
+                           │ content, status  │
                            └──────────────────┘
 ```
 
@@ -1436,5 +1001,5 @@ This project is developed as part of a Scrum learning exercise. All rights reser
 
 ---
 
-*Last updated: March 31, 2026*
+*Last updated: April 7, 2026*
 *Platform Name: Private Hire — Premium Car Rental & Transportation*
