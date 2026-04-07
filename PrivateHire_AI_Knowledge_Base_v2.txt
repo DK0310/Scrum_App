@@ -1,0 +1,273 @@
+Private Hire AI Knowledge Base
+Version 2.1 - Optimized for RAG Vector Search
+Last updated: April 2026
+
+---
+
+TOPIC: About Private Hire Platform
+
+Private Hire is a premium car rental and transportation platform based in the UK. The platform connects customers with professional minicab services. All vehicles are managed by the operations team — there are no self-listing car owners. Bookings are dispatched by Control Staff to professional drivers. The platform is available at app.privatehire.com.
+
+---
+
+TOPIC: Services Offered by Private Hire
+
+Private Hire offers five types of services:
+1. Local (Minicab) — Point-to-point city rides.
+2. Long-Distance Transfer — Rides between cities or counties.
+3. Airport Transfer — Pickup or drop-off at major UK airports.
+4. Hotel Transfer — To or from hotels, venues, and events.
+5. Daily Hire — Full-day vehicle with driver, charged as a flat daily rate.
+
+---
+
+TOPIC: User Roles on Private Hire
+
+Private Hire has five user roles: user, driver, callcenterstaff, controlstaff, and admin. Regular customers have the "user" role. Drivers manage trip status. Call Center Staff create phone bookings for customers. Control Staff approve bookings and dispatch drivers. Admin has full platform access including user management and promotions.
+
+---
+
+TOPIC: What Can Regular Customers (Users) Do
+
+Regular customers with the "user" role can: browse vehicles, create online minicab bookings, view and manage their orders, cancel bookings (24+ hours before pickup), leave reviews after completed journeys, earn loyalty points, apply promo codes, pay via Cash, PayPal, or Account Balance, participate in community posts, and contact support via the enquiry form.
+
+---
+
+TOPIC: How to Book a Minicab Step by Step
+
+To book a minicab on Private Hire: Go to the Booking page. Select a service type: Local, Long-Distance, Airport Transfer, Hotel Transfer, or Daily Hire. Choose a ride tier: Eco, Standard, or Luxury. Choose number of passengers: 4 or 7 seats. Enter pickup location and destination. Enter pickup date and time (must be in the future). For Daily Hire, also enter the return date and time. Distance is calculated automatically from the map. Optionally apply a promo code. Choose a payment method: Cash, PayPal, or Account Balance. Submit the booking — it goes to Control Staff for approval. Once confirmed, you receive an invoice by email.
+
+---
+
+TOPIC: Requirements to Create a Booking
+
+Customers must be signed in and have a verified email address to create a booking. Bookings are reviewed and approved by Control Staff before a driver is assigned. The pickup time must be in the future.
+
+---
+
+TOPIC: Ride Tiers - Eco, Standard, Luxury Explained
+
+Private Hire offers three ride tiers. Eco is the budget-friendly option. Standard offers comfortable everyday vehicles. Luxury provides premium executive cars. All tiers are available in 4-seat and 7-seat configurations. Tier availability depends on the selected date and time.
+
+---
+
+TOPIC: Fare Pricing for Online Bookings (Per Mile)
+
+Online booking rates per mile: Eco 4-seat is £2.00/mile, Standard 4-seat is £2.50/mile, Luxury 4-seat is £3.50/mile. For 7-seat vehicles: Eco is £3.00/mile, Standard is £3.50/mile, Luxury is £4.50/mile. Distance is measured from pickup to destination in miles (1 km equals 0.621 miles, converted automatically by the system).
+
+---
+
+TOPIC: Fare Pricing for Daily Hire (Flat Rate Per Day)
+
+Daily Hire flat rates per day: Eco 4-seat is £180/day, Standard 4-seat is £220/day, Luxury 4-seat is £300/day. For 7-seat vehicles: Eco is £220/day, Standard is £270/day, Luxury is £400/day. Daily Hire requires both a start date/time and an end date/time.
+
+---
+
+TOPIC: Fare Pricing for Phone Bookings via Call Center
+
+Phone bookings made through Call Center Staff are priced per mile plus a £2.00 booking fee. Eco 4-seat is £2.50/mile, Standard 4-seat is £3.00/mile, Premium 4-seat is £4.00/mile. For 7-seat vehicles: Eco is £3.00/mile, Standard is £3.50/mile, Premium is £5.00/mile.
+
+---
+
+TOPIC: Booking Status - What Each Status Means
+
+Pending means the booking was submitted and is waiting for Control Staff to review and approve it. In Progress means Control Staff confirmed the booking, assigned a driver and vehicle, and an invoice was emailed to the customer. Completed means the journey has finished and the driver marked the trip as complete — the customer can now leave a review. Cancelled means the booking was cancelled by the customer or staff, and applicable refunds are processed automatically.
+
+---
+
+TOPIC: How Long Does Booking Confirmation Take
+
+Bookings are reviewed by the Control Staff team. The customer receives a notification and an invoice email once confirmed. Confirmation usually happens within business hours. If a booking remains Pending for a long time, the customer should contact the support team.
+
+---
+
+TOPIC: How to Modify a Booking
+
+A booking can be modified only if all of these conditions are met: the booking status is Pending, the payment method is Cash, the booking type is Minicab, and the pickup is more than 24 hours away. Customers can change the pickup location, destination, service type, date and time (within plus or minus 7 days from the original), ride tier, and number of seats. The fare recalculates automatically. To modify: go to My Orders, find the booking, and click Modify.
+
+---
+
+TOPIC: How to Cancel a Booking
+
+Customers can cancel a booking if the pickup is at least 24 hours away and the journey has not started. Go to My Orders, find the booking, and click Cancel. Refunds are processed automatically: PayPal payments are refunded to the PayPal account (typically 3 to 5 business days), Account Balance payments are credited back instantly, and Cash bookings require no refund since no payment was collected online. Bookings that are In Progress or Completed cannot be cancelled.
+
+---
+
+TOPIC: Payment Methods Accepted
+
+Private Hire currently accepts three payment methods. Cash means the customer pays the driver directly at pickup — no online payment required. PayPal is a secure online payment where customers are redirected to PayPal checkout. Account Balance uses the customer's Private Hire wallet credit, which is deducted at the time of booking. Bank Transfer, Credit Card, Apple Pay, Google Pay, and Cryptocurrency are not currently supported.
+
+---
+
+TOPIC: Account Balance Wallet
+
+Account Balance is an in-platform wallet. Customers can load credit from their Profile page. When a booking is confirmed using Account Balance, the amount is deducted immediately. Refunds from cancelled bookings that were paid via Account Balance are credited back automatically and instantly.
+
+---
+
+TOPIC: PayPal Payment and Refunds
+
+When using PayPal, the customer is redirected to PayPal's secure checkout page to complete payment. If the booking is cancelled, the refund is sent back to the customer's PayPal account and typically takes 3 to 5 business days to appear.
+
+---
+
+TOPIC: How to Sign Up / Register
+
+New customers can register on the Register page using three methods. Email and Password: enter full name, email, and password, then verify with a 6-digit code sent to the email. Google Sign-In: register instantly with a Google account — no verification code needed. Phone OTP: enter a phone number and verify with a 6-digit SMS code. All account types start as the "user" role by default.
+
+---
+
+TOPIC: How to Sign In / Log In
+
+Customers can sign in using: Email and Password, Google OAuth (Google account), Phone OTP (6-digit SMS code), or Face ID (if previously set up in Profile settings).
+
+---
+
+TOPIC: Email Verification During Registration
+
+After registering with email and password, a 6-digit verification code is sent to the registered email address. The customer must enter this code to complete registration. If the verification email is not received, check the spam or junk folder first. If still missing, contact the Support team.
+
+---
+
+TOPIC: How to Reset a Forgotten Password
+
+Go to the Password Change page — there is a link on the login screen. Enter the registered email address. A password reset link will be sent to that email. Click the link and set a new password. The reset link expires after 5 minutes. If the link has expired, request a new one from the same page.
+
+---
+
+TOPIC: Face ID Login
+
+Face ID allows customers to log in using their camera instead of a password. To set it up, go to the Profile page and enable Face ID — this requires camera access on the device. Once registered, the customer can select Face ID at the login screen for instant access.
+
+---
+
+TOPIC: How to Update Profile Information
+
+Customers can update their information from the Profile page: full name, phone number, profile photo (avatar), email address (requires OTP verification), and password (via the Change Password flow). Account Balance can also be viewed and topped up from the Profile page.
+
+---
+
+TOPIC: Promotional Codes Currently Available
+
+Active promo codes as of April 2026:
+WEEKEND20 — 20% off weekend rentals, minimum 2 days.
+FIRST50 — £50 off the first booking, minimum 1 day, for new users.
+LONGTERM30 — 30% off for 30 or more day rentals, minimum 30 days.
+SUMMER25 — 25% off SUV rentals in summer, minimum 3 days.
+EV15 — 15% off electric vehicle rentals, minimum 1 day.
+REFER20 — £20 off for both the referrer and the new customer, minimum 1 day.
+Visit the Promotions page to see all current active deals.
+
+---
+
+TOPIC: How to Apply a Promo Code
+
+On the Booking page, after entering trip details, look for the Promo Code field. Enter the code and click Apply. The discount is shown instantly before payment. Promo codes have usage limits and expiry dates. If a code is rejected, it may be expired or at its usage limit.
+
+---
+
+TOPIC: Loyalty Points - How to Earn and Use Them
+
+Customers earn loyalty points by completing a journey and then leaving a review for that booking. Points are credited to the account immediately after the review is submitted. For Daily Hire bookings, bonus points are awarded based on the tier. Loyalty points contribute to the Account Balance and can be used toward future bookings by selecting Account Balance as the payment method.
+
+---
+
+TOPIC: How to Leave a Review
+
+After a booking is marked Completed, go to My Orders, find that booking, and click Leave Review. Rate the journey from 1 to 5 stars and optionally write a comment. Reviews are publicly visible on the Reviews page. Leaving a review also earns loyalty points. Reviews cannot be edited or deleted after submission.
+
+---
+
+TOPIC: Notifications and Alerts
+
+Customers receive notifications for: booking created, booking confirmed by Control Staff with invoice, booking cancelled with refund info, driver on the way, trip completed, loyalty points earned, and promotional announcements. Notifications appear in the bell icon in the top navigation bar. A red badge shows the unread count. Clicking a notification marks it as read. All notifications can be cleared from the notification panel.
+
+---
+
+TOPIC: Vehicle Availability Notifications (Notify Me)
+
+If no vehicles are available for the customer's preferred tier and time, they can subscribe for availability alerts. On the Booking page, select the desired tier and seat count. If no vehicles are available for the chosen time slot, click Notify Me. The customer will receive an automatic notification when a vehicle becomes available. A signed-in account is required to use this feature.
+
+---
+
+TOPIC: Invoice and Email Confirmation
+
+When a booking is confirmed by Control Staff, a PDF invoice is automatically generated and emailed to the customer's registered email address. The invoice includes: booking ID, vehicle details, pickup and destination addresses, fare breakdown, payment method, and company contact details. If the invoice is not received, check the spam folder, confirm the registered email is correct, and if still missing, contact the Support team to request a resend.
+
+---
+
+TOPIC: Airport Transfer Booking
+
+To book an airport transfer, go to the Booking page and select Airport Transfer as the service type. Enter the airport name or terminal as the pickup or destination. Private Hire drivers are experienced with all major UK airports. Customers should allow adequate time for flight schedules and add any relevant details in the special requests field.
+
+---
+
+TOPIC: Daily Hire Booking Details
+
+Daily Hire provides a vehicle and driver for the entire day at a flat daily rate. Select Daily Hire as the service type on the Booking page. Specify both a start date/time and an end date/time. The number of days is calculated automatically and the total fare is shown before confirmation. Daily Hire is ideal for busy days, events, or business use.
+
+---
+
+TOPIC: What to Do If the Booking Remains Pending
+
+If a booking shows Pending status for an extended period, the customer should contact the Support team. Control Staff review bookings during business hours. The customer can also submit a Customer Enquiry for faster follow-up.
+
+---
+
+TOPIC: Driver Dispatch and Journey Start
+
+Once a booking is confirmed, a driver is assigned by Control Staff. The driver will navigate to the pickup location. The driver advances the trip status: first to On Route (heading to pickup), then to On Trip (passenger collected, journey started), and finally to Completed (journey finished). The customer receives notifications at each stage.
+
+---
+
+TOPIC: What to Do If Driver Has Not Arrived
+
+Check the booking status in My Orders. If it shows In Progress, the driver is on the way. If the driver is significantly late or there is a safety concern, contact the Support team immediately. The support team can coordinate with the driver and dispatch team.
+
+---
+
+TOPIC: Community Page
+
+The Community page is a social space where Private Hire users can share road trip stories and travel experiences, post car tips and recommendations, ask questions and get peer advice, and like and comment on posts from other members. It is a great place to connect with fellow customers and get inspiration before a journey.
+
+---
+
+TOPIC: How to Contact Customer Support
+
+Customers can reach Private Hire support via three channels. The Support page has an FAQ section and a contact form for general enquiries. The Customer Enquiry page allows customers to submit detailed enquiries with a category and description — staff reply by email. This AI chatbot is available 24 hours a day, 7 days a week for instant answers and will escalate complex issues to the support team when needed.
+
+---
+
+TOPIC: Pages and Where to Find Things
+
+Home page is at the root URL. Browse Cars is at /cars.php. Booking page is at /booking.php — requires sign-in. My Orders is at /orders.php — requires sign-in. Profile is at /profile.php — requires sign-in. Promotions page is at /promotions.php. Membership page is at /membership.php. Reviews page is at /reviews.php. Support page is at /support.php. Customer Enquiry is at /customer-enquiry.php — requires sign-in. Password Change is at /password-change.php.
+
+---
+
+TOPIC: When to Escalate to the Support Team
+
+The AI assistant should escalate to the Support team for: account recovery or email change issues, payment disputes or failed refunds, booking errors that cannot be self-resolved, driver complaints or safety concerns, requests to cancel an InProgress booking, and any situation not covered in this knowledge base. Direct the customer to the Support page at app.privatehire.com/support.
+
+---
+
+TOPIC: Data Security and Privacy
+
+Private Hire uses industry-standard security practices including encrypted database connections via Supabase and secure hosting. All sensitive data is encrypted. Customer personal data is never shared with third parties without explicit consent. Passwords are stored as secure hashes and are never visible to staff.
+
+---
+
+TOPIC: Membership Plans
+
+Private Hire offers four membership tiers. Free is the default tier with email support and 48-hour cancellation notice. Basic includes 5% rental discount and priority email support. Premium includes 15% rental discount, 24/7 priority support, 24-hour cancellation notice, free driver upgrade, and airport lounge access. Corporate includes custom pricing, a dedicated account manager, flexible cancellation, and full fleet GPS tracking. To upgrade, visit the Membership page and select the desired plan.
+
+---
+
+TOPIC: AI Chatbot Scope and Limitations
+
+This AI assistant is specialised in Private Hire bookings and services only. For questions outside of Private Hire — such as general travel advice, weather, or unrelated topics — the assistant will politely redirect users. The assistant will never speculate about pricing, promotions, or policies not listed in its knowledge base. It will never process payments, refunds, or cancellations directly. It will never share other customers' personal information.
+
+---
+
+END OF KNOWLEDGE BASE
+Private Hire - AI Knowledge Base v2.1 - April 2026
+For internal AI training use only.

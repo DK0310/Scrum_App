@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PrivateHire — MVP Workflow Diagram</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#f0f4ff; min-height:100vh; padding:32px 20px 60px; }
+  h1 { text-align:center; color:#1a3a6b; font-size:1.6rem; margin-bottom:6px; font-weight:700; }
+  .subtitle { text-align:center; color:#5b7ab5; font-size:0.9rem; margin-bottom:28px; }
+  .legend { display:flex; gap:24px; justify-content:center; flex-wrap:wrap; margin-bottom:28px; }
+  .legend-item { display:flex; align-items:center; gap:8px; font-size:.83rem; color:#444; }
+  .legend-box { width:18px; height:18px; border-radius:4px; }
+  .l-c{background:#1e88e5}.l-s{background:#fb8c00}.l-t{background:#43a047}.l-d{background:#e91e63}
+  .diagram-wrapper { overflow-x:auto; }
+  svg { display:block; margin:0 auto; }
+  text { font-family:'Segoe UI',Arial,sans-serif; fill:white; font-size:12px; font-weight:600; text-anchor:middle; dominant-baseline:central; }
+  .dt { fill:#0d47a1; font-size:11px; font-weight:600; }
+  .lbl { fill:#444; font-size:11px; font-weight:700; }
+  .arrow { fill:#1e88e5; }
+  line { stroke:#1e88e5; stroke-width:2; fill:none; }
+</style>
+</head>
+<body>
+<h1>PrivateHire — MVP Workflow Diagram</h1>
+<p class="subtitle">MoSCoW Must-Have Features · End-to-End Booking Lifecycle</p>
+<div class="legend">
+  <div class="legend-item"><div class="legend-box l-c"></div>Customer</div>
+  <div class="legend-item"><div class="legend-box l-s"></div>System</div>
+  <div class="legend-item"><div class="legend-box l-t"></div>Staff</div>
+  <div class="legend-item"><div class="legend-box l-d"></div>Driver</div>
+</div>
+<div class="diagram-wrapper">
+<svg width="1640" height="1900" viewBox="0 0 1640 1900" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="arr" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><polygon points="0 0,9 4.5,0 9" class="arrow"/></marker>
+  <marker id="arr-r" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><polygon points="0 0,9 4.5,0 9" fill="#ef5350"/></marker>
+  <filter id="sh" x="-8%" y="-8%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.15)"/></filter>
+</defs>
+
+<!-- ── SWIM LANES ── -->
+<rect x="10"   y="55" width="390" height="1830" rx="12" fill="#e8f0fe" stroke="#90b4f8" stroke-width="1.5"/>
+<rect x="408"  y="55" width="290" height="1830" rx="12" fill="#fff3e0" stroke="#ffcc80" stroke-width="1.5"/>
+<rect x="706"  y="55" width="480" height="1830" rx="12" fill="#e8f5e9" stroke="#a5d6a7" stroke-width="1.5"/>
+<rect x="1194" y="55" width="438" height="1830" rx="12" fill="#fce4ec" stroke="#f48fb1" stroke-width="1.5"/>
+
+<!-- Lane headers -->
+<text x="205"  y="82" style="fill:#1a3a8f;font-size:13px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">CUSTOMER</text>
+<text x="553"  y="82" style="fill:#e65100;font-size:13px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">SYSTEM</text>
+<text x="946"  y="82" style="fill:#2e7d32;font-size:13px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">STAFF (CC + CONTROL)</text>
+<text x="1413" y="82" style="fill:#880e4f;font-size:13px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">DRIVER</text>
+
+<!-- ── STAGE BARS ── -->
+<rect x="10" y="108" width="1622" height="24" rx="4" fill="#1565c0" opacity="0.1"/>
+<text x="821" y="120" style="fill:#1a3a6b;font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">STAGE 1 — USER INTERACTION FLOW</text>
+
+<rect x="10" y="462" width="1622" height="24" rx="4" fill="#1565c0" opacity="0.1"/>
+<text x="821" y="474" style="fill:#1a3a6b;font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">STAGE 2 — BOOKING PROCESSING FLOW</text>
+
+<rect x="10" y="920" width="1622" height="24" rx="4" fill="#1565c0" opacity="0.1"/>
+<text x="821" y="932" style="fill:#1a3a6b;font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">STAGE 3 — STAFF OPERATIONS &amp; DISPATCH FLOW</text>
+
+<rect x="10" y="1440" width="1622" height="24" rx="4" fill="#1565c0" opacity="0.1"/>
+<text x="821" y="1452" style="fill:#1a3a6b;font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI',Arial;">STAGE 4 — NOTIFICATION &amp; COMPLETION FLOW</text>
+
+<!-- ══════════════════════════════════ -->
+<!-- STAGE 1: USER INTERACTION         -->
+<!-- ══════════════════════════════════ -->
+
+<!-- START -->
+<rect x="120" y="148" width="170" height="44" rx="22" fill="#1565c0" filter="url(#sh)"/>
+<text x="205" y="170">START</text>
+<line x1="205" y1="192" x2="205" y2="218" marker-end="url(#arr)"/>
+
+<!-- New User? -->
+<polygon points="205,220 275,252 205,284 135,252" fill="#e3f2fd" stroke="#1e88e5" stroke-width="2" filter="url(#sh)"/>
+<text x="205" y="252" class="dt">New User?</text>
+
+<!-- YES → left branch → Register -->
+<line x1="135" y1="252" x2="55"  y2="252"/>
+<text x="88" y="244" class="lbl">Yes</text>
+<line x1="55"  y1="252" x2="55"  y2="348"/>
+<line x1="55"  y1="348" x2="100" y2="348" marker-end="url(#arr)"/>
+
+<!-- NO → right → Login -->
+<line x1="275" y1="252" x2="305" y2="252" marker-end="url(#arr)"/>
+<text x="288" y="244" class="lbl">No</text>
+
+<!-- Register Account -->
+<rect x="100" y="326" width="160" height="44" rx="8" fill="#1e88e5" filter="url(#sh)"/>
+<text x="180" y="348">Register Account</text>
+
+<!-- System: Verify Email -->
+<line x1="260" y1="348" x2="408" y2="348" marker-end="url(#arr)"/>
+<rect x="468" y="326" width="170" height="44" rx="8" fill="#fb8c00" filter="url(#sh)"/>
+<text x="553" y="348">Verify Email / OTP</text>
+
+<!-- Login to System -->
+<rect x="305" y="326" width="160" height="44" rx="8" fill="#1e88e5" filter="url(#sh)"/>
+<text x="385" y="348">Login to System</text>
+
+<!-- Join → Choose Service -->
+<line x1="180" y1="370" x2="180" y2="414"/>
+<line x1="385" y1="370" x2="385" y2="400"/>
+<line x1="553" y1="370" x2="553" y2="390"/>
+<line x1="553" y1="390" x2="180" y2="390"/>
+<line x1="385" y1="400" x2="180" y2="400"/>
+<line x1="180" y1="414" x2="205" y2="414"/>
+
+<!-- Choose Service Type -->
+<rect x="120" y="414" width="170" height="44" rx="8" fill="#1e88e5" filter="url(#sh)"/>
+<text x="205" y="436">Choose Service Type</text>
+<line x1="205" y1="458" x2="205" y2="462" marker-end="url(#arr)"/>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- STAGE 2: BOOKING PROCESSING       -->
+<!-- ══════════════════════════════════ -->
+
+<!-- View Vehicle Information -->
+<line x1="205" y1="486" x2="205" y2="508" marker-end="url(#arr)"/>
+<rect x="120" y="508" width="170" height="44" rx="8" fill="#1e88e5" filter="url(#sh)"/>
+<text x="205" y="530">View Vehicle Information</text>
+
+<!-- → Check Availability -->
+<line x1="290" y1="530" x2="408" y2="530" marker-end="url(#arr)"/>
+<rect x="468" y="508" width="170" height="44" rx="8" fill="#fb8c00" filter="url(#sh)"/>
+<text x="553" y="530">Check Availability</text>
+
+<!-- → Available? decision -->
+<line x1="638" y1="530" x2="700" y2="530" marker-end="url(#arr)"/>
+<polygon points="756,508 820,530 756,552 692,530" fill="#e3f2fd" stroke="#1e88e5" stroke-width="2" filter="url(#sh)"/>
+<text x="756" y="530" class="dt">Available?</text>
+
+<!-- No → back to customer -->
+<line x1="756" y1="552" x2="756" y2="600"/>
+<line x1="756" y1="600" x2="205" y2="600"/>
+<line x1="205" y1="600" x2="205" y2="552" marker-end="url(#arr)"/>
+<text x="476" y="616" style="fill:#ef5350;font-size:10px;text-anchor:middle;font-family:'Segoe UI'">No — Notify Customer / Choose Another</text>
+
+<!-- Yes → Submit in Staff lane -->
+<line x1="820" y1="530" x2="871" y2="530" marker-end="url(#arr)"/>
+<text x="843" y="521" class="lbl">Yes</text>
+<rect x="871" y="508" width="180" height="44" rx="8" fill="#43a047" filter="url(#sh)"/>
+<text x="961" y="530" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Booking Request Received</text>
+
+<!-- Customer also submits -->
+<line x1="205" y1="552" x2="205" y2="634" marker-end="url(#arr)"/>
+<rect x="120" y="634" width="170" height="44" rx="8" fill="#1e88e5" filter="url(#sh)"/>
+<text x="205" y="656">Submit Booking Request</text>
+
+<!-- System Status=PENDING note -->
+<rect x="468" y="620" width="170" height="34" rx="6" fill="#fb8c00" filter="url(#sh)"/>
+<text x="553" y="637" style="fill:white;font-size:10px;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">System: Status = PENDING</text>
+<line x1="290" y1="652" x2="468" y2="637" marker-end="url(#arr)" style="stroke:#e65100"/>
+
+<!-- → Payment Method? -->
+<line x1="205" y1="678" x2="205" y2="724" marker-end="url(#arr)"/>
+<polygon points="205,726 275,758 205,790 135,758" fill="#e3f2fd" stroke="#1e88e5" stroke-width="2" filter="url(#sh)"/>
+<text x="205" y="758" class="dt" style="font-size:10px">Payment Method?</text>
+
+<!-- CASH branch -->
+<line x1="135" y1="758" x2="55"  y2="758"/>
+<text x="90" y="748" class="lbl">Cash</text>
+<line x1="55"  y1="758" x2="55"  y2="840"/>
+<line x1="55"  y1="840" x2="100" y2="840" marker-end="url(#arr)"/>
+<rect x="100" y="818" width="140" height="40" rx="6" fill="#78909c" filter="url(#sh)"/>
+<text x="170" y="838" style="font-size:10px">Pay on Pickup</text>
+
+<!-- PayPal branch -->
+<line x1="275" y1="758" x2="348" y2="758" marker-end="url(#arr)"/>
+<text x="308" y="748" class="lbl">PayPal</text>
+<rect x="468" y="736" width="170" height="44" rx="8" fill="#fb8c00" filter="url(#sh)"/>
+<text x="553" y="758">Process Payment</text>
+<line x1="348" y1="758" x2="468" y2="758" marker-end="url(#arr)"/>
+
+<!-- Payment OK? decision -->
+<line x1="638" y1="758" x2="692" y2="758" marker-end="url(#arr)"/>
+<polygon points="756,736 820,758 756,780 692,758" fill="#e3f2fd" stroke="#1e88e5" stroke-width="2" filter="url(#sh)"/>
+<text x="756" y="758" class="dt" style="font-size:10px">Payment OK?</text>
+
+<!-- Payment failed → retry -->
+<line x1="756" y1="780" x2="756" y2="810"/>
+<line x1="756" y1="810" x2="553" y2="810"/>
+<line x1="553" y1="810" x2="553" y2="780" marker-end="url(#arr)"/>
+<text x="656" y="824" style="fill:#ef5350;font-size:10px;text-anchor:middle;font-family:'Segoe UI'">Failed — Retry</text>
+
+<!-- Payment OK Yes → Booking Queued -->
+<line x1="820" y1="758" x2="870" y2="758" marker-end="url(#arr)"/>
+<text x="843" y="748" class="lbl">Yes</text>
+<rect x="870" y="736" width="180" height="44" rx="8" fill="#43a047" filter="url(#sh)"/>
+<text x="960" y="758" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Booking Queued → PENDING</text>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- STAGE 3: STAFF OPERATIONS         -->
+<!-- ══════════════════════════════════ -->
+
+<line x1="960" y1="780" x2="960" y2="944" marker-end="url(#arr)"/>
+
+<!-- Control Staff Reviews Booking -->
+<rect x="870" y="944" width="180" height="44" rx="8" fill="#43a047" filter="url(#sh)"/>
+<text x="960" y="966" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Control Staff Reviews Booking</text>
+
+<!-- Approve? decision -->
+<line x1="960" y1="988" x2="960" y2="1020" marker-end="url(#arr)"/>
+<polygon points="960,1022 1030,1058 960,1094 890,1058" fill="#e3f2fd" stroke="#1e88e5" stroke-width="2" filter="url(#sh)"/>
+<text x="960" y="1058" class="dt">Approve?</text>
+
+<!-- NO → Reject path -->
+<line x1="890" y1="1058" x2="830" y2="1058"/>
+<text x="857" y="1046" class="lbl">No</text>
+<line x1="830" y1="1058" x2="830" y2="1160"/>
+<rect x="748" y="1138" width="165" height="44" rx="8" fill="#ef5350" filter="url(#sh)"/>
+<text x="830" y="1160">Booking Rejected</text>
+<!-- Notify System -->
+<line x1="748" y1="1160" x2="638" y2="1160" marker-end="url(#arr)"/>
+<rect x="468" y="1138" width="170" height="44" rx="8" fill="#fb8c00" filter="url(#sh)"/>
+<text x="553" y="1160">Notify: Rejected</text>
+<!-- Customer Notified -->
+<line x1="468" y1="1160" x2="290" y2="1160" marker-end="url(#arr)"/>
+<rect x="120" y="1138" width="170" height="44" rx="8" fill="#78909c" filter="url(#sh)"/>
+<text x="205" y="1160">Customer Notified</text>
+
+<!-- YES → Confirm Booking -->
+<line x1="1030" y1="1058" x2="1120" y2="1058" marker-end="url(#arr)"/>
+<text x="1073" y="1046" class="lbl">Yes</text>
+<rect x="1120" y="1036" width="188" height="44" rx="8" fill="#43a047" filter="url(#sh)"/>
+<text x="1214" y="1054" style="fill:white;font-size:10.5px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Confirm Booking</text>
+<text x="1214" y="1068" style="fill:rgba(255,255,255,0.85);font-size:9px;text-anchor:middle;font-family:'Segoe UI'">(incl. Phone Bookings)</text>
+
+<!-- Status = CONFIRMED -->
+<line x1="960" y1="1094" x2="960" y2="1250" marker-end="url(#arr)"/>
+<rect x="468" y="1238" width="170" height="36" rx="6" fill="#fb8c00" filter="url(#sh)"/>
+<text x="553" y="1256" style="fill:white;font-size:10.5px;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Status = CONFIRMED</text>
+<line x1="1120" y1="1058" x2="960" y2="1250" marker-end="url(#arr)" style="stroke:#43a047"/>
+
+<!-- Dispatch Vehicle -->
+<line x1="960" y1="1274" x2="960" y2="1316" marker-end="url(#arr)"/>
+<rect x="870" y="1316" width="180" height="44" rx="8" fill="#43a047" filter="url(#sh)"/>
+<text x="960" y="1338" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Dispatch Vehicle to Driver</text>
+
+<!-- Status = DISPATCHED -->
+<line x1="960" y1="1360" x2="960" y2="1400" marker-end="url(#arr)"/>
+<rect x="870" y="1400" width="180" height="36" rx="6" fill="#fb8c00" filter="url(#sh)"/>
+<text x="960" y="1418" style="fill:white;font-size:10.5px;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Status = DISPATCHED</text>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- STAGE 4: NOTIFICATION & COMPLETION -->
+<!-- ══════════════════════════════════ -->
+
+<!-- Booking Confirmation System -->
+<line x1="553" y1="1274" x2="553" y2="1474" marker-end="url(#arr)"/>
+<rect x="468" y="1474" width="170" height="44" rx="8" fill="#fb8c00" filter="url(#sh)"/>
+<text x="553" y="1492">Booking Confirmation</text>
+<text x="553" y="1505" style="fill:rgba(255,255,255,0.8);font-size:9px;text-anchor:middle;font-family:'Segoe UI'">Notification Sent</text>
+
+<!-- Customer Receives Confirmation -->
+<line x1="468" y1="1496" x2="290" y2="1496" marker-end="url(#arr)"/>
+<rect x="120" y="1474" width="170" height="44" rx="8" fill="#42a5f5" filter="url(#sh)"/>
+<text x="205" y="1492">Customer Receives</text>
+<text x="205" y="1505" style="fill:rgba(255,255,255,0.85);font-size:9.5px;text-anchor:middle;font-family:'Segoe UI'">Confirmation</text>
+
+<!-- Driver On Route -->
+<line x1="960" y1="1436" x2="1194" y2="1496" marker-end="url(#arr)"/>
+<rect x="1254" y="1474" width="180" height="44" rx="8" fill="#e91e63" filter="url(#sh)"/>
+<text x="1344" y="1492" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Driver On Route</text>
+<text x="1344" y="1505" style="fill:rgba(255,255,255,0.8);font-size:9px;text-anchor:middle;font-family:'Segoe UI'">Status = ON_ROUTE</text>
+
+<!-- Cancel Booking? -->
+<line x1="205" y1="1518" x2="205" y2="1574" marker-end="url(#arr)"/>
+<rect x="120" y="1574" width="170" height="44" rx="8" fill="#78909c" filter="url(#sh)"/>
+<text x="205" y="1596">Cancel Booking?</text>
+<line x1="290" y1="1596" x2="360" y2="1596"/>
+<text x="322" y="1586" class="lbl" style="fill:#ef5350">Cancel</text>
+<rect x="468" y="1574" width="170" height="44" rx="8" fill="#ef5350" filter="url(#sh)"/>
+<text x="553" y="1596">Process Cancellation</text>
+<line x1="360" y1="1596" x2="468" y2="1596" marker-end="url(#arr)"/>
+
+<!-- Trip In Progress -->
+<line x1="1344" y1="1518" x2="1344" y2="1574" marker-end="url(#arr)"/>
+<rect x="1254" y="1574" width="180" height="44" rx="8" fill="#c2185b" filter="url(#sh)"/>
+<text x="1344" y="1592" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Trip In Progress</text>
+<text x="1344" y="1605" style="fill:rgba(255,255,255,0.8);font-size:9px;text-anchor:middle;font-family:'Segoe UI'">Status = ON_TRIP</text>
+
+<!-- Trip Completed -->
+<line x1="1344" y1="1618" x2="1344" y2="1674" marker-end="url(#arr)"/>
+<rect x="1254" y="1674" width="180" height="44" rx="8" fill="#880e4f" filter="url(#sh)"/>
+<text x="1344" y="1692" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Trip Completed</text>
+<text x="1344" y="1705" style="fill:rgba(255,255,255,0.8);font-size:9px;text-anchor:middle;font-family:'Segoe UI'">Driver marks COMPLETED</text>
+
+<!-- Status = COMPLETED -->
+<line x1="1254" y1="1696" x2="1050" y2="1696" marker-end="url(#arr)"/>
+<rect x="870" y="1674" width="180" height="44" rx="6" fill="#fb8c00" filter="url(#sh)"/>
+<text x="960" y="1696" style="fill:white;font-size:10.5px;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Status = COMPLETED</text>
+
+<!-- Send Trip Enquiry -->
+<line x1="205" y1="1618" x2="205" y2="1770" marker-end="url(#arr)"/>
+<rect x="120" y="1770" width="170" height="44" rx="8" fill="#42a5f5" filter="url(#sh)"/>
+<text x="205" y="1792">Send Trip Enquiry</text>
+<line x1="290" y1="1792" x2="408" y2="1792" marker-end="url(#arr)"/>
+
+<!-- Staff Responds to Enquiry -->
+<rect x="870" y="1770" width="180" height="44" rx="8" fill="#43a047" filter="url(#sh)"/>
+<text x="960" y="1792" style="fill:white;font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;font-family:'Segoe UI'">Staff Responds to Enquiry</text>
+<line x1="408" y1="1792" x2="870" y2="1792" marker-end="url(#arr)"/>
+<line x1="960" y1="1814" x2="960" y2="1840"/>
+<line x1="960" y1="1840" x2="205" y2="1840"/>
+<line x1="205" y1="1840" x2="205" y2="1814" marker-end="url(#arr)"/>
+
+<!-- END -->
+<line x1="960" y1="1718" x2="960" y2="1858"/>
+<line x1="205" y1="1858" x2="960" y2="1858"/>
+<rect x="120" y="1858" width="170" height="44" rx="22" fill="#1565c0" filter="url(#sh)"/>
+<text x="205" y="1880">END</text>
+
+</svg>
+</div>
+
+<!-- Business Value Summary -->
+<div style="max-width:920px;margin:44px auto 0;background:white;border-radius:16px;padding:28px 36px;box-shadow:0 4px 24px rgba(0,0,0,0.08);border-left:6px solid #1e88e5;">
+  <h2 style="color:#1a3a6b;font-size:1.1rem;margin-bottom:16px;font-family:'Segoe UI'">Business Value Delivered by the MVP</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-family:'Segoe UI';font-size:.88rem;color:#333;">
+    <div><strong style="color:#1565c0">End-to-End Booking Lifecycle</strong><br>Covers Register → Login → Choose Service → View Vehicle → Submit → Payment → Pending → Confirmed → Dispatched → Completed.</div>
+    <div><strong style="color:#43a047">Staff-Side Control</strong><br>Control Staff can review, approve/reject, dispatch, and create phone bookings — maintaining full operational oversight.</div>
+    <div><strong style="color:#e65100">Automated State Transitions</strong><br>System manages PENDING → CONFIRMED → DISPATCHED → ON_ROUTE → ON_TRIP → COMPLETED automatically on each action.</div>
+    <div><strong style="color:#880e4f">Driver Lifecycle</strong><br>Driver advances trip: On Route → On Trip → Completed. Notifications keep the customer informed at every stage.</div>
+    <div><strong style="color:#78909c">Payment Flexibility</strong><br>Supports Cash (pay on pickup) and PayPal (online). Handles payment failure with retry before queuing.</div>
+    <div><strong style="color:#ef5350">Cancel &amp; Enquiry Handling</strong><br>Customers can cancel before trip starts. Staff respond to enquiries within the same lifecycle.</div>
+  </div>
+  <p style="margin-top:16px;color:#888;font-size:.8rem;font-family:'Segoe UI';font-style:italic;">Features excluded from MVP (Should/Could/Won't Have): Reviews, Loyalty Points, Face ID, Promotions, Membership, Community, GPS Tracking, Admin Dashboard.</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,566 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxGraphModel dx="1422" dy="762" grid="0" gridSize="10" guides="1" tooltips="1"
+  connect="1" arrows="1" fold="1" page="0" pageScale="1"
+  pageWidth="1700" pageHeight="1950" math="0" shadow="1">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+
+    <!-- ═══════════════════════════════════════════
+         SWIM LANE BACKGROUNDS
+         ═══════════════════════════════════════════ -->
+    <mxCell id="bg-title" value="PrivateHire — MVP Workflow Diagram"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1a3a6b;"
+      vertex="1" parent="1">
+      <mxGeometry x="200" y="10" width="1300" height="36" as="geometry" />
+    </mxCell>
+
+    <mxCell id="lane-cust" value="CUSTOMER"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#90b4f8;strokeWidth=2;align=center;verticalAlign=top;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#1a3a8f;"
+      vertex="1" parent="1">
+      <mxGeometry x="10" y="55" width="390" height="1830" as="geometry" />
+    </mxCell>
+
+    <mxCell id="lane-sys" value="SYSTEM"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#ffcc80;strokeWidth=2;align=center;verticalAlign=top;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#e65100;"
+      vertex="1" parent="1">
+      <mxGeometry x="408" y="55" width="290" height="1830" as="geometry" />
+    </mxCell>
+
+    <mxCell id="lane-staff" value="STAFF (CC + CONTROL)"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#a5d6a7;strokeWidth=2;align=center;verticalAlign=top;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#2e7d32;"
+      vertex="1" parent="1">
+      <mxGeometry x="706" y="55" width="480" height="1830" as="geometry" />
+    </mxCell>
+
+    <mxCell id="lane-driv" value="DRIVER"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce4ec;strokeColor=#f48fb1;strokeWidth=2;align=center;verticalAlign=top;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#880e4f;"
+      vertex="1" parent="1">
+      <mxGeometry x="1194" y="55" width="438" height="1830" as="geometry" />
+    </mxCell>
+
+    <!-- ═══ STAGE BARS ═══ -->
+    <mxCell id="sb1" value="STAGE 1 — USER INTERACTION FLOW"
+      style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1565c0;strokeColor=none;opacity=12;fontColor=#1a3a6b;fontStyle=1;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="10" y="108" width="1622" height="24" as="geometry" />
+    </mxCell>
+
+    <mxCell id="sb2" value="STAGE 2 — BOOKING PROCESSING FLOW"
+      style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1565c0;strokeColor=none;opacity=12;fontColor=#1a3a6b;fontStyle=1;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="10" y="462" width="1622" height="24" as="geometry" />
+    </mxCell>
+
+    <mxCell id="sb3" value="STAGE 3 — STAFF OPERATIONS &amp; DISPATCH FLOW"
+      style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1565c0;strokeColor=none;opacity=12;fontColor=#1a3a6b;fontStyle=1;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="10" y="920" width="1622" height="24" as="geometry" />
+    </mxCell>
+
+    <mxCell id="sb4" value="STAGE 4 — NOTIFICATION &amp; COMPLETION FLOW"
+      style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1565c0;strokeColor=none;opacity=12;fontColor=#1a3a6b;fontStyle=1;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="10" y="1440" width="1622" height="24" as="geometry" />
+    </mxCell>
+
+
+    <!-- ═══════════════════════════════════════════
+         STAGE 1 — USER INTERACTION
+         ═══════════════════════════════════════════ -->
+
+    <!-- START -->
+    <mxCell id="n-start" value="START"
+      style="ellipse;whiteSpace=wrap;html=1;fillColor=#1565c0;strokeColor=#1565c0;fontColor=#ffffff;fontStyle=1;fontSize=13;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="148" width="170" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- New User? decision -->
+    <mxCell id="n-newuser" value="New User?"
+      style="rhombus;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1e88e5;strokeWidth=2;fontColor=#0d47a1;fontStyle=1;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="135" y="218" width="140" height="68" as="geometry" />
+    </mxCell>
+
+    <!-- Register Account -->
+    <mxCell id="n-register" value="Register Account"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e88e5;strokeColor=#1e88e5;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="32" y="326" width="158" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Login to System -->
+    <mxCell id="n-login" value="Login to System"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e88e5;strokeColor=#1e88e5;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="220" y="326" width="158" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- System: Verify Email / OTP -->
+    <mxCell id="n-verify" value="Verify Email / OTP"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="326" width="168" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Choose Service Type -->
+    <mxCell id="n-service" value="Choose Service Type"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e88e5;strokeColor=#1e88e5;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="414" width="170" height="44" as="geometry" />
+    </mxCell>
+
+
+    <!-- ═══════════════════════════════════════════
+         STAGE 2 — BOOKING PROCESSING
+         ═══════════════════════════════════════════ -->
+
+    <!-- View Vehicle Information -->
+    <mxCell id="n-viewveh" value="View Vehicle Information"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e88e5;strokeColor=#1e88e5;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="508" width="170" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Check Availability (System) -->
+    <mxCell id="n-checkavail" value="Check Availability"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="508" width="168" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Available? decision -->
+    <mxCell id="n-avail" value="Available?"
+      style="rhombus;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1e88e5;strokeWidth=2;fontColor=#0d47a1;fontStyle=1;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="692" y="496" width="128" height="56" as="geometry" />
+    </mxCell>
+
+    <!-- Booking Request Received (Staff) -->
+    <mxCell id="n-recvd" value="Booking Request Received"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#43a047;strokeColor=#43a047;fontColor=#ffffff;fontStyle=1;arcSize=20;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="870" y="508" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- No-Available label -->
+    <mxCell id="lbl-noavail" value="No — Notify Customer / Choose Another"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#ef5350;"
+      vertex="1" parent="1">
+      <mxGeometry x="350" y="584" width="300" height="20" as="geometry" />
+    </mxCell>
+
+    <!-- Submit Booking Request (Customer) -->
+    <mxCell id="n-submit" value="Submit Booking Request"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e88e5;strokeColor=#1e88e5;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="634" width="170" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- System: Status = PENDING -->
+    <mxCell id="n-pending" value="System: Status = PENDING"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontSize=10;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="614" width="168" height="34" as="geometry" />
+    </mxCell>
+
+    <!-- Payment Method? decision -->
+    <mxCell id="n-paymeth" value="Payment Method?"
+      style="rhombus;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1e88e5;strokeWidth=2;fontColor=#0d47a1;fontStyle=1;fontSize=10;"
+      vertex="1" parent="1">
+      <mxGeometry x="135" y="726" width="140" height="64" as="geometry" />
+    </mxCell>
+
+    <!-- Pay on Pickup (Cash) -->
+    <mxCell id="n-cash" value="Pay on Pickup"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#78909c;strokeColor=#78909c;fontColor=#ffffff;fontStyle=1;fontSize=10;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="22" y="818" width="140" height="40" as="geometry" />
+    </mxCell>
+
+    <!-- Process Payment (System) -->
+    <mxCell id="n-payment" value="Process Payment"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="736" width="168" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Payment OK? decision -->
+    <mxCell id="n-payok" value="Payment OK?"
+      style="rhombus;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1e88e5;strokeWidth=2;fontColor=#0d47a1;fontStyle=1;fontSize=10;"
+      vertex="1" parent="1">
+      <mxGeometry x="692" y="730" width="128" height="56" as="geometry" />
+    </mxCell>
+
+    <!-- Failed-Retry label -->
+    <mxCell id="lbl-retry" value="Failed — Retry"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#ef5350;"
+      vertex="1" parent="1">
+      <mxGeometry x="576" y="806" width="120" height="20" as="geometry" />
+    </mxCell>
+
+    <!-- Booking Queued → PENDING (Staff) -->
+    <mxCell id="n-queued" value="Booking Queued → PENDING"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#43a047;strokeColor=#43a047;fontColor=#ffffff;fontStyle=1;fontSize=11;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="870" y="736" width="180" height="44" as="geometry" />
+    </mxCell>
+
+
+    <!-- ═══════════════════════════════════════════
+         STAGE 3 — STAFF OPERATIONS
+         ═══════════════════════════════════════════ -->
+
+    <!-- Control Staff Reviews Booking -->
+    <mxCell id="n-review" value="Control Staff Reviews Booking"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#43a047;strokeColor=#43a047;fontColor=#ffffff;fontStyle=1;fontSize=11;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="870" y="944" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Approve? decision -->
+    <mxCell id="n-approve" value="Approve?"
+      style="rhombus;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1e88e5;strokeWidth=2;fontColor=#0d47a1;fontStyle=1;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="890" y="1022" width="140" height="72" as="geometry" />
+    </mxCell>
+
+    <!-- Booking Rejected (Staff) -->
+    <mxCell id="n-reject" value="Booking Rejected"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ef5350;strokeColor=#ef5350;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="748" y="1138" width="165" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Notify: Rejected (System) -->
+    <mxCell id="n-notifyrej" value="Notify: Rejected"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="1138" width="168" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Customer Notified -->
+    <mxCell id="n-notified" value="Customer Notified"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#78909c;strokeColor=#78909c;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="1138" width="170" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Confirm Booking (Staff/Driver boundary) -->
+    <mxCell id="n-confirm" value="Confirm Booking&#xa;(incl. Phone Bookings)"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#43a047;strokeColor=#43a047;fontColor=#ffffff;fontStyle=1;fontSize=10.5;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="1120" y="1022" width="182" height="50" as="geometry" />
+    </mxCell>
+
+    <!-- Status = CONFIRMED (System) -->
+    <mxCell id="n-confirmed" value="Status = CONFIRMED"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontSize=10.5;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="1238" width="168" height="36" as="geometry" />
+    </mxCell>
+
+    <!-- Dispatch Vehicle to Driver -->
+    <mxCell id="n-dispatch" value="Dispatch Vehicle to Driver"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#43a047;strokeColor=#43a047;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="870" y="1316" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Status = DISPATCHED -->
+    <mxCell id="n-dispatched" value="Status = DISPATCHED"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontSize=10.5;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="870" y="1400" width="180" height="36" as="geometry" />
+    </mxCell>
+
+
+    <!-- ═══════════════════════════════════════════
+         STAGE 4 — NOTIFICATION & COMPLETION
+         ═══════════════════════════════════════════ -->
+
+    <!-- Booking Confirmation (System) -->
+    <mxCell id="n-bookconf" value="Booking Confirmation&#xa;Notification Sent"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="1474" width="168" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Customer Receives Confirmation -->
+    <mxCell id="n-custreceive" value="Customer Receives Confirmation"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#42a5f5;strokeColor=#42a5f5;fontColor=#ffffff;fontStyle=1;fontSize=10.5;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="1474" width="170" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Driver On Route -->
+    <mxCell id="n-onroute" value="Driver On Route&#xa;Status = ON_ROUTE"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e91e63;strokeColor=#e91e63;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="1254" y="1474" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Cancel Booking? -->
+    <mxCell id="n-cancel" value="Cancel Booking?"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#78909c;strokeColor=#78909c;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="1574" width="170" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Process Cancellation -->
+    <mxCell id="n-cancelproc" value="Process Cancellation"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ef5350;strokeColor=#ef5350;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="468" y="1574" width="168" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Trip In Progress -->
+    <mxCell id="n-ontrip" value="Trip In Progress&#xa;Status = ON_TRIP"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c2185b;strokeColor=#c2185b;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="1254" y="1574" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Trip Completed -->
+    <mxCell id="n-complete" value="Trip Completed&#xa;Driver marks COMPLETED"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#880e4f;strokeColor=#880e4f;fontColor=#ffffff;fontStyle=1;arcSize=20;fontSize=10.5;"
+      vertex="1" parent="1">
+      <mxGeometry x="1254" y="1674" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Status = COMPLETED -->
+    <mxCell id="n-completed" value="Status = COMPLETED"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fb8c00;strokeColor=#fb8c00;fontColor=#ffffff;fontSize=10.5;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="870" y="1674" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Send Trip Enquiry -->
+    <mxCell id="n-enquiry" value="Send Trip Enquiry"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#42a5f5;strokeColor=#42a5f5;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="1770" width="170" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- Staff Responds to Enquiry -->
+    <mxCell id="n-respond" value="Staff Responds to Enquiry"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#43a047;strokeColor=#43a047;fontColor=#ffffff;fontStyle=1;arcSize=20;"
+      vertex="1" parent="1">
+      <mxGeometry x="870" y="1770" width="180" height="44" as="geometry" />
+    </mxCell>
+
+    <!-- END -->
+    <mxCell id="n-end" value="END"
+      style="ellipse;whiteSpace=wrap;html=1;fillColor=#1565c0;strokeColor=#1565c0;fontColor=#ffffff;fontStyle=1;fontSize=13;"
+      vertex="1" parent="1">
+      <mxGeometry x="120" y="1858" width="170" height="44" as="geometry" />
+    </mxCell>
+
+
+    <!-- ═══════════════════════════════════════════
+         EDGES / ARROWS
+         ═══════════════════════════════════════════ -->
+
+    <!-- START → New User? -->
+    <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-start" target="n-newuser" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- New User? → YES → Register -->
+    <mxCell id="e2" value="Yes" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;" edge="1" source="n-newuser" target="n-register" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="60" y="252" /><mxPoint x="60" y="348" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- New User? → NO → Login -->
+    <mxCell id="e3" value="No" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="n-newuser" target="n-login" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Register → Verify Email -->
+    <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-register" target="n-verify" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Register → Choose Service (join) -->
+    <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-register" target="n-service" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Login → Choose Service -->
+    <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-login" target="n-service" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Choose Service → View Vehicle -->
+    <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-service" target="n-viewveh" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- View Vehicle → Check Availability -->
+    <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-viewveh" target="n-checkavail" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Check Availability → Available? -->
+    <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-checkavail" target="n-avail" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Available? → YES → Booking Request Received -->
+    <mxCell id="e10" value="Yes" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;" edge="1" source="n-avail" target="n-recvd" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Available? → NO → back to View Vehicle (loop) -->
+    <mxCell id="e11" value="No" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#ef5350;strokeColor=#ef5350;" edge="1" source="n-avail" target="n-viewveh" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="756" y="600" /><mxPoint x="205" y="600" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Customer: View Vehicle → Submit Booking -->
+    <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-viewveh" target="n-submit" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Submit → System: Status PENDING -->
+    <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#e65100;" edge="1" source="n-submit" target="n-pending" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Submit → Payment Method? -->
+    <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-submit" target="n-paymeth" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Payment Method? → CASH → Pay on Pickup -->
+    <mxCell id="e15" value="Cash" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;" edge="1" source="n-paymeth" target="n-cash" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="60" y="758" /><mxPoint x="60" y="838" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Payment Method? → PayPal → Process Payment -->
+    <mxCell id="e16" value="PayPal" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="n-paymeth" target="n-payment" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Process Payment → Payment OK? -->
+    <mxCell id="e17" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-payment" target="n-payok" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Payment OK? → Failed → retry (back to Process Payment) -->
+    <mxCell id="e18" value="Failed" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#ef5350;strokeColor=#ef5350;" edge="1" source="n-payok" target="n-payment" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="756" y="810" /><mxPoint x="552" y="810" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Payment OK? → YES → Booking Queued -->
+    <mxCell id="e19" value="Yes" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;" edge="1" source="n-payok" target="n-queued" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Booking Queued → Control Staff Reviews -->
+    <mxCell id="e20" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-queued" target="n-review" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Control Staff Reviews → Approve? -->
+    <mxCell id="e21" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-review" target="n-approve" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Approve? → NO → Booking Rejected -->
+    <mxCell id="e22" value="No" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;" edge="1" source="n-approve" target="n-reject" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="890" y="1058" /><mxPoint x="830" y="1058" /><mxPoint x="830" y="1160" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Booking Rejected → Notify: Rejected -->
+    <mxCell id="e23" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-reject" target="n-notifyrej" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Notify: Rejected → Customer Notified -->
+    <mxCell id="e24" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-notifyrej" target="n-notified" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Approve? → YES → Confirm Booking -->
+    <mxCell id="e25" value="Yes" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#444;" edge="1" source="n-approve" target="n-confirm" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Confirm Booking → Status = CONFIRMED -->
+    <mxCell id="e26" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#43a047;" edge="1" source="n-confirm" target="n-confirmed" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Status CONFIRMED → Dispatch Vehicle -->
+    <mxCell id="e27" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-confirmed" target="n-dispatch" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="552" y="1300" /><mxPoint x="960" y="1300" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Dispatch → Status = DISPATCHED -->
+    <mxCell id="e28" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-dispatch" target="n-dispatched" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Status CONFIRMED → Booking Confirmation (notify) -->
+    <mxCell id="e29" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#fb8c00;" edge="1" source="n-confirmed" target="n-bookconf" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Booking Confirmation → Customer Receives -->
+    <mxCell id="e30" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-bookconf" target="n-custreceive" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Status DISPATCHED → Driver On Route -->
+    <mxCell id="e31" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-dispatched" target="n-onroute" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1344" y="1418" /><mxPoint x="1344" y="1474" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Customer Receives → Cancel Booking? -->
+    <mxCell id="e32" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-custreceive" target="n-cancel" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Cancel Booking? → Process Cancellation -->
+    <mxCell id="e33" value="Cancel" style="edgeStyle=orthogonalEdgeStyle;fontStyle=1;fontColor=#ef5350;strokeColor=#ef5350;" edge="1" source="n-cancel" target="n-cancelproc" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Driver On Route → Trip In Progress -->
+    <mxCell id="e34" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-onroute" target="n-ontrip" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Trip In Progress → Trip Completed -->
+    <mxCell id="e35" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-ontrip" target="n-complete" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Trip Completed → Status = COMPLETED -->
+    <mxCell id="e36" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-complete" target="n-completed" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Cancel Booking? → Send Trip Enquiry -->
+    <mxCell id="e37" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-cancel" target="n-enquiry" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Send Trip Enquiry → Staff Responds -->
+    <mxCell id="e38" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-enquiry" target="n-respond" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Staff Responds → back to Customer (loop) -->
+    <mxCell id="e39" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-respond" target="n-enquiry" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="960" y="1840" /><mxPoint x="205" y="1840" /></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Status COMPLETED → END -->
+    <mxCell id="e40" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="n-completed" target="n-end" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="960" y="1858" /><mxPoint x="205" y="1858" /></Array></mxGeometry>
+    </mxCell>
+
+  </root>
+</mxGraphModel>
