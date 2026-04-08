@@ -1,16 +1,13 @@
 {
-    "name": "scrum/chatbot-with-memory",
-    "description": "Scrum Project with Chatbot + Mem0 Memory",
-    "require": {
-        "php": ">=7.4",
-        "guzzlehttp/guzzle": "^7.0",
-        "phpmailer/phpmailer": "^7.0",
-        "google/apiclient": "^2.0",
-        "mpdf/mpdf": "8.2"
-    },
-    "autoload": {
-        "psr-4": {
-            "Scrum\\": "src/"
-        }
-    }
+  "scripts": {
+    "post-update-cmd": "Google\\Task\\Composer::cleanup",
+    "post-install-cmd": "Google\\Task\\Composer::cleanup"
+  },
+  "extra": {
+    "google/apiclient-services": [
+      "Drive",
+      "Calendar",
+      "Sheets"
+    ]
+  }
 }

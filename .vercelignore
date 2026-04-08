@@ -1,0 +1,13 @@
+/vendor/google/apiclient-services/src/
+*.md
+*.txt
+tests/
+test/
+docs/
+
+tests/
+test/
+docs/
+*.md
+*.rst
+.git
