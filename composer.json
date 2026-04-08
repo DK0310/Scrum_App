@@ -1,13 +1,18 @@
 {
+  "require": {
+    "google/apiclient": "^2.0",
+    "phpmailer/phpmailer": "^7.0",
+    "mpdf/mpdf": "^8.0",
+    "firebase/php-jwt": "^7.0",
+    "monolog/monolog": "^3.0"
+  },
   "scripts": {
-    "post-update-cmd": "Google\\Task\\Composer::cleanup",
-    "post-install-cmd": "Google\\Task\\Composer::cleanup"
+    "post-install-cmd": "Google\\Task\\Composer::cleanup",
+    "post-update-cmd": "Google\\Task\\Composer::cleanup"
   },
   "extra": {
     "google/apiclient-services": [
-      "Drive",
-      "Calendar",
-      "Sheets"
+      "Gmail"
     ]
   }
 }
