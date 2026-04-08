@@ -501,6 +501,7 @@
 
     <div class="cc-tabbar" role="tablist" aria-label="Call center tabs">
         <button type="button" class="cc-tab-btn active" data-tab="booking" role="tab" aria-selected="true">Customer Booking</button>
+        <button type="button" class="cc-tab-btn" data-tab="enquiry" role="tab" aria-selected="false">Customer Enquiry</button>
         <?php if (!empty($canCreateAccount)): ?>
         <button type="button" class="cc-tab-btn" data-tab="create-account" role="tab" aria-selected="false">Create Account</button>
         <?php endif; ?>
@@ -680,6 +681,42 @@
         </div>
     </section>
 
+    <section class="cc-tab-panel" id="ccTabEnquiry" role="tabpanel" aria-label="Customer Enquiry">
+        <p class="cc-tab-note">Review customer enquiries and send replies directly from staff dashboard.</p>
+
+        <section class="cc-enquiry-shell">
+            <div class="cc-enquiry-head">
+                <h2 class="cc-enquiry-title">Customer Enquiry Inbox</h2>
+                <div class="cc-enquiry-tools">
+                    <input class="cc-enquiry-search" type="text" value="Latest enquiries" readonly>
+                </div>
+            </div>
+
+            <div class="cc-table-wrap" style="max-height:58vh;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Created</th>
+                            <th>Type</th>
+                            <th>Customer</th>
+                            <th>Status</th>
+                            <th>Content</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ccEnquiryTable">
+                        <tr><td colspan="6">Loading enquiries...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="cc-enquiry-foot">
+                <span>Replies are sent via enquiry response API.</span>
+                <span>Use Reply to answer open enquiries.</span>
+            </div>
+        </section>
+    </section>
+
     <?php if (!empty($canCreateAccount)): ?>
     <section class="cc-tab-panel" id="ccTabCreateAccount" role="tabpanel" aria-label="Create Account">
         <p class="cc-tab-note">Create customer accounts with temporary password <strong>123456</strong>.</p>
@@ -771,6 +808,7 @@
     (function () {
         function activateTab(tab) {
             const bookingPanel = document.getElementById('ccTabBooking');
+            const enquiryPanel = document.getElementById('ccTabEnquiry');
             const createAccountPanel = document.getElementById('ccTabCreateAccount');
             const buttons = document.querySelectorAll('.cc-tab-btn');
 
@@ -781,6 +819,7 @@
             });
 
             if (bookingPanel) bookingPanel.classList.toggle('active', tab === 'booking');
+            if (enquiryPanel) enquiryPanel.classList.toggle('active', tab === 'enquiry');
             if (createAccountPanel) createAccountPanel.classList.toggle('active', tab === 'create-account');
         }
 

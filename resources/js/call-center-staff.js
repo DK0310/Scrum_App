@@ -351,7 +351,8 @@
             if (isDailyHireService()) {
                 el.estimateDistance.textContent = 'Not required for Daily Hire';
             } else {
-                el.estimateDistance.textContent = (d && d > 0) ? (d.toFixed(1) + ' km') : 'Select locations';
+                const dMiles = (d && d > 0) ? (d * 0.621371) : 0;
+                el.estimateDistance.textContent = (dMiles > 0) ? (dMiles.toFixed(1) + ' miles') : 'Select locations';
             }
         }
 

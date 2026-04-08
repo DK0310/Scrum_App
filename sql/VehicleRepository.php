@@ -200,7 +200,7 @@ final class VehicleRepository
     }
 
     /**
-     * Get vehicle assigned to driver for today
+     * Get currently assigned vehicle for a driver.
      * @return array<string,mixed>|null
      */
     public function getAssignedVehicleForDriver(string $driverId): ?array
@@ -213,14 +213,32 @@ final class VehicleRepository
             FROM vehicle_assignments va
             JOIN vehicles v ON va.vehicle_id = v.id
             WHERE va.driver_id = ?
-            AND va.assigned_date = CURRENT_DATE
             AND va.unassigned_at IS NULL
+            ORDER BY va.assigned_at DESC
             LIMIT 1
         ");
         $stmt->execute([$driverId]);
-        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-    }
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return $row;
+        }
 
+        // Fallback for cases where users.assigned_vehicle_id is set
+        // but assignment history row is missing or archived.
+        $fallbackStmt = $this->pdo->prepare("
+            SELECT
+                v.id, v.brand, v.model, v.year, v.license_plate, v.color,
+                v.transmission, v.fuel_type, v.seats, v.service_tier,
+                u.assigned_vehicle_assigned_at::date AS assigned_date
+            FROM users u
+            JOIN vehicles v ON v.id = u.assigned_vehicle_id
+            WHERE u.id = ?
+              AND u.assigned_vehicle_id IS NOT NULL
+            LIMIT 1
+        ");
+        $fallbackStmt->execute([$driverId]);
+        return $fallbackStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
     /**
      * Assign vehicle to driver for a specific date
      */
@@ -614,3 +632,4 @@ final class VehicleRepository
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 }
+

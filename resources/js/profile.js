@@ -144,6 +144,8 @@ async function loadProfile() {
         document.getElementById('emailVerifiedStatus').textContent = u.email_verified ? 'Your email is verified' : 'Not verified yet';
         document.getElementById('emailVerifiedBadge').textContent = u.email_verified ? 'Verified' : 'Not Verified';
         document.getElementById('emailVerifiedBadge').className = 'admin-badge ' + (u.email_verified ? 'active' : 'inactive');
+        const verifyBtn = document.getElementById('sendVerifyEmailBtn');
+        if (verifyBtn) verifyBtn.style.display = u.email_verified ? 'none' : 'inline-flex';
 
         document.getElementById('phoneVerifiedStatus').textContent = u.phone_verified ? 'Your phone is verified' : 'Not verified yet';
         document.getElementById('phoneVerifiedBadge').textContent = u.phone_verified ? 'Verified' : 'Not Verified';
@@ -379,8 +381,9 @@ function validateProfileField(fieldId) {
 
     if (fieldId === 'pPhone') {
         if (!value) return setFieldValidationState(el, false, 'Phone number is required.');
-        const ok = /^\d{10}$/.test(value);
-        return setFieldValidationState(el, ok, ok ? '' : 'Phone number must be exactly 10 digits.');
+        const digits = value.replace(/\D/g, '');
+        const ok = digits.length >= 10 && digits.length <= 15;
+        return setFieldValidationState(el, ok, ok ? '' : 'Phone number must be at least 10 digits (e.g. 07700900123).');
     }
 
     if (fieldId === 'pDob') {
@@ -547,6 +550,78 @@ async function sendMyPasswordResetLink(buttonEl) {
 
     btn.disabled = false;
     btn.textContent = oldText;
+}
+
+async function sendEmailVerification() {
+    const btn = document.getElementById('sendVerifyEmailBtn');
+    if (!btn) return;
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = '⏳ Sending...';
+
+    try {
+        const res = await fetch(PROFILE_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'send-verify-email' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('📧 Verification email sent! Check your inbox.', 'success');
+            // Open OTP modal
+            document.getElementById('evEmailDisplay').textContent = data.email || '';
+            document.getElementById('evOtpInput').value = '';
+            document.getElementById('evStatusBar').style.display = 'none';
+            document.getElementById('emailVerifyModal').classList.add('open');
+        } else {
+            showToast(data.message || 'Failed to send verification email.', 'error');
+        }
+    } catch (e) {
+        showToast('Network error while sending verification email.', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = oldText;
+}
+
+async function submitEmailVerifyOtp() {
+    const otp = (document.getElementById('evOtpInput')?.value || '').trim();
+    if (otp.length !== 6) {
+        document.getElementById('evStatusBar').style.display = 'block';
+        document.getElementById('evStatusBar').textContent = 'Please enter the 6-digit code.';
+        document.getElementById('evStatusBar').style.background = '#fee2e2';
+        document.getElementById('evStatusBar').style.color = '#991b1b';
+        return;
+    }
+
+    const verifyBtn = document.getElementById('evVerifyBtn');
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = '⏳ Verifying...';
+
+    try {
+        const res = await fetch(PROFILE_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verify-email-otp', otp })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeModal('emailVerifyModal');
+            showToast('✅ Email verified successfully!', 'success');
+            loadProfile();
+        } else {
+            document.getElementById('evStatusBar').style.display = 'block';
+            document.getElementById('evStatusBar').textContent = data.message || 'Invalid code. Try again.';
+            document.getElementById('evStatusBar').style.background = '#fee2e2';
+            document.getElementById('evStatusBar').style.color = '#991b1b';
+        }
+    } catch (e) {
+        document.getElementById('evStatusBar').textContent = 'Network error.';
+        document.getElementById('evStatusBar').style.display = 'block';
+    }
+
+    verifyBtn.disabled = false;
+    verifyBtn.textContent = '✅ Verify';
 }
 
 async function deleteMyAccount() {

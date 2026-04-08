@@ -630,4 +630,86 @@ if ($action === 'email-change-verify') {
     exit;
 }
 
+if ($action === 'send-verify-email') {
+    api_require_auth();
+
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    $user = $userRepo->getFullProfile($userId);
+
+    if (!$user) {
+        echo json_encode(['success' => false, 'message' => 'User not found.']);
+        exit;
+    }
+    if (!empty($user['email_verified'])) {
+        echo json_encode(['success' => false, 'message' => 'Your email is already verified.']);
+        exit;
+    }
+    $email = $user['email'] ?? '';
+    if (empty($email)) {
+        echo json_encode(['success' => false, 'message' => 'No email address on your account.']);
+        exit;
+    }
+
+    $otp = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $_SESSION['email_verify_otp'] = $otp;
+    $_SESSION['email_verify_expires'] = time() + 300; // 5 minutes
+
+    try {
+        $mail = new PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host = \EnvLoader::get('SMTP_HOST', 'smtp.gmail.com');
+        $mail->SMTPAuth = true;
+        $mail->Username = \EnvLoader::get('SMTP_USERNAME');
+        $mail->Password = \EnvLoader::get('SMTP_PASSWORD');
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = (int)\EnvLoader::get('SMTP_PORT', 587);
+        $mail->setFrom(\EnvLoader::get('SMTP_FROM_EMAIL'), \EnvLoader::get('SMTP_FROM_NAME', 'PrivateHire'));
+        $mail->addAddress($email);
+        $mail->isHTML(true);
+        $mail->Subject = 'PrivateHire - Email Verification Code';
+        $mail->Body = "<h2>Verify Your Email</h2><p>Your verification code is:</p><h1 style='letter-spacing:5px;font-family:monospace;'>{$otp}</h1><p>This code expires in 5 minutes.</p>";
+        $mail->send();
+        echo json_encode(['success' => true, 'message' => 'Verification code sent.', 'email' => $email]);
+    } catch (Exception $e) {
+        error_log('send-verify-email PHPMailer error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Failed to send verification email.']);
+    }
+    exit;
+}
+
+if ($action === 'verify-email-otp') {
+    api_require_auth();
+
+    $otp = trim((string)($input['otp'] ?? ''));
+    if (strlen($otp) !== 6) {
+        echo json_encode(['success' => false, 'message' => 'Please enter the 6-digit code.']);
+        exit;
+    }
+    if (empty($_SESSION['email_verify_otp'])) {
+        echo json_encode(['success' => false, 'message' => 'No pending verification. Click "Verify Email" first.']);
+        exit;
+    }
+    if (time() > ($_SESSION['email_verify_expires'] ?? 0)) {
+        unset($_SESSION['email_verify_otp'], $_SESSION['email_verify_expires']);
+        echo json_encode(['success' => false, 'message' => 'Code expired. Please request a new one.']);
+        exit;
+    }
+    if ($_SESSION['email_verify_otp'] !== $otp) {
+        echo json_encode(['success' => false, 'message' => 'Invalid code. Please try again.']);
+        exit;
+    }
+
+    // Mark email as verified
+    $userId = (string)($_SESSION['user_id'] ?? '');
+    try {
+        $stmt = $pdo->prepare("UPDATE users SET email_verified = TRUE, updated_at = NOW() WHERE id = :id");
+        $stmt->execute([':id' => $userId]);
+        unset($_SESSION['email_verify_otp'], $_SESSION['email_verify_expires']);
+        echo json_encode(['success' => true, 'message' => 'Email verified successfully!']);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 echo json_encode(['success' => false, 'message' => 'Unknown action: ' . $action]);

@@ -114,7 +114,14 @@
                                 <div style="font-weight:600;">📧 Email Verification</div>
                                 <small id="emailVerifiedStatus" style="color:var(--gray-500);">Checking...</small>
                             </div>
-                            <span id="emailVerifiedBadge" class="admin-badge">—</span>
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span id="emailVerifiedBadge" class="admin-badge">—</span>
+                                <button type="button" id="sendVerifyEmailBtn" class="btn btn-outline"
+                                    onclick="sendEmailVerification()"
+                                    style="display:none;padding:6px 12px;font-size:0.78rem;">
+                                    Verify Email
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Phone Verified -->
@@ -261,6 +268,30 @@
             </div>
         </div>
     </section>
+
+    <!-- ===== EMAIL VERIFY OTP MODAL ===== -->
+    <div class="modal-overlay" id="emailVerifyModal">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header">
+                <h3 class="modal-title">📧 Verify Your Email</h3>
+                <button type="button" class="modal-close" onclick="closeModal('emailVerifyModal')">✕</button>
+            </div>
+            <div class="modal-body" style="text-align:center;">
+                <p style="color:var(--gray-600);font-size:0.875rem;margin-bottom:6px;">
+                    We've sent a 6-digit code to:
+                </p>
+                <p style="font-weight:700;color:var(--primary);margin-bottom:20px;" id="evEmailDisplay"></p>
+                <input type="text" id="evOtpInput" class="form-input"
+                    maxlength="6" placeholder="Enter 6-digit code"
+                    style="text-align:center;letter-spacing:0.3em;font-size:1.4rem;font-weight:700;max-width:200px;margin:0 auto 16px;">
+                <div id="evStatusBar" style="padding:10px;border-radius:var(--radius);margin-bottom:12px;font-size:0.85rem;display:none;background:#fee2e2;color:#991b1b;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('emailVerifyModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" id="evVerifyBtn" onclick="submitEmailVerifyOtp()">✅ Verify</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ===== EMAIL CHANGE OTP MODAL ===== -->
     <div class="modal-overlay" id="emailChangeModal">

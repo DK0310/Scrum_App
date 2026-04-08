@@ -268,8 +268,8 @@ class AuthRepository {
 
         $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
 
-        $query = "INSERT INTO users (email, phone, password_hash, full_name, date_of_birth, auth_provider, role, is_active, created_at)
-                  VALUES (:email, :phone, :password_hash, :full_name, :date_of_birth, 'email', :role, TRUE, NOW())
+        $query = "INSERT INTO users (email, phone, password_hash, full_name, date_of_birth, auth_provider, role, is_active, email_verified, created_at)
+                  VALUES (:email, :phone, :password_hash, :full_name, :date_of_birth, 'email', :role, TRUE, TRUE, NOW())
                   RETURNING id";
 
         $stmt = $this->pdo->prepare($query);
